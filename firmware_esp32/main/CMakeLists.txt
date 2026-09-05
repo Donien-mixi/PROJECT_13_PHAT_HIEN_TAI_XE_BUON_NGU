@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "wifi_stream_client.cpp"
+        "image_decoder.cpp"
+        "ai_inference.cpp"
+        "pnp_solver.cpp"
+        "adas_controller.cpp"
+        "telemetry_sender.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES
+        esp_wifi
+        esp_event
+        nvs_flash
+        esp_psram
+        esp_timer
+        esp_netif
+        lwip
+        driver
+        mbedtls
+)

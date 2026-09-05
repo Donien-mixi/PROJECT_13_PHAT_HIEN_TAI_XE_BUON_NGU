@@ -1,0 +1,47 @@
+menu "TinyDriver ADAS Configuration"
+
+    config ESP_WIFI_SSID
+        string "Wi-Fi SSID"
+        default "AIoT_Driver_Net"
+        help
+            SSID of the Wi-Fi network connecting ESP32-S3 and the Laptop Host.
+
+    config ESP_WIFI_PASSWORD
+        string "Wi-Fi Password"
+        default "12345678"
+        help
+            Password of the Wi-Fi network.
+
+    config LAPTOP_HOST_IP
+        string "Laptop Host IP Address"
+        default "192.168.1.100"
+        help
+            IPv4 Address of the Laptop running host_ip_cam.py (found via 'ipconfig').
+
+    config TCP_STREAM_PORT
+        int "TCP Video Stream Port"
+        default 8888
+        range 1024 65535
+        help
+            TCP Port on Laptop Host serving 1:1 JPEG frames.
+
+    config UDP_TELEMETRY_PORT
+        int "UDP Telemetry Port"
+        default 8889
+        range 1024 65535
+        help
+            UDP Port on Laptop Host listening for ADAS telemetry JSON packets.
+
+    config BUZZER_GPIO_PIN
+        int "Buzzer GPIO Pin"
+        default 4
+        help
+            GPIO pin connected to the onboard/external active buzzer.
+
+    config LED_STATUS_GPIO_PIN
+        int "Status LED GPIO Pin"
+        default 48
+        help
+            GPIO pin for the onboard status/alarm LED (e.g., GPIO 48 or 2).
+
+endmenu

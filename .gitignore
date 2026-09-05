@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.tflite
+!host_laptop/models/tinydriver_model.tflite
+!training_tinyml/tinydriver_model.tflite
