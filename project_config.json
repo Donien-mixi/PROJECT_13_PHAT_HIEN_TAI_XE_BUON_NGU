@@ -1,0 +1,68 @@
+{
+  "project_name": "PROJECT_13_PHAT_HIEN_BUON_NGU",
+  "title": "Hệ Thống Phát Hiện Tài Xế Ngủ Gật & Mất Tập Trung (Driver Drowsiness & Distraction Detection)",
+  "target_hardware": "ESP32-S3 N16R8 (Xtensa LX7 @ 240MHz, 16MB Flash, 8MB Octal PSRAM)",
+  "version": "1.0.0",
+
+  "model": {
+    "name": "TinyDriverNet",
+    "architecture": "MobileNetV3-Tiny-WingLoss",
+    "input_width": 96,
+    "input_height": 96,
+    "input_channels": 1,
+    "color_space": "Grayscale",
+    "num_landmarks": 22,
+    "output_dims": 44,
+    "quantization": "Full-Integer INT8",
+    "input_scale": 0.0078431377,
+    "input_zero_point": 0,
+    "output_scale": 0.0039215688,
+    "output_zero_point": -128
+  },
+
+  "landmarks_mapping": {
+    "left_eye": [0, 1, 2, 3, 4, 5],
+    "right_eye": [6, 7, 8, 9, 10, 11],
+    "mouth": [12, 13, 14, 15, 16, 17],
+    "nasion": 18,
+    "nose_tip": 19,
+    "nose_left_wing": 20,
+    "chin": 21
+  },
+
+  "adas_thresholds": {
+    "calibration_duration_sec": 5.0,
+    "ear_default_threshold": 0.21,
+    "ear_calib_factor": 0.75,
+    "slow_blink_min_sec": 0.5,
+    "microsleep_duration_sec": 1.5,
+    "mar_default_threshold": 0.45,
+    "mar_calib_factor": 1.6,
+    "yawn_duration_sec": 1.5,
+    "yawn_count_threshold": 3,
+    "yawn_sliding_window_sec": 180.0,
+    "yaw_distraction_threshold_deg": 30.0,
+    "pitch_distraction_threshold_deg": 25.0,
+    "distraction_duration_sec": 3.0
+  },
+
+  "networking": {
+    "tcp_stream_port": 8888,
+    "udp_telemetry_port": 8889,
+    "http_mjpeg_port": 8080,
+    "tcp_magic_header_hex": "0xAA55AA55",
+    "default_laptop_ip": "192.168.1.100"
+  },
+
+  "hardware_gpio": {
+    "gpio_buzzer": 4,
+    "gpio_led_status": 48
+  },
+
+  "paths": {
+    "colab_package_name": "tinydriver_esp32_package.zip",
+    "host_tflite_model": "host_laptop/models/tinydriver_model.tflite",
+    "firmware_model_header": "firmware_esp32/main/tinydriver_model_data.h",
+    "training_tflite_model": "training_tinyml/tinydriver_model.tflite"
+  }
+}
