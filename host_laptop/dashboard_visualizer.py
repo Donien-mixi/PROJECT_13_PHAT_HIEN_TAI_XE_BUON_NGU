@@ -127,25 +127,55 @@ class DashboardVisualizer:
             for pt in pts_2d[18:22]:
                 cv2.circle(display, pt, 3, (0, 255, 255), -1)
 
-            # Draw 3D Head Pose Axes projecting from nose tip (pt 19)
+            # Draw 3D Head Pose Axes projecting from nose tip (pt 19) bằng cv2.projectPoints chuẩn xác
             nose_px, nose_py = pts_2d[19]
-            yaw_rad = math.radians(state.get('yaw', 0.0))
-            pitch_rad = math.radians(state.get('pitch', 0.0))
-            roll_rad = math.radians(state.get('roll', 0.0))
-
+            pitch = float(state.get('pitch', 0.0))
+            yaw = float(state.get('yaw', 0.0))
+            roll = float(state.get('roll', 0.0))
             axis_len = 50.0
-            # Projected endpoints
-            x_end = (int(nose_px + axis_len * (math.cos(yaw_rad) * math.cos(roll_rad))),
-                     int(nose_py + axis_len * (math.cos(pitch_rad) * math.sin(roll_rad) + math.cos(roll_rad) * math.sin(pitch_rad) * math.sin(yaw_rad))))
-            y_end = (int(nose_px - axis_len * (math.cos(yaw_rad) * math.sin(roll_rad))),
-                     int(nose_py + axis_len * (math.cos(pitch_rad) * math.cos(roll_rad) - math.sin(pitch_rad) * math.sin(yaw_rad) * math.sin(roll_rad))))
-            z_end = (int(nose_px + axis_len * math.sin(yaw_rad)),
-                     int(nose_py - axis_len * math.sin(pitch_rad)))
 
-            # Red: Pitch (X), Green: Yaw (Y), Blue: Roll/Forward (Z)
-            cv2.line(display, (nose_px, nose_py), x_end, (0, 0, 255), 2)
-            cv2.line(display, (nose_px, nose_py), y_end, (0, 255, 0), 2)
-            cv2.line(display, (nose_px, nose_py), z_end, (255, 0, 0), 2)
+            # Chuyển góc Euler sang ma trận xoay Rodrigues (PnP convention: pitch=rx, yaw=ry, roll=rz)
+            rx = np.array([
+                [1.0, 0.0, 0.0],
+                [0.0, math.cos(math.radians(pitch)), -math.sin(math.radians(pitch))],
+                [0.0, math.sin(math.radians(pitch)), math.cos(math.radians(pitch))]
+            ])
+            ry = np.array([
+                [math.cos(math.radians(yaw)), 0.0, math.sin(math.radians(yaw))],
+                [0.0, 1.0, 0.0],
+                [-math.sin(math.radians(yaw)), 0.0, math.cos(math.radians(yaw))]
+            ])
+            rz = np.array([
+                [math.cos(math.radians(roll)), -math.sin(math.radians(roll)), 0.0],
+                [math.sin(math.radians(roll)), math.cos(math.radians(roll)), 0.0],
+                [0.0, 0.0, 1.0]
+            ])
+            R = rz @ ry @ rx
+            rvec, _ = cv2.Rodrigues(R)
+
+            h_vis, w_vis = display.shape[:2]
+            focal_len = w_vis * 1.1
+            cam_mat = np.array([
+                [focal_len, 0, nose_px],
+                [0, focal_len, nose_py],
+                [0, 0, 1]
+            ], dtype=np.float64)
+            dist_c = np.zeros((4, 1))
+            tvec = np.array([[0.0], [0.0], [focal_len]], dtype=np.float64)
+
+            axes_3d = np.array([
+                [0.0, 0.0, 0.0],
+                [axis_len, 0.0, 0.0],
+                [0.0, axis_len, 0.0],
+                [0.0, 0.0, axis_len]
+            ], dtype=np.float64)
+
+            imgpts, _ = cv2.projectPoints(axes_3d, rvec, tvec, cam_mat, dist_c)
+            imgpts = imgpts.reshape(-1, 2).astype(int)
+
+            cv2.line(display, tuple(imgpts[0]), tuple(imgpts[1]), (0, 0, 255), 2, cv2.LINE_AA)  # Red: Pitch (X)
+            cv2.line(display, tuple(imgpts[0]), tuple(imgpts[2]), (0, 255, 0), 2, cv2.LINE_AA)  # Green: Yaw (Y)
+            cv2.line(display, tuple(imgpts[0]), tuple(imgpts[3]), (255, 0, 0), 2, cv2.LINE_AA)  # Blue: Roll/Forward (Z)
 
         # 3. Draw Telemetry Overlay Panel (Glassmorphism Dark)
         overlay = display.copy()

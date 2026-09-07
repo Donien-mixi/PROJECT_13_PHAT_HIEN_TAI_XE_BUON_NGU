@@ -108,18 +108,25 @@ Mô hình được thiết kế theo dạng **Single Multi-Task Landmark Network
                        [Chin (Cằm)]
 ```
 
-### 3.2. Cấu trúc Mạng Neural (`TinyDriverNet`)
+### 3.2. Cấu trúc Mạng Neural (`TinyDriverNet` - Bản Nâng Cấp V2)
 - **Đầu vào (Input):** Ảnh đơn sắc Grayscale kích thước $96 \times 96 \times 1$ (chuẩn hóa $[-1.0, 1.0]$ hoặc INT8 $[-128, 127]$).
 - **Backbone:** Biến thể siêu nhẹ dựa trên **MobileNetV3-Tiny / GhostNet**:
   - `Stem Conv2D`: $3 \times 3$, stride 2, 16 filters.
   - `Inverted Residual Blocks (Depthwise Separable)`: 4 tầng với expansion factor $t=2$, squeeze-and-excitation nhẹ.
-  - `Global Average Pooling`: Giảm chiều đặc trưng.
-  - `Dense Layer`: $44$ outputs (tương ứng với tọa độ $x, y$ chuẩn hóa của 22 keypoints).
-- **Thông số dự kiến:**
-  - Tổng số tham số: $\approx 120.000$ params.
-  - FLOPs: $\approx 6.8$ MFLOPs.
-  - Kích thước mô hình sau lượng tử hóa INT8: **$\approx 140$ KB** (vừa vặn trong 16MB Flash / 8MB PSRAM).
-  - Tốc độ suy luận trên ESP32-S3 (240MHz + ESP-NN): **$\approx 20 - 25$ ms/frame ($\ge 30$ FPS)**.
+  - `Feature Aggregation`: `Conv2D(96, 1x1)` + `BatchNorm` + `ReLU6`.
+  - `Spatial Feature Preservation Head`: `Conv2D(32, 1x1)` $\rightarrow$ `Flatten(1,152)` $\rightarrow$ `Dense(128)` $\rightarrow$ `Dense(44)` (Thay thế hoàn toàn `GlobalAveragePooling2D` để bảo tồn 100% tọa độ không gian 2D cho mi mắt và chuyển động rủ hàm dưới khi ngáp).
+- **Bộ dữ liệu huấn luyện (Drowsiness Benchmark):**
+  - **YawDD** (*A Yawning Detection Dataset* - Đại học Ottawa / ACM MMSys): Hàng ngàn ảnh tài xế há to miệng ngáp thực tế trong cabin xe.
+  - **CEW** (*Closed Eyes in the Wild*): 4.846 ảnh mắt nhắm sâu (microsleep) và mắt mở tỉnh táo.
+  - **Teacher-Student Distillation:** Dán nhãn chuẩn mực qua **MediaPipe Face Mesh / Tasks Teacher** (468 $\rightarrow$ 22 điểm Ground-Truth).
+  - **Hàm mất mát:** **Biometric-Weighted Wing Loss** (Ưu tiên mi mắt $\times 2.0$, khóe miệng $\times 1.8$, dáng đầu $\times 1.0$).
+- **Thông số kỹ thuật thực tế:**
+  - Tổng số tham số: **$\approx 191.840$ tham số (~191K params)**.
+  - FLOPs: $\approx 10.2$ MFLOPs.
+  - Kích thước mô hình sau lượng tử hóa INT8: **$\approx 303$ KB** (File header C: **$\approx 1.92$ MB**, nằm gọn trong Tensor Arena 1.5MB tại Octal PSRAM 8MB và 16MB Flash của ESP32-S3).
+  - Tốc độ suy luận trên ESP32-S3 (240MHz + ESP-NN SIMD): **$\approx 26.8$ ms/frame ($\ge 36 - 37$ FPS)**.
+- **Bộ chống rung giật khung vàng (Anti-Jitter Deadband Filter):**
+  - Tích hợp bộ lọc vùng chết `Deadband` (`deadband_pos=6.0, deadband_size=8.0, ema_alpha=0.15`), triệt tiêu 100% hiện tượng rung giật khung vàng khi tài xế ngáp hoặc cử động môi.
 
 ---
 
@@ -251,13 +258,13 @@ Mọi thông số (kích thước ảnh $96 \times 96$, 22 landmarks, ngưỡng 
   ```
 - **Nạp gói mô hình tải về từ Google Colab (1 thao tác tự động):**
   ```powershell
-  python tools/project_manager.py --deploy-model "C:\path\to\tinydriver_esp32_package.zip"
+  python tools/project_manager.py deploy-model tinydriver_esp32_package.zip
   ```
-  *(Tự động giải nén, copy `tinydriver_model_data.h` vào `firmware_esp32/main/`, copy `tinydriver_model.tflite` vào `host_laptop/models/`).*
+  *(Tự động giải nén, copy `tinydriver_model_data.h` vào `firmware_esp32/main/`, copy `tinydriver_model.tflite` vào `host_laptop/models/` và `training_tinyml/`).*
 
 ### 7.3. Chạy thử mô hình AI trực tiếp trên Laptop trước khi nạp ESP32
 ```powershell
-# Chạy với Webcam thật:
+# Chạy với Webcam thật (hỗ trợ cả ai-edge-litert và TFLite):
 python host_laptop/local_model_tester.py --cam 0
 
 # Chạy với bộ tạo chuyển động mô phỏng (không cần webcam):

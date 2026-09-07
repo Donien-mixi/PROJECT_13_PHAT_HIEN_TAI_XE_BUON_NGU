@@ -29,6 +29,7 @@ import json
 import zipfile
 import shutil
 import argparse
+import subprocess
 from pathlib import Path
 
 # Đảm bảo in tiếng Việt UTF-8 trên Windows Console
@@ -268,18 +269,39 @@ def cmd_sync(args):
         with open(fw_header, "r", encoding="utf-8") as f:
             fw_content = f.read()
         fw_checks = [
-            f"#define TINYDRIVER_INPUT_WIDTH       {cfg['model']['input_width']}",
-            f"#define TINYDRIVER_INPUT_HEIGHT      {cfg['model']['input_height']}",
-            f"#define TINYDRIVER_NUM_LANDMARKS     {cfg['model']['num_landmarks']}",
+            ("TINYDRIVER_INPUT_WIDTH", str(cfg['model']['input_width'])),
+            ("TINYDRIVER_INPUT_HEIGHT", str(cfg['model']['input_height'])),
+            ("TINYDRIVER_NUM_LANDMARKS", str(cfg['model']['num_landmarks'])),
         ]
-        for item in fw_checks:
-            if item in fw_content:
-                print(f"    ✓ {item}")
-            else:
-                print(f"    ⚠️ Cần cập nhật hằng số: {item}")
+        for name, val in fw_checks:
+            matched = False
+            for line in fw_content.splitlines():
+                if f"#define {name}" in line and val in line:
+                    print(f"    ✓ {line.strip()}")
+                    matched = True
+                    break
+            if not matched:
+                print(f"    ⚠️ Cần cập nhật hằng số: #define {name} {val}")
 
     print("\n✅ Quá trình đồng bộ hoàn tất! Tất cả các phân hệ đều chia sẻ cùng thông số chuẩn.")
     print("=" * 70)
+
+
+def cmd_preprocess(args):
+    """Kích hoạt công cụ tiền xử lý và gán nhãn 22 điểm dữ liệu cộng đồng chuẩn."""
+    print("=" * 70)
+    print("🧠 TIỀN XỬ LÝ & GÁN NHÃN 22 ĐIỂM DỮ LIỆU CỘNG ĐỒNG (PREPROCESSING)")
+    print("=" * 70)
+    preprocess_script = ROOT_DIR / "tools" / "preprocess_dataset.py"
+    if not preprocess_script.exists():
+        print(f"❌ Không tìm thấy script: {preprocess_script}")
+        return
+
+    cmd = [sys.executable, str(preprocess_script)]
+    if hasattr(args, "data_dir") and args.data_dir:
+        cmd.extend(["--data-dir", str(args.data_dir)])
+
+    subprocess.run(cmd)
 
 
 def cmd_pack_colab(args):
@@ -301,9 +323,10 @@ def cmd_pack_colab(args):
         "tinydriver_net.py",
         "wing_loss.py",
         "distillation.py",
-        "train.py",
         "export_tflite.py",
         "run_colab_train.py",
+        "yawn_faces.zip",
+        "preprocessed_driver_dataset.npz",
     ]
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -312,9 +335,16 @@ def cmd_pack_colab(args):
             if fpath.exists():
                 zf.write(fpath, arcname=f"training_tinyml/{fname}")
                 zf.write(fpath, arcname=fname)
-                print(f"  ✓ Đã nén: {fname}")
+                print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024:.1f} KB)")
             else:
-                print(f"  ⚠️ Cảnh báo thiếu file: {fname}")
+                if fname != "preprocessed_driver_dataset.npz":
+                    print(f"  ⚠️ Cảnh báo thiếu file: {fname}")
+
+        # Thêm file script tiền xử lý nếu có
+        preprocess_script = ROOT_DIR / "tools" / "preprocess_dataset.py"
+        if preprocess_script.exists():
+            zf.write(preprocess_script, arcname="preprocess_dataset.py")
+            print(f"  ✓ Đã nén công cụ tiền xử lý: preprocess_dataset.py")
 
     size_kb = zip_path.stat().st_size / 1024
     print("=" * 70)
@@ -325,10 +355,11 @@ def cmd_pack_colab(args):
     print("   2. Tạo 1 ô lệnh (Cell) duy nhất và chạy đoạn code sau:")
     print("-" * 70)
     print("from google.colab import files")
+    print("!pip install -q mediapipe")
     print("!rm -f training_package*.zip")
     print("uploaded = files.upload() # Chọn file training_package.zip vừa tạo")
-    print("!unzip -q -o training_package*.zip && python run_colab_train.py")
-    print("files.download('tinydriver_esp32_package.zip')")
+    print("!unzip -q -o training_package*.zip")
+    print("!python run_colab_train.py")
     print("-" * 70)
     print("   3. Quá trình train sẽ tự động chạy và file tinydriver_esp32_package.zip sẽ tự động tải về!")
     print("=" * 70)
@@ -353,11 +384,16 @@ def main():
     parser_pack = subparsers.add_parser("pack-colab", help="Đóng gói bộ code training thành file ZIP để nạp lên Colab")
     parser_pack.set_defaults(func=cmd_pack_colab)
 
+    # Lệnh preprocess
+    parser_prep = subparsers.add_parser("preprocess", help="Chạy tiền xử lý và gán nhãn 22 điểm dữ liệu cộng đồng")
+    parser_prep.add_argument("--data-dir", type=str, default=None, help="Thư mục tập dữ liệu bổ sung (nếu có)")
+    parser_prep.set_defaults(func=cmd_preprocess)
+
     # Lệnh sync
     parser_sync = subparsers.add_parser("sync", help="Đồng bộ cấu hình từ project_config.json")
     parser_sync.set_defaults(func=cmd_sync)
 
-    # Nếu gọi dạng flag ngắn (--status, --sync, --deploy-model, --pack-colab ...)
+    # Nếu gọi dạng flag ngắn (--status, --sync, --deploy-model, --pack-colab, --preprocess ...)
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         if arg in ["--status", "-s"]:
@@ -368,6 +404,11 @@ def main():
             return
         elif arg in ["--pack-colab", "-p"]:
             cmd_pack_colab(None)
+            return
+        elif arg in ["--preprocess"]:
+            class PrepArgs:
+                data_dir = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
+            cmd_preprocess(PrepArgs())
             return
         elif arg in ["--deploy-model", "-d"]:
             if len(sys.argv) < 3:

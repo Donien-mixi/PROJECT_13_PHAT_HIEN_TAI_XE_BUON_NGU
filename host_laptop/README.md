@@ -20,10 +20,11 @@ host_laptop/
 ├── camera_streamer.py                    # Thuật toán Square Center-Crop 1:1, TCP Server & HTTP MJPEG Server
 ├── dashboard_visualizer.py               # Lắng nghe UDP Telemetry từ ESP32, vẽ HUD Cyberpunk Glassmorphism
 ├── host_ip_cam.py                        # Điểm khởi chạy chính (Master Entrypoint)
+├── local_model_tester.py                 # Kiểm thử mô hình TFLite/LiteRT với Webcam Laptop trước khi nạp ESP32
 ├── mock_esp32_client.py                  # Client giả lập ESP32-S3 để test hệ thống trước khi nạp mạch thật
 ├── test_phase2_pipeline.py               # Bộ kiểm chuẩn tự động 5 bài test (Unit & Integration)
 ├── haarcascade_frontalface_default.xml   # Bộ nhận diện khuôn mặt Haar Cascade bám tâm động
-└── requirements.txt                      # opencv-python, numpy
+└── requirements.txt                      # opencv-python, numpy, ai-edge-litert
 ```
 
 ---

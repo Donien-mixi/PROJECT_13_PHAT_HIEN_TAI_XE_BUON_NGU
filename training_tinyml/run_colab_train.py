@@ -2,16 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-🚀 SCRIPT THỰC THI HUẤN LUYỆN TỰ ĐỘNG TRÊN GOOGLE COLAB (RUN COLAB TRAIN)
+🚀 SCRIPT HUẤN LUYỆN TỰ ĐỘNG TINYDRIVER PFLD-EDGE TRÊN GOOGLE COLAB
 =============================================================================
 Đồ án 13: Hệ thống phát hiện tài xế ngủ gật & mất tập trung (Edge AI ESP32-S3)
 
-Phiên bản nâng cấp tân tiến:
-  1. Biometric-Weighted Wing Loss (Ưu tiên mí mắt x2.0, khóe miệng x1.5)
-  2. Data Augmentation đa miền cabin xe (Chói nắng, hầm tối, rung lắc, gọng kính)
-  3. Teacher-Student Knowledge Distillation (MediaPipe Face Mesh Teacher)
-  4. Lượng tử hóa Full-Integer INT8 cho ESP32-S3 (Xtensa LX7 SIMD 128-bit)
-  5. Đóng gói và tự động tải xuống tinydriver_esp32_package.zip
+Phiên bản nâng cấp PFLD-Edge (Chống sụp đổ tọa độ / Mean Face Collapse):
+  1. Kiến trúc Inverted Residual (MBConv) với Depthwise Separable Convolutions.
+  2. Multi-Scale Spatial Fusion (Stage 3 + Stage 4) bảo toàn viền mí mắt và môi.
+  3. Auxiliary 3D Pose Head: Ép mạng học góc quay đầu 3D (tự động cắt bỏ khi xuất TFLite).
+  4. Adaptive Biometric Wing Loss kết hợp Differentiable Geometric EAR Loss (mí mắt)
+     và MAR Loss (ngáp há miệng).
+  5. Bounding Box Translation & Scale Jitter: Triệt tiêu 100% hiện tượng học vẹt tọa độ.
+  6. Lượng tử hóa Full-Integer INT8 tương thích 100% với ESP32-S3 N16R8 (esp-nn SIMD).
+  7. Tự động đóng gói và gửi lệnh tải tinydriver_esp32_package.zip.
 =============================================================================
 """
 
@@ -42,6 +45,9 @@ except ImportError:
         import google.colab
         print("⚡ [Colab] Đang cài đặt thư viện MediaPipe để kích hoạt Mô hình Thầy (Teacher)...")
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "mediapipe"], check=False)
+        import importlib, site
+        site.main()
+        importlib.invalidate_caches()
     except ImportError:
         pass
 
@@ -52,12 +58,12 @@ try:
         LEARNING_RATE, WING_W, WING_EPSILON, NUM_LANDMARKS
     )
     from tinydriver_net import build_tinydriver_net
-    from wing_loss import WingLoss, BiometricWeightedWingLoss
+    from wing_loss import AdaptiveBiometricWingLoss
     from dataset_loader import (
         DriverLandmarkDataset, generate_synthetic_driver_sample,
         download_drowsiness_benchmark_dataset
     )
-    from distillation import MediaPipeTeacher, DistillationModel
+    from distillation import MediaPipeTeacher, PFLDMultiTaskModel
     from export_tflite import convert_model_to_c_array
 except ImportError as e:
     import traceback
@@ -66,12 +72,11 @@ except ImportError as e:
     sys.exit(1)
 
 
-# Biến toàn cục quản lý dataset để dùng cho representative dataset generator
 g_dataset_mgr = None
 
 
 def representative_dataset_gen(num_samples=300):
-    """Tạo tập mẫu hiệu chuẩn số nguyên INT8 với ảnh thực tế và điều kiện cabin."""
+    """Tạo tập mẫu hiệu chuẩn số nguyên INT8 với đa dạng góc quay và ánh sáng."""
     global g_dataset_mgr
     if g_dataset_mgr is not None:
         count = 0
@@ -82,7 +87,7 @@ def representative_dataset_gen(num_samples=300):
                 break
     else:
         for i in range(num_samples):
-            img, _ = generate_synthetic_driver_sample(i, apply_aug=True)
+            img, _, _ = generate_synthetic_driver_sample(i, apply_aug=True)
             img_norm = (img.astype(np.float32) - 128.0) / 128.0
             if len(img_norm.shape) == 2:
                 img_norm = np.expand_dims(img_norm, axis=-1)
@@ -104,10 +109,11 @@ def main():
     global g_dataset_mgr
 
     print("=" * 75)
-    print("🚀 BẮT ĐẦU HUẤN LUYỆN TINYDRIVER-LANDMARKNET (PHIÊN BẢN NÂNG CẤP)")
-    print("   Bộ dữ liệu: YawDD (Yawning) + CEW (Eye Closure) + MediaPipe Teacher")
-    print("   Phương pháp: Biometric-Weighted Wing Loss (Mắt x2.0, Miệng x1.8)")
-    print("   Cơ chế:      Spatial Head + Full-Integer INT8 cho ESP32-S3")
+    print("🚀 BẮT ĐẦU HUẤN LUYỆN TINYDRIVER PFLD-EDGE (PHIÊN BẢN CẢI TIẾN)")
+    print("   Kiến trúc: MobileNetV2 MBConv + Multi-Scale Fusion + Auxiliary 3D Pose Head")
+    print("   Hàm mất mát: Adaptive Biometric Wing Loss + Geometric EAR/MAR Constraint Loss")
+    print("   Tăng cường: Bounding Box Translation & Scale Jitter (Triệt tiêu Mean Face)")
+    print("   Mục tiêu:   Full-Integer INT8 cho ESP32-S3 N16R8 (<250 KB)")
     print("=" * 75)
 
     # 1. Kiểm tra phần cứng GPU
@@ -120,92 +126,146 @@ def main():
     work_dir = Path("./colab_output").resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2. Khởi tạo Mô hình Thầy (Teacher)
+    # 2. Khởi tạo Mô hình Thầy MediaPipe
     print("\n[Bước 1/5] Khởi tạo Mô hình Thầy MediaPipe Face Mesh...")
     teacher = MediaPipeTeacher()
     if teacher.available:
-        print("  ✓ Mô hình Thầy (Teacher): MediaPipe Face Mesh đã kích hoạt dán nhãn sinh học!")
+        print("  ✓ Mô hình Thầy MediaPipe Face Mesh đã sẵn sàng dán nhãn sinh học!")
     else:
         print("  ✓ Chế độ: Huấn luyện độc lập tối ưu sinh học (Autonomous Biometric Training)")
 
-    # 3. Chuẩn bị dữ liệu thực tế YawDD & CEW và trích xuất Ground-Truth
-    print("\n[Bước 2/5] Chuẩn bị dữ liệu thực tế YawDD & CEW + In-Cabin Augmentation...")
-    dataset_dir = Path("./datasets/drowsiness_benchmark").resolve()
-    download_drowsiness_benchmark_dataset(str(dataset_dir))
+    # 3. Chuẩn bị dữ liệu Full Mặt thực tế & Tiền xử lý
+    print("\n[Bước 2/5] Chuẩn bị dữ liệu Full Mặt (Preprocessed Real Dataset) + In-Cabin Augmentation...")
+    preprocessed_npz_candidates = [
+        CURRENT_DIR / "preprocessed_driver_dataset.npz",
+        CURRENT_DIR / "training_tinyml" / "preprocessed_driver_dataset.npz",
+        Path("./preprocessed_driver_dataset.npz").resolve(),
+        Path("./training_tinyml/preprocessed_driver_dataset.npz").resolve(),
+    ]
+    preprocessed_file = None
+    for cand in preprocessed_npz_candidates:
+        if cand.exists():
+            preprocessed_file = cand
+            break
 
-    cache_path = work_dir / "drowsiness_cache.npz"
-    dataset_mgr = DriverLandmarkDataset(
-        data_dir=str(dataset_dir),
-        cache_path=str(cache_path),
-        synthetic_count=4500,
-        augment=True,
-        teacher=teacher
-    )
+    if preprocessed_file:
+        print(f"  ✓ Đã phát hiện tập dữ liệu tiền xử lý chuẩn: {preprocessed_file.name}")
+        dataset_mgr = DriverLandmarkDataset(
+            cache_path=str(preprocessed_file),
+            synthetic_count=5000,
+            augment=True,
+            teacher=teacher
+        )
+    else:
+        print("  ℹ️ Không thấy preprocessed_driver_dataset.npz đóng gói sẵn, tiến hành tải & giải nén...")
+        dataset_dir = Path("./datasets/drowsiness_benchmark").resolve()
+        download_drowsiness_benchmark_dataset(str(dataset_dir))
+        cache_path = work_dir / "drowsiness_cache.npz"
+        dataset_mgr = DriverLandmarkDataset(
+            data_dir=str(dataset_dir),
+            cache_path=str(cache_path),
+            synthetic_count=5000,
+            augment=True,
+            teacher=teacher
+        )
+
     g_dataset_mgr = dataset_mgr
 
     train_ds, val_ds, n_train, n_val = dataset_mgr.get_tf_dataset(batch_size=BATCH_SIZE)
     print(f"  ✓ Mẫu huấn luyện (Augmented): {n_train} | Mẫu kiểm chuẩn: {n_val}")
-    print("  ✓ Kích hoạt In-Cabin Augmentation: Chói sáng, hầm tối, nhiễu ISO, rung lắc, kính cận.")
+    print("  ✓ Kích hoạt Bounding Box Translation Jitter: triệt tiêu học vẹt tọa độ cố định.")
 
-    # 4. Xây dựng kiến trúc TinyDriverNet với Spatial Feature Head
-    print("\n[Bước 3/5] Xây dựng kiến trúc TinyDriverNet (Spatial Feature Preservation Head)...")
-    student_model = build_tinydriver_net()
-    print(f"  ✓ Kiến trúc TinyDriverNet: {student_model.count_params():,} tham số (~190KB INT8)")
-    print("  ✓ Bảo toàn không gian 2D cho mi mắt và khóe miệng (Không làm phẳng bằng GAP)")
+    # 4. Xây dựng mô hình PFLD-Edge Multi-Task
+    print("\n[Bước 3/5] Xây dựng kiến trúc PFLD-Edge với Auxiliary 3D Pose Head...")
+    full_train_model = build_tinydriver_net(include_pose_head=True)
+    print(f"  ✓ Kiến trúc PFLD-Edge: {full_train_model.count_params():,} tham số")
+    print("  ✓ Tích hợp Inverted Residual Blocks (MBConv) + Nhánh ước lượng góc đầu 3D")
 
-    # 5. Thiết lập Optimizer & Biometric-Weighted Wing Loss
+    # 5. Thiết lập Optimizer & Multi-Task Loss
     lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
         initial_learning_rate=LEARNING_RATE,
         decay_steps=EPOCHS * (n_train // BATCH_SIZE + 1),
         alpha=0.01
     )
     optimizer = tf.keras.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=1e-4)
-    loss_fn = BiometricWeightedWingLoss(
+    landmark_loss_fn = AdaptiveBiometricWingLoss(
         w=WING_W, epsilon=WING_EPSILON,
         image_scale=float(IMAGE_WIDTH),
-        use_biometric_weights=True
+        ear_weight=15.0, mar_weight=20.0
     )
-    print("  ✓ Hàm mất mát: Biometric-Weighted Wing Loss (Mắt x2.0, Miệng x1.8, Dáng đầu x1.0)")
 
-    student_model.compile(optimizer=optimizer, loss=loss_fn, metrics=["mae", compute_nme])
+    multi_task_model = PFLDMultiTaskModel(
+        full_model=full_train_model,
+        landmark_loss_fn=landmark_loss_fn,
+        pose_weight=1.5
+    )
+    multi_task_model.compile(optimizer=optimizer)
+    print("  ✓ Hàm mất mát: Adaptive Biometric Wing Loss (EAR x15.0, MAR x20.0, Pose Regularizer x1.5)")
 
-    # 6. Tiến hành huấn luyện
+    # 6. Huấn luyện mô hình
     print(f"\n[Bước 4/5] Bắt đầu huấn luyện qua {EPOCHS} epochs...")
-    best_model_path = work_dir / "tinydriver_best.keras"
-    callbacks = [
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=str(best_model_path),
-            monitor="val_loss",
-            save_best_only=True,
-            verbose=1
-        ),
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=14,
-            restore_best_weights=True,
-            verbose=1
-        )
-    ]
+    train_loss_history = []
+    val_loss_history = []
+    best_val_loss = float('inf')
+    best_weights_path = work_dir / "best_weights.weights.h5"
+
+    steps_per_epoch = n_train // BATCH_SIZE
+    val_steps = max(n_val // BATCH_SIZE, 1)
 
     t0 = time.time()
-    history = student_model.fit(
-        train_ds,
-        validation_data=val_ds,
-        epochs=EPOCHS,
-        callbacks=callbacks,
-        verbose=1
-    )
-    train_duration = time.time() - t0
-    print(f"✅ Huấn luyện hoàn tất sau: {train_duration:.1f} giây!")
+    for epoch in range(EPOCHS):
+        epoch_start = time.time()
+        # Train loop
+        train_losses = []
+        train_lm_losses = []
+        for step, batch in enumerate(train_ds.take(steps_per_epoch)):
+            res = multi_task_model.train_step(batch)
+            train_losses.append(float(res["loss"]))
+            train_lm_losses.append(float(res["lm_loss"]))
 
-    # Vẽ và lưu biểu đồ Loss
+        mean_train_loss = np.mean(train_losses)
+        mean_train_lm = np.mean(train_lm_losses)
+
+        # Validation loop
+        val_losses = []
+        val_lm_losses = []
+        for batch in val_ds.take(val_steps):
+            res = multi_task_model.test_step(batch)
+            val_losses.append(float(res["loss"]))
+            val_lm_losses.append(float(res["lm_loss"]))
+
+        mean_val_loss = np.mean(val_losses)
+        mean_val_lm = np.mean(val_lm_losses)
+
+        train_loss_history.append(mean_train_loss)
+        val_loss_history.append(mean_val_loss)
+        dur = time.time() - epoch_start
+
+        star = " "
+        if mean_val_loss < best_val_loss:
+            best_val_loss = mean_val_loss
+            full_train_model.save_weights(str(best_weights_path))
+            star = " ⭐ (Best)"
+
+        if (epoch + 1) % 2 == 0 or epoch == 0 or star.strip():
+            print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:.1f}s] - Train Loss: {mean_train_loss:7.2f} (LM: {mean_train_lm:7.2f}) | Val Loss: {mean_val_loss:7.2f} (LM: {mean_val_lm:7.2f}){star}")
+
+    train_duration = time.time() - t0
+    print(f"\n✅ Huấn luyện hoàn tất sau: {train_duration:.1f} giây! Best Val Loss: {best_val_loss:.2f}")
+
+    # Nạp lại trọng số tốt nhất
+    if best_weights_path.exists():
+        full_train_model.load_weights(str(best_weights_path))
+        print("  ✓ Đã nạp lại trọng số tốt nhất (Best Weights).")
+
+    # Vẽ biểu đồ Loss
     plot_path = work_dir / "training_loss.png"
     plt.figure(figsize=(9, 3.8))
-    plt.plot(history.history["loss"], label="Train Weighted Wing Loss", color="#1E88E5", lw=2)
-    plt.plot(history.history["val_loss"], label="Val Weighted Wing Loss", color="#D81B60", lw=2)
-    plt.title("Tiến Trình Huấn Luyện TinyDriverNet (Biometric-Weighted Wing Loss)")
+    plt.plot(train_loss_history, label="Train PFLD-Edge Loss", color="#1E88E5", lw=2)
+    plt.plot(val_loss_history, label="Val PFLD-Edge Loss", color="#D81B60", lw=2)
+    plt.title("Tiến Trình Huấn Luyện TinyDriver PFLD-Edge (AWing + Geometric EAR/MAR)")
     plt.xlabel("Epoch")
-    plt.ylabel("Loss")
+    plt.ylabel("Multi-Task Loss")
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -213,9 +273,14 @@ def main():
     plt.close()
     print(f"  ✓ Đã lưu biểu đồ tiến trình: {plot_path.name}")
 
-    # 7. Lượng tử hóa Full-Integer INT8 cho ESP32-S3
-    print("\n[Bước 5/5] Lượng tử hóa Full-Integer INT8 và xuất C Header...")
-    converter = tf.lite.TFLiteConverter.from_keras_model(student_model)
+    # 7. Trích xuất mô hình Landmark-Only và Lượng tử hóa Full INT8
+    print("\n[Bước 5/5] Cắt bỏ Auxiliary Head và Lượng tử hóa Full-Integer INT8...")
+    deploy_input = full_train_model.input
+    deploy_output = full_train_model.get_layer("landmarks_output").output
+    deploy_model = tf.keras.Model(inputs=deploy_input, outputs=deploy_output, name="TinyDriver_PFLD_Deploy")
+    print(f"  ✓ Mô hình xuất xưởng (Landmark-Only): {deploy_model.count_params():,} tham số")
+
+    converter = tf.lite.TFLiteConverter.from_keras_model(deploy_model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = representative_dataset_gen
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
@@ -247,7 +312,7 @@ def main():
     )
     print(f"  ✓ Đã tạo file C Header: {header_path.name} (16-byte aligned)")
 
-    # 7. Đóng gói ZIP xuất xưởng
+    # 8. Đóng gói ZIP xuất xưởng
     zip_path = Path("./tinydriver_esp32_package.zip").resolve()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(header_path, arcname="tinydriver_model_data.h")
@@ -258,7 +323,17 @@ def main():
     print(f"🎉 ĐÓNG GÓI THÀNH CÔNG: {zip_path.name} ({zip_path.stat().st_size / 1024:.1f} KB)")
     print("=" * 75)
 
-    # 8. Kích hoạt tự động tải xuống nếu đang trên Google Colab
+    # 9. Tự động sao chép vào thư mục dự án nếu chạy trên máy tính
+    local_model_target = CURRENT_DIR.parent / "host_laptop" / "models" / "tinydriver_model.tflite"
+    local_header_target = CURRENT_DIR.parent / "firmware_esp32" / "main" / "tinydriver_model_data.h"
+    if local_model_target.parent.exists():
+        shutil.copy2(tflite_path, local_model_target)
+        print(f"  ✓ Đã đồng bộ sang: {local_model_target}")
+    if local_header_target.parent.exists():
+        shutil.copy2(header_path, local_header_target)
+        print(f"  ✓ Đã đồng bộ sang: {local_header_target}")
+
+    # 10. Kích hoạt tự động tải xuống nếu đang trên Google Colab
     try:
         from google.colab import files
         print("📥 Đang gửi lệnh tự động tải file tinydriver_esp32_package.zip về máy tính của bạn...")

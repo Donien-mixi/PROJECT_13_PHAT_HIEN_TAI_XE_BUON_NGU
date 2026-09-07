@@ -18,6 +18,35 @@ from socketserver import ThreadingMixIn
 # Magic protocol header for ESP32 TCP frame sync
 TCP_MAGIC_HEADER = b'\xaa\x55\xaa\x55'
 
+
+def enhance_low_light(frame_bgr, target_luma=115.0):
+    """
+    Tự động cân bằng sáng và tăng cường tương phản trong điều kiện cabin thiếu sáng/ngược sáng/ban đêm.
+    Áp dụng Adaptive Gamma Curve + CLAHE trên kênh Luminance (LAB).
+    """
+    if frame_bgr is None:
+        return frame_bgr
+    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    mean_luma = float(np.mean(gray))
+
+    if mean_luma >= target_luma:
+        return frame_bgr
+
+    gamma = math.log(target_luma / 255.0) / math.log(max(mean_luma, 4.0) / 255.0)
+    gamma = float(np.clip(gamma, 0.35, 0.90))
+
+    lut = np.array([((i / 255.0) ** gamma) * 255.0 for i in range(256)]).clip(0, 255).astype(np.uint8)
+    brightened = cv2.LUT(frame_bgr, lut)
+
+    lab = cv2.cvtColor(brightened, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clip = 2.5 if mean_luma > 60.0 else 3.5
+    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8))
+    l_enh = clahe.apply(l)
+    enhanced = cv2.cvtColor(cv2.merge((l_enh, a, b)), cv2.COLOR_LAB2BGR)
+    return enhanced
+
+
 class CameraStreamer:
     def __init__(self, camera_src=0, stream_size=240, jpeg_quality=75, use_dynamic_face=True, use_synthetic=False):
         self.camera_src = camera_src
@@ -56,26 +85,29 @@ class CameraStreamer:
         self.deadband_size = 8.0
 
         # Initialize Haar Cascade for optional dynamic face tracking
-        self.face_cascade = None
-        local_cascade = os.path.join(os.path.dirname(__file__), 'haarcascade_frontalface_default.xml')
-        system_cascade = getattr(cv2.data, 'haarcascades', '') + 'haarcascade_frontalface_default.xml'
+        # Initialize Haar Multi-Cascade for robust dynamic face tracking
+        self.face_cascades = []
+        candidate_paths = [
+            os.path.join(os.path.dirname(__file__), 'models', 'haarcascade_frontalface_alt2.xml'),
+            os.path.join(os.path.dirname(__file__), 'models', 'haarcascade_frontalface_default.xml'),
+            os.path.join(os.path.dirname(__file__), 'haarcascade_frontalface_default.xml'),
+            getattr(cv2.data, 'haarcascades', '') + 'haarcascade_frontalface_alt2.xml',
+            getattr(cv2.data, 'haarcascades', '') + 'haarcascade_frontalface_alt.xml',
+            getattr(cv2.data, 'haarcascades', '') + 'haarcascade_frontalface_default.xml'
+        ]
 
-        cascade_path = None
-        if os.path.exists(local_cascade):
-            cascade_path = local_cascade
-        elif os.path.exists(system_cascade):
-            cascade_path = system_cascade
+        if hasattr(cv2, 'CascadeClassifier'):
+            for p in candidate_paths:
+                if p and os.path.exists(p):
+                    try:
+                        cc = cv2.CascadeClassifier(p)
+                        if not cc.empty():
+                            self.face_cascades.append(cc)
+                    except Exception:
+                        pass
 
-        if cascade_path and hasattr(cv2, 'CascadeClassifier'):
-            try:
-                cc = cv2.CascadeClassifier(cascade_path)
-                if not cc.empty():
-                    self.face_cascade = cc
-                    print(f"🎯 [Face Tracking] Đã nạp Haar Cascade từ: {cascade_path}")
-                else:
-                    print("⚠️ [Face Tracking] File cascade rỗng. Sử dụng Center-Crop cố định.")
-            except Exception:
-                print("⚠️ [Face Tracking] Không thể nạp CascadeClassifier. Sử dụng Center-Crop chuẩn.")
+        if self.face_cascades:
+            print(f"🎯 [Face Tracking] Đã nạp {len(self.face_cascades)} bộ dò Haar Cascade.")
         else:
             print("ℹ️ [Face Tracking] Sử dụng Square Center-Crop đẳng hướng 1:1.")
 
@@ -163,19 +195,23 @@ class CameraStreamer:
                 if target_face_center is not None:
                     target_cx, target_cy = target_face_center
                     target_S = 260.0
-                elif self.face_cascade is not None:
-                    small_gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (w // 2, h // 2))
-                    faces = self.face_cascade.detectMultiScale(
-                        small_gray, scaleFactor=1.2, minNeighbors=4, minSize=(35, 35)
-                    )
-                    if len(faces) > 0:
-                        faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                        fx, fy, fw, fh = faces[0]
-                        target_cx = (fx + fw / 2.0) * 2.0
-                        target_cy = (fy + fh / 2.0) * 2.0
-                        # 1.35x expansion to encompass head, chin and forehead
-                        face_size = max(fw, fh) * 2.0
-                        target_S = float(np.clip(face_size * 1.35, 120, default_S))
+                elif self.face_cascades:
+                    enh_frame = enhance_low_light(frame, target_luma=115.0)
+                    small_gray = cv2.resize(cv2.cvtColor(enh_frame, cv2.COLOR_BGR2GRAY), (w // 2, h // 2))
+                    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+                    small_gray = clahe.apply(small_gray)
+                    for cc in self.face_cascades:
+                        faces = cc.detectMultiScale(
+                            small_gray, scaleFactor=1.06, minNeighbors=2, minSize=(30, 30)
+                        )
+                        if len(faces) > 0:
+                            faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                            fx, fy, fw, fh = faces[0]
+                            target_cx = (fx + fw / 2.0) * 2.0
+                            target_cy = (fy + fh * 0.52) * 2.0
+                            face_size = max(fw, fh) * 2.0
+                            target_S = float(np.clip(face_size * 1.50, 160, default_S))
+                            break
 
             # Apply Anti-Jitter Deadband and Exponential Moving Average (EMA) smoothing
             if self.smooth_cx is None:
@@ -207,6 +243,9 @@ class CameraStreamer:
             # Crop square region (1:1 Isomorphic)
             crop = frame[y0:y0 + S, x0:x0 + S]
             square_resized = cv2.resize(crop, (self.stream_size, self.stream_size), interpolation=cv2.INTER_LINEAR)
+            # Nâng sáng và tương phản thích ứng nếu crop tối để ESP32 nhận diện rõ nét
+            if np.mean(square_resized) < 95.0:
+                square_resized = enhance_low_light(square_resized, target_luma=120.0)
 
             # Encode to JPEG
             ret_enc, jpeg_buf = cv2.imencode('.jpg', square_resized, self.jpeg_quality)

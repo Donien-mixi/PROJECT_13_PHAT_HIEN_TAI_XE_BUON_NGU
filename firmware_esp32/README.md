@@ -35,8 +35,8 @@ firmware_esp32/
     ├── CMakeLists.txt             # Đăng ký các file nguồn và thư viện phụ thuộc
     ├── Kconfig.projbuild          # Menu cấu hình Wi-Fi, IP Laptop, GPIO
     ├── main.cpp                   # Điểm khởi chạy app_main và khởi tạo 2 FreeRTOS Task
-    ├── tinydriver_model_data.h    # Mảng byte mô hình INT8 (~140KB) căn lề 16-byte cho SIMD
-    ├── wifi_stream_client.h/.cpp  # Nhận stream JPEG qua TCP, Double Buffering PSRAM (Core 0)
+│   ├── tinydriver_model_data.h    # Mảng byte mô hình INT8 (~303KB, Spatial Head 191K params) căn lề 16-byte cho SIMD
+│   ├── wifi_stream_client.h/.cpp  # Nhận stream JPEG qua TCP, Double Buffering PSRAM (Core 0)
     ├── image_decoder.h/.cpp       # Giải nén JPEG 1:1, nội suy Bilinear về 96x96 INT8
     ├── ai_inference.h/.cpp        # Nạp TFLite Micro Arena (1.5MB PSRAM), nhân tăng tốc esp-nn
     ├── pnp_solver.h/.cpp          # Thuật toán POSIT/PnP thuần C++ tính Yaw, Pitch, Roll (<0.3ms)

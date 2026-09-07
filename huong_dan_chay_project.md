@@ -60,6 +60,25 @@ Nếu hệ thống báo tất cả các module đều tồn tại, bạn sẵn s
 
 ---
 
+## 🧠 BƯỚC 1.5: TIỀN XỬ LÝ CÁC TẬP DỮ LIỆU CỘNG ĐỒNG (BENCHMARK DATASETS)
+
+Để mô hình AI có khả năng **tổng quát hóa cao nhất, nhận diện chính xác bất kỳ khuôn mặt tài xế nào trong cộng đồng**:
+
+Chạy lệnh tiền xử lý tự động:
+```powershell
+python tools/project_manager.py --preprocess
+```
+*(Nếu có thêm thư mục ảnh dữ liệu tài xế khác của bạn, bạn có thể truyền: `python tools/preprocess_dataset.py --data-dir "duong_dan_thu_muc"`)*
+
+👉 Lệnh này sẽ:
+1. Quét qua toàn bộ các tập dữ liệu tài xế cộng đồng (bộ ảnh tài xế lái xe trong cabin ngày/đêm + bộ ảnh ngáp thật).
+2. Dùng mô hình Thầy MediaPipe FaceMesh dán nhãn chuẩn 22 điểm Ground-Truth theo đúng giải phẫu học khuôn mặt người.
+3. Cắt ô vuông chuẩn hóa Isomorphic Skull Anchor $96 \times 96$ Grayscale (đồng bộ 100% với ESP32-S3).
+4. Xuất các ảnh kiểm tra trực quan có vẽ 22 điểm vào thư mục **`output/preprocessed_preview/`** để bạn mở xem trực tiếp độ bám dính của mí mắt và khóe môi.
+5. Xuất file dữ liệu chuẩn **`training_tinyml/preprocessed_driver_dataset.npz`**.
+
+---
+
 ## ☁️ BƯỚC 2: ĐÓNG GÓI & HUẤN LUYỆN TRÊN GOOGLE COLAB (GPU T4)
 
 > [!TIP]
@@ -70,7 +89,7 @@ Tại thư mục gốc dự án (với môi trường `projet_13` đang kích ho
 ```powershell
 python tools/project_manager.py --pack-colab
 ```
-👉 Lệnh này sẽ tự động thu gom các file huấn luyện trong `training_tinyml/` và xuất ra file **`training_package.zip`** ngay tại thư mục dự án.
+👉 Lệnh này sẽ tự động thu gom mã nguồn và file dữ liệu tiền xử lý `preprocessed_driver_dataset.npz` (nếu có) để tạo file **`training_package.zip`** ngay tại thư mục dự án.
 
 ### 2.2. Huấn luyện trên Google Colab với 1 lệnh duy nhất
 1. Mở trình duyệt và truy cập: **[https://colab.research.google.com/](https://colab.research.google.com/)**
@@ -99,32 +118,24 @@ files.download('tinydriver_esp32_package.zip')
 
 5. Nhấn nút **Play (Run cell)**:
    - Một nút **"Choose Files" (Chọn tệp)** sẽ xuất hiện: Bạn chọn file `training_package.zip` vừa tạo ở Bước 2.1.
-   - Colab sẽ tự động giải nén, huấn luyện mạng `TinyDriverNet` bằng hàm mất mát **Wing Loss**, lượng tử hóa sang **Full-Integer INT8** (~140 KB), vẽ biểu đồ Loss và đóng gói thành file **`tinydriver_esp32_package.zip`**.
+   - Colab sẽ tự động giải nén, đồng bộ dữ liệu người thật **YawDD (ngáp tài xế)** và **CEW (mắt nhắm)**, dán nhãn qua **MediaPipe Teacher**, huấn luyện mạng `TinyDriverNet` (Spatial Head ~191K params) bằng hàm mất mát **Biometric-Weighted Wing Loss** (Mắt x2.0, Miệng x1.8), lượng tử hóa sang **Full-Integer INT8** (~303 KB), vẽ biểu đồ Loss và đóng gói thành file **`tinydriver_esp32_package.zip`**.
    - Khi hoàn tất, trình duyệt sẽ **tự động tải file `tinydriver_esp32_package.zip` về thư mục Downloads của máy bạn**!
 
 ---
 
 ## 📦 BƯỚC 3: NẠP MÔ HÌNH VÀO PROJECT (1 THAO TÁC TỰ ĐỘNG)
 
-Sau khi file `tinydriver_esp32_package.zip` đã nằm trong máy bạn, bạn **không cần giải nén hay copy thủ công rườm rà**. 
+Sau khi file `tinydriver_esp32_package.zip` đã tải về máy tính của bạn, bạn **không cần giải nén hay copy thủ công rườm rà**.
 
-> [!NOTE]
-> **Nếu bạn đã chép đè 3 file mới vào đúng các vị trí:**
-> - `firmware_esp32/main/tinydriver_model_data.h`
-> - `host_laptop/models/tinydriver_model.tflite`
-> - `training_tinyml/training_loss.png`
-> 
-> Thì **Bước 3 đã hoàn tất 100%**! Bạn không cần chạy lại lệnh bên dưới mà hãy chuyển thẳng sang **Bước 4** để kiểm thử ngay lập tức.
-
-Chỉ cần chạy lệnh sau trên máy tính (nếu bạn muốn hệ thống tự giải nén phân phối tự động):
+Chỉ cần mở terminal tại thư mục gốc dự án và chạy câu lệnh:
 ```powershell
-python tools/project_manager.py --deploy-model "C:\Users\Tên_Bạn\Downloads\tinydriver_esp32_package.zip"
+python tools/project_manager.py deploy-model tinydriver_esp32_package.zip
 ```
-*(Nếu bạn để file zip ngay trong thư mục project thì chỉ cần chạy: `python tools/project_manager.py --deploy-model tinydriver_esp32_package.zip`)*
+*(Nếu bạn để file zip ở thư mục khác, hãy truyền đường dẫn tới file đó, ví dụ: `python tools/project_manager.py deploy-model "C:\Users\...\Downloads\tinydriver_esp32_package.zip"`)*
 
 Hệ thống sẽ tự động:
-- Đặt file `tinydriver_model_data.h` vào `firmware_esp32/main/` (để nạp vào ESP32).
-- Đặt file `tinydriver_model.tflite` vào `host_laptop/models/` (để chạy thử trên Laptop).
+- Đặt file `tinydriver_model_data.h` (~1.92 MB) vào `firmware_esp32/main/` (để nạp vào ESP32).
+- Đặt file `tinydriver_model.tflite` (~303 KB) vào `host_laptop/models/` và `training_tinyml/` (để chạy thử trên Laptop).
 - Lưu biểu đồ huấn luyện `training_loss.png` vào `training_tinyml/`.
 
 ---

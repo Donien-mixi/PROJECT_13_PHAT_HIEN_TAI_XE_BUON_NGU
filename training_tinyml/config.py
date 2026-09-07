@@ -11,8 +11,9 @@ IMAGE_HEIGHT = 96
 IMAGE_CHANNELS = 1          # Grayscale (saves memory & bandwidth on ESP32-S3)
 INPUT_SHAPE = (IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS)
 
-# Bounding box expansion ratio to ensure whole face + context is captured
-BBOX_EXPANSION_RATIO = 1.25
+# Bounding box expansion ratio to ensure whole face + context is captured (Standardized with FaceTracker & ESP32)
+BBOX_EXPANSION_RATIO = 1.35
+
 
 # ==============================================================================
 # 2. Facial Landmark Selection (22 Points selected from 68 standard iBUG points)

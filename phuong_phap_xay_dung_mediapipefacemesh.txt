@@ -1,0 +1,40 @@
+Đây là cách MediaPipe Face Mesh hoạt động, và cách bạn có thể "học" theo nó để tự train mô hình 22 điểm cho ESP32.
+
+## Cách MediaPipe Face Mesh hoạt động
+
+Pipeline gồm hai mạng nơ-ron tách biệt chạy nối tiếp nhau thay vì một mạng end-to-end duy nhất — một detector xử lý toàn bộ ảnh để xác định vị trí khuôn mặt, và một mạng landmark 3D hoạt động trên vùng đã xác định đó để dự đoán bề mặt khuôn mặt bằng hồi quy.
+
+**Giai đoạn 1 — Face detector (BlazeFace):** đây là mô hình BlazeFace short-range, một detector khuôn mặt nhẹ được tối ưu cho suy luận trên GPU di động. Nó chạy trên ảnh gốc và trả về vùng chứa mặt cùng vài điểm neo (mắt, mũi, khóe miệng) để làm mốc căn chỉnh xoay.
+
+**Giai đoạn 2 — Cắt & căn chỉnh ROI:** vùng mặt được cắt, xoay thẳng và resize về kích thước cố định nhỏ. Đây là mẹo quan trọng nhất: việc có được vùng mặt được cắt chính xác giúp giảm mạnh nhu cầu augment dữ liệu như xoay, dịch chuyển, thay đổi tỉ lệ — nhờ đó mạng landmark có thể dồn hầu hết năng lực vào việc dự đoán tọa độ chính xác thay vì phải học cách "tìm mặt" nữa.
+
+**Giai đoạn 3 — Mạng hồi quy landmark:** một CNN nhận ảnh mặt đã cắt và **hồi quy trực tiếp tọa độ** (x, y, z) của từng điểm — không dùng heatmap. Model dùng phân tích Procrustes để ánh xạ các landmark đã hồi quy vào không gian metric 3D, còn tọa độ z biểu diễn độ sâu tương đối so với mặt phẳng đi qua trọng tâm của mesh. Mạng cũng xuất thêm một giá trị xác suất cho biết mặt có đang hiện diện và được căn chỉnh tốt hay không.
+
+**Vòng lặp tracking:** đây là lý do Face Mesh chạy nhanh trên video — vùng cắt (crop) cho frame tiếp theo có thể được tạo dựa trên chính các landmark vừa nhận diện ở frame trước, và detector chỉ được gọi lại khi mạng landmark không còn nhận ra mặt trong khung hình nữa. Nghĩa là detector BlazeFace thường chỉ chạy 1 lần rồi "nghỉ", còn mạng landmark chạy liên tục mỗi frame.
+
+**Cách huấn luyện:** đây là phần thú vị nhất để bạn học theo. Đội MediaPipe dùng transfer learning, huấn luyện mạng đồng thời trên hai mục tiêu: dự đoán tọa độ landmark 3D trên dữ liệu tổng hợp (synthetic, render từ mô hình mặt 3D) và dự đoán đường viền ngữ nghĩa 2D trên dữ liệu thực đã gán nhãn thủ công. Nhờ kết hợp này, mạng cho ra dự đoán 3D hợp lý cả trên dữ liệu tổng hợp lẫn dữ liệu thực. Đây chính là cách họ giải quyết bài toán khó nhất: người gán nhãn tay không thể xác định chính xác tọa độ z (độ sâu), nên phải dùng ảnh 3D render sẵn có nhãn z chuẩn, rồi kết hợp với ảnh thật (chỉ có nhãn x,y) để mạng học tổng quát tốt trên cả hai loại dữ liệu.
+
+## Áp dụng vào mô hình 22 điểm cho ESP32
+
+Ý tưởng cốt lõi của MediaPipe — **hồi quy tọa độ trực tiếp bằng CNN nhỏ trên ảnh mặt đã cắt** — chính là hướng đi đúng cho ESP32, vì heatmap-based (kiểu OpenPose) tốn RAM cho feature map lớn hơn nhiều so với direct regression. Cụ thể các bước:
+
+**1. Định nghĩa 22 điểm và tạo nhãn tự động (pseudo-labeling)**
+Thay vì tự tay gán nhãn hàng nghìn ảnh, cách nhanh nhất là dùng chính MediaPipe Face Mesh (chạy trên máy tính) để tự động gán nhãn: chạy MediaPipe trên một tập ảnh mặt lớn (WFLW, 300W-LP, CelebA, hoặc ảnh tự chụp từ camera ESP32 của bạn), lấy ra 468 điểm, rồi chọn ra 22 điểm bạn cần (ví dụ: 4 góc mắt, 2 tâm mắt, 4-6 điểm lông mày, 1 mũi, 4 điểm miệng, vài điểm viền hàm...). Đây là kỹ thuật distillation — mô hình lớn "dạy" mô hình nhỏ.
+
+**2. Kiến trúc nhẹ, hồi quy trực tiếp**
+- Input rất nhỏ: 64×64 hoặc 96×96, grayscale nếu được (giảm 1/3 dữ liệu vào so với RGB).
+- Backbone kiểu MobileNet thu nhỏ: depthwise separable conv, vài block, giảm số kênh mạnh (16-32-64 thay vì 32-64-128).
+- Output: 22×2 (hoặc ×3 nếu cần z) giá trị float hồi quy trực tiếp — không heatmap.
+- Có thể thêm 1 output phụ "face confidence" như MediaPipe làm, để biết khi nào cần chạy lại detector.
+
+**3. Vẫn cần một bước "định vị mặt" trước khi hồi quy landmark**
+Nếu camera ESP32 không phải lúc nào cũng nhìn thẳng cận cảnh khuôn mặt chiếm gần hết khung hình, bạn vẫn cần một detector nhẹ (có thể dùng lại kỹ thuật MTCNN đã có port sẵn cho ESP32-S3, hoặc một detector siêu nhẹ tự train) để crop trước khi đưa vào mạng landmark — giống hệt logic 2-giai-đoạn của MediaPipe. Nếu ứng dụng của bạn cố định (camera luôn nhìn thẳng mặt, khoảng cách ổn định) thì có thể bỏ qua bước này và coi cả khung hình là ROI.
+
+**4. Loss & augmentation**
+- Loss: L1 hoặc Wing loss trên tọa độ chuẩn hóa (0-1) theo kích thước ROI — Wing loss thường cho kết quả landmark mượt hơn MSE thuần.
+- Augmentation: xoay nhẹ, dịch, thay đổi sáng, blur, thêm nhiễu — mô phỏng chất lượng ảnh cảm biến ESP32-CAM (thường noise và độ phân giải thấp hơn camera điện thoại).
+
+**5. Triển khai lên ESP32**
+Quy trình chuẩn: train bằng TensorFlow/Keras → convert sang TFLite → **quantize int8** (bắt buộc, vì ESP32 không có FPU mạnh) → build bằng framework `esp-tflite-micro` của Espressif. Một lưu ý thực tế: TensorFlow Lite Micro chính thức đã có hỗ trợ trên ESP32, tận dụng 2 nhân CPU của chip để chạy workload TF Micro, và đã có ví dụ thực tế chạy phát hiện + landmark mặt (MTCNN) trên ESP32-S3 bằng chính con đường này. Nên ưu tiên **ESP32-S3** thay vì ESP32 gốc — S3 có tập lệnh vector hỗ trợ suy luận nhanh hơn đáng kể và thường đi kèm PSRAM, rất cần thiết khi giữ buffer ảnh + activation của CNN.
+
+Tóm lại: bạn không cần copy y hệt kiến trúc BlazeFace + Attention Mesh phức tạp của Google — điều đáng học nhất là **triết lý thiết kế**: tách detect/crop ra khỏi landmark, dùng regression trực tiếp thay vì heatmap, tận dụng model lớn để tự sinh nhãn cho model nhỏ, và tái sử dụng ROI giữa các frame để tiết kiệm compute. Đó cũng chính là công thức khả thi nhất để chạy mượt trên một MCU nhỏ như ESP32.
