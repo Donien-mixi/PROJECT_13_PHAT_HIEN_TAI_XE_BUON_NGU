@@ -856,9 +856,9 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
     elif roll < -90.0:
         roll += 180.0
 
-    # 3. Robust Gating: Nếu miệng bị chụm hoặc PnP bị lật nghiệm suy biến (|yaw - geom_yaw| > 18 độ)
-    # Tự động ghim Yaw theo mỏ neo hình học thật và tái tạo rvec cho 3 trục chiếu chuẩn xác
-    if not mouth_valid or abs(yaw - geom_yaw) > 18.0:
+    # 3. Robust Gating: Chỉ can thiệp khi PnP bị lật nghiệm suy biến thực sự (|yaw| > 80° hoặc |yaw - geom_yaw| > 45°)
+    # Không để việc há miệng khi ngáp hay sai số nhỏ của chóp mũi kích hoạt ghi đè góc ảo.
+    if abs(yaw) > 80.0 or abs(yaw - geom_yaw) > 45.0:
         yaw = geom_yaw
         rx = np.array([
             [1.0, 0.0, 0.0],

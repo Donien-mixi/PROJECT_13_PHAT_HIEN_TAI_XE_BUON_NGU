@@ -340,8 +340,16 @@ def main():
         train_lm_losses = []
         for step, batch in enumerate(train_ds.take(steps_per_epoch)):
             res = multi_task_model.train_step(batch)
-            train_losses.append(float(res["loss"]))
-            train_lm_losses.append(float(res["lm_loss"]))
+            l_val = float(res["loss"])
+            lm_val = float(res["lm_loss"])
+            train_losses.append(l_val)
+            train_lm_losses.append(lm_val)
+
+            # Heartbeat logging: in tiến độ động và flush thường xuyên để Colab không bị đóng băng/mất kết nối
+            if (step + 1) % 25 == 0 or (step + 1) == steps_per_epoch:
+                pct = int((step + 1) / steps_per_epoch * 100)
+                sys.stdout.write(f"\r  [Epoch {epoch+1:02d}/{EPOCHS}] Step {step+1:3d}/{steps_per_epoch} ({pct:3d}%) | Loss: {l_val:6.2f} (LM: {lm_val:6.2f})")
+                sys.stdout.flush()
 
         mean_train_loss = np.mean(train_losses)
         mean_train_lm = np.mean(train_lm_losses)
@@ -375,10 +383,14 @@ def main():
             full_train_model.save_weights(str(best_weights_path))
             star = " ⭐ (Best)"
 
-        if (epoch + 1) % 2 == 0 or epoch == 0 or star.strip():
-            nme_str = f" | Real-Val NME: {nme_now['nme']*100:.2f}% (miệng {nme_now['parts']['mouth']*100:.2f}%)" \
-                if nme_now is not None else " | Real-Val NME: N/A"
-            print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:.1f}s] - Train Loss: {mean_train_loss:7.2f} (LM: {mean_train_lm:7.2f}) | Val Loss: {mean_val_loss:7.2f}{nme_str}{star}")
+        # Xóa dòng tiến trình tạm thời trước khi in kết quả epoch
+        sys.stdout.write("\r" + " " * 75 + "\r")
+        sys.stdout.flush()
+
+        # In kết quả cho MỌI epoch (không bỏ sót epoch lẻ) để giữ kết nối Colab luôn thông suốt
+        nme_str = f" | Real-Val NME: {nme_now['nme']*100:.2f}% (miệng {nme_now['parts']['mouth']*100:.2f}%)" \
+            if nme_now is not None else " | Real-Val NME: N/A"
+        print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:4.1f}s] - Train: {mean_train_loss:6.2f} (LM: {mean_train_lm:6.2f}) | Val: {mean_val_loss:6.2f}{nme_str}{star}", flush=True)
 
     train_duration = time.time() - t0
     final_nme_str = f", Best Real-Val NME: {best_score*100:.2f}%" if nme_history else ""

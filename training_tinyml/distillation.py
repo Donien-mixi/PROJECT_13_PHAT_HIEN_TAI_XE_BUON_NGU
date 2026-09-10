@@ -12,9 +12,12 @@ import cv2
 try:
     import tensorflow as tf
     _BaseModel = tf.keras.Model
-except ImportError:
+    _tf_func = tf.function
+except (ImportError, AttributeError):
     tf = None
     _BaseModel = object
+    def _tf_func(fn):
+        return fn
 
 # Mapping from MediaPipe 468/478-point Face Mesh to Project 13 (22 Landmarks)
 # Ordered as: Left Eye (6), Right Eye (6), Mouth (6), Nose & Chin (4)
@@ -234,6 +237,7 @@ class PFLDMultiTaskModel(_BaseModel):
         self.pose_loss_fn = tf.keras.losses.MeanSquaredError()
         self.pose_weight = float(pose_weight)
 
+    @_tf_func
     def train_step(self, data):
         # Unpack data: x is image, y is dict {"landmarks_output": ..., "pose_output": ...}
         # or tuple (y_landmarks, y_pose)
@@ -286,6 +290,7 @@ class PFLDMultiTaskModel(_BaseModel):
         }
         return results
 
+    @_tf_func
     def test_step(self, data):
         if isinstance(data, (list, tuple)) and len(data) == 2:
             x, y = data

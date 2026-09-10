@@ -810,9 +810,31 @@ class DriverLandmarkDataset:
             c_idx = np.array(self.closed_indices, dtype=np.int64) if self.closed_indices else np.array(self.normal_indices[:50], dtype=np.int64)
             y_idx = np.array(self.yawn_indices, dtype=np.int64) if self.yawn_indices else np.array(self.normal_indices[:50], dtype=np.int64)
             n_idx = np.array(self.normal_indices, dtype=np.int64)
+
+            # [BIOMETRIC HYBRID INJECTION]
+            # AFLW2000 là tập dữ liệu góc quay đầu (hầu hết mở mắt, chỉ có 105 mẫu nheo mắt EAR ~ 0.16, 0 mẫu EAR < 0.05).
+            # Bổ sung các mẫu giải phẫu nhắm mắt thật (EAR = 0.02 - 0.06) và ngáp sâu (MAR = 0.75 - 1.15)
+            # để mô hình học được toàn bộ dải động sinh học mí mắt và cơ hàm thực tế!
+            n_synth_inject = max(len(c_idx) * 3, 350)
+            c_synth_i, c_synth_l, c_synth_p = [], [], []
+            y_synth_i, y_synth_l, y_synth_p = [], [], []
+            for i in range(n_synth_inject):
+                img_c, lm_c, pose_c = generate_synthetic_driver_sample(i, apply_aug=False, force_state='microsleep')
+                c_synth_i.append(img_c); c_synth_l.append(lm_c); c_synth_p.append(pose_c)
+                img_y, lm_y, pose_y = generate_synthetic_driver_sample(i, apply_aug=False, force_state='yawn')
+                y_synth_i.append(img_y); y_synth_l.append(lm_y); y_synth_p.append(pose_y)
+
+            all_c_i = np.concatenate([self.real_images[c_idx], np.array(c_synth_i, np.uint8)], axis=0)
+            all_c_l = np.concatenate([self.real_landmarks[c_idx], np.array(c_synth_l, np.float32)], axis=0)
+            all_c_p = np.concatenate([self.real_poses[c_idx], np.array(c_synth_p, np.float32)], axis=0)
+
+            all_y_i = np.concatenate([self.real_images[y_idx], np.array(y_synth_i, np.uint8)], axis=0)
+            all_y_l = np.concatenate([self.real_landmarks[y_idx], np.array(y_synth_l, np.float32)], axis=0)
+            all_y_p = np.concatenate([self.real_poses[y_idx], np.array(y_synth_p, np.float32)], axis=0)
+
             return (
-                (self.real_images[c_idx], self.real_landmarks[c_idx], self.real_poses[c_idx]),
-                (self.real_images[y_idx], self.real_landmarks[y_idx], self.real_poses[y_idx]),
+                (all_c_i, all_c_l, all_c_p),
+                (all_y_i, all_y_l, all_y_p),
                 (self.real_images[n_idx], self.real_landmarks[n_idx], self.real_poses[n_idx]),
             )
         # Synthetic fallback
