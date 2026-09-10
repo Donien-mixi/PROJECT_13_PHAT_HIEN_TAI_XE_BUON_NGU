@@ -106,10 +106,15 @@ void adas_controller_update(const point2d_t landmarks[22],
     float ear = (ear_l + ear_r) * 0.5f;
 
     // 2. Calculate Mouth Aspect Ratio (MAR)
-    // Mouth: 12 (left corner), 13 (right corner), 14 (top outer), 15 (bottom outer)
-    float mouth_v = euclidean_dist(landmarks[14], landmarks[15]);
-    float mouth_h = euclidean_dist(landmarks[12], landmarks[13]);
-    float mar     = (mouth_h > 1e-4f) ? (mouth_v / mouth_h) : 0.0f;
+    // [SYNC 2025] Công thức đồng bộ 100% với training_tinyml/wing_loss.py (compute_tensor_mar)
+    // và host_laptop/local_model_tester.py (compute_mar):
+    //     MAR = (h_outer + h_inner) / (2 * w_mouth)
+    // Trước đây firmware dùng v_outer/h thuần -> MAR firmware khác MAR laptop/train
+    // -> ngưỡng hiệu chuẩn lệch -> hành vi báo ngáp khác nhau giữa 2 nền tảng.
+    float mouth_h_outer = euclidean_dist(landmarks[14], landmarks[15]);
+    float mouth_h_inner = euclidean_dist(landmarks[16], landmarks[17]);
+    float mouth_w       = euclidean_dist(landmarks[12], landmarks[13]);
+    float mar = (mouth_w > 1e-4f) ? ((mouth_h_outer + mouth_h_inner) / (2.0f * mouth_w)) : 0.0f;
 
     // 3. Calibration Phase (First 5 Seconds)
     if (!s_is_calibrated) {

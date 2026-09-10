@@ -1,0 +1,6 @@
+## Managed component dependencies (ESP-IDF Component Manager)
+## esp_new_jpeg: thư viện giải mã JPEG baseline tối ưu SIMD ESP32-S3.
+## Image_decoder cần nó để giải mã frame thật từ laptop (trước đây là stub).
+dependencies:
+  idf: ">=5.0"
+  espressif/esp_new_jpeg: "^1.0.2"

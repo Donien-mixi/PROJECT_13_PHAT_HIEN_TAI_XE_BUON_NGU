@@ -5,26 +5,60 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 
+// =====================================================================
+// [SYNC 2025] Giải mã JPEG THẬT bằng espressif/esp_new_jpeg.
+// Trước đây hàm này chỉ là stub "map byte sau marker SOS" -> ảnh nạp vào
+// tensor là nhiễu rác trên mạch thật, mô hình AI không thể hoạt động dù
+// đã được train chuẩn. esp_new_jpeg tận dụng SIMD ESP32-S3, chỉ hỗ trợ
+// baseline JPEG (OpenCV imencode mặc định là baseline -> tương thích).
+// Thêm dependency trong main/idf_component.yml:
+//   dependencies:
+//     espressif/esp_new_jpeg: "^1.0.2"
+// =====================================================================
+#if __has_include("esp_jpeg_dec.h")
+#include "esp_jpeg_dec.h"
+#define HAS_ESP_NEW_JPEG 1
+#else
+#define HAS_ESP_NEW_JPEG 0
+#endif
+
 static const char* TAG = "IMAGE_DECODER";
 
 #define TARGET_WIDTH  96
 #define TARGET_HEIGHT 96
+#define MAX_IMG_W 320
+#define MAX_IMG_H 320
 
-// Intermediate decoding buffer in PSRAM
-static uint8_t* s_decoded_rgb_buffer = NULL;
-static const size_t MAX_DECODE_BUFFER_SIZE = 320 * 320 * 3; // Up to 320x320 RGB
+// Intermediate buffers in Octal PSRAM
+static uint8_t* s_gray_buffer = NULL;   // grayscale đã decode (MAX_IMG_W*MAX_IMG_H)
+#if HAS_ESP_NEW_JPEG
+static uint8_t* s_rgb_buffer = NULL;    // RGB888 output của decoder (x3)
+#endif
 
 bool image_decoder_init(void) {
-    ESP_LOGI(TAG, "Cấp phát buffer giải mã ảnh trong Octal PSRAM (%d KB)...", MAX_DECODE_BUFFER_SIZE / 1024);
-    s_decoded_rgb_buffer = (uint8_t*) heap_caps_malloc(MAX_DECODE_BUFFER_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!s_decoded_rgb_buffer) {
-        ESP_LOGE(TAG, "LỖI: Không thể cấp phát decoded_rgb_buffer trong PSRAM!");
+    ESP_LOGI(TAG, "Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray %d KB%s)...",
+             (MAX_IMG_W * MAX_IMG_H) / 1024,
+             HAS_ESP_NEW_JPEG ? " + rgb" : ", STUB-MODE không có esp_new_jpeg!");
+    s_gray_buffer = (uint8_t*) heap_caps_malloc(MAX_IMG_W * MAX_IMG_H, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_gray_buffer) {
+        ESP_LOGE(TAG, "LỖI: Không thể cấp phát gray_buffer trong PSRAM!");
         return false;
     }
+#if HAS_ESP_NEW_JPEG
+    s_rgb_buffer = (uint8_t*) heap_caps_malloc(MAX_IMG_W * MAX_IMG_H * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_rgb_buffer) {
+        ESP_LOGE(TAG, "LỖI: Không thể cấp phát rgb_buffer trong PSRAM!");
+        return false;
+    }
+    ESP_LOGI(TAG, "✅ esp_new_jpeg đã sẵn sàng (RGB888 output, baseline JPEG).");
+#else
+    ESP_LOGW(TAG, "⚠️ esp_new_jpeg KHÔNG có trong build! Thêm 'espressif/esp_new_jpeg: ^1.0.2' "
+                  "vào main/idf_component.yml, nếu không ảnh nạp vào AI sẽ là rác.");
+#endif
     return true;
 }
 
-// Fast embedded JPEG dimension parser (SOF0 marker: 0xFF 0xC0)
+// Fast embedded JPEG dimension parser (SOF0/SOF1 marker: 0xFF 0xC0/0xC1)
 static bool parse_jpeg_dimensions(const uint8_t* data, size_t len, int* out_w, int* out_h) {
     if (len < 4 || data[0] != 0xFF || data[1] != 0xD8) {
         return false; // Not a valid JPEG SOI
@@ -34,13 +68,11 @@ static bool parse_jpeg_dimensions(const uint8_t* data, size_t len, int* out_w, i
     while (i < len - 8) {
         if (data[i] == 0xFF) {
             uint8_t marker = data[i + 1];
-            // SOF0 (Baseline), SOF1 (Extended), SOF2 (Progressive)
-            if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+            if (marker == 0xC0 || marker == 0xC1) {
                 *out_h = (data[i + 5] << 8) | data[i + 6];
                 *out_w = (data[i + 7] << 8) | data[i + 8];
                 return true;
             }
-            // Skip marker segment
             if (marker != 0xD8 && marker != 0xD9 && marker != 0x00 && marker != 0xFF) {
                 uint16_t segment_len = (data[i + 2] << 8) | data[i + 3];
                 i += 2 + segment_len;
@@ -100,6 +132,76 @@ static void downsample_and_quantize(const uint8_t* src_gray, int src_w, int src_
     }
 }
 
+#if HAS_ESP_NEW_JPEG
+// Decode baseline JPEG -> RGB888 (esp_new_jpeg) -> luminance grayscale
+static bool decode_jpeg_to_gray(const uint8_t* jpeg_data, size_t jpeg_len,
+                                int* out_w, int* out_h) {
+    jpeg_dec_config_t config = DEFAULT_JPEG_DEC_CONFIG();
+    config.output_type = JPEG_PIXEL_FORMAT_RGB888;
+    config.rotate = JPEG_ROTATE_0;
+
+    jpeg_dec_handle_t jpeg_dec = NULL;
+    jpeg_error_t err = jpeg_dec_open(&config, &jpeg_dec);
+    if (err != JPEG_ERR_OK) {
+        ESP_LOGE(TAG, "jpeg_dec_open lỗi: %d", (int)err);
+        return false;
+    }
+
+    jpeg_dec_io_t jpeg_io = {0};
+    jpeg_io.inbuf = (unsigned char*)jpeg_data;
+    jpeg_io.inbuf_len = jpeg_len;
+
+    jpeg_dec_header_info_t jpeg_info = {0};
+    err = jpeg_dec_parse_header(jpeg_dec, &jpeg_io, &jpeg_info);
+    if (err != JPEG_ERR_OK) {
+        ESP_LOGE(TAG, "jpeg_dec_parse_header lỗi: %d (JPEG progressive không hỗ trợ!)", (int)err);
+        jpeg_dec_close(jpeg_dec);
+        return false;
+    }
+
+    int img_w = (int)jpeg_info.width;
+    int img_h = (int)jpeg_info.height;
+    if (img_w <= 0 || img_h <= 0 || img_w > MAX_IMG_W || img_h > MAX_IMG_H) {
+        ESP_LOGW(TAG, "Kích thước JPEG ngoài giới hạn: %dx%d (max %dx%d)", img_w, img_h, MAX_IMG_W, MAX_IMG_H);
+        jpeg_dec_close(jpeg_dec);
+        return false;
+    }
+
+    // Outbuf bắt buộc align 16-byte (FAQ esp_new_jpeg: tránh ảnh bị lệch cột)
+    size_t rgb_size = (size_t)img_w * img_h * 3;
+    jpeg_io.outbuf = (unsigned char*)jpeg_calloc_align(rgb_size, 16);
+    if (jpeg_io.outbuf == NULL) {
+        ESP_LOGE(TAG, "Không cấp phát được outbuf %u bytes", (unsigned)rgb_size);
+        jpeg_dec_close(jpeg_dec);
+        return false;
+    }
+
+    err = jpeg_dec_process(jpeg_dec, &jpeg_io);
+    if (err != JPEG_ERR_OK) {
+        ESP_LOGE(TAG, "jpeg_dec_process lỗi: %d", (int)err);
+        jpeg_free_align(jpeg_io.outbuf);
+        jpeg_dec_close(jpeg_dec);
+        return false;
+    }
+
+    // RGB888 -> Luminance (ITU-R BT.601) vào gray buffer
+    const uint8_t* rgb = jpeg_io.outbuf;
+    for (int p = 0; p < img_w * img_h; p++) {
+        uint32_t r = rgb[p * 3 + 0];
+        uint32_t g = rgb[p * 3 + 1];
+        uint32_t b = rgb[p * 3 + 2];
+        s_gray_buffer[p] = (uint8_t)((r * 299 + g * 587 + b * 114) / 1000);
+    }
+
+    jpeg_free_align(jpeg_io.outbuf);
+    jpeg_dec_close(jpeg_dec);
+
+    *out_w = img_w;
+    *out_h = img_h;
+    return true;
+}
+#endif
+
 bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
                                 int8_t* out_int8_tensor,
                                 float input_scale, int32_t input_zero_point) {
@@ -107,50 +209,48 @@ bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
         return false;
     }
 
-    int img_w = 0, img_h = 0;
-    if (!parse_jpeg_dimensions(jpeg_data, jpeg_len, &img_w, &img_h)) {
-        // Fallback default resolution if header parsing missed
-        img_w = 240;
-        img_h = 240;
-    }
-
-    if (img_w <= 0 || img_h <= 0 || img_w > 640 || img_h > 480) {
-        ESP_LOGW(TAG, "Kích thước ảnh JPEG bất thường: %dx%d", img_w, img_h);
+    // Quick SOI validation
+    if (jpeg_len < 4 || jpeg_data[0] != 0xFF || jpeg_data[1] != 0xD8) {
+        ESP_LOGW(TAG, "Frame không phải JPEG hợp lệ (thiếu SOI marker)");
         return false;
     }
 
-    // Direct grayscale buffer in PSRAM
-    size_t gray_size = (size_t)img_w * img_h;
-    if (gray_size > MAX_DECODE_BUFFER_SIZE) {
-        gray_size = MAX_DECODE_BUFFER_SIZE;
+    int img_w = 0, img_h = 0;
+
+#if HAS_ESP_NEW_JPEG
+    if (!decode_jpeg_to_gray(jpeg_data, jpeg_len, &img_w, &img_h)) {
+        return false;
     }
-
-    // Decompress / extract luminance directly from JPEG payload
-    // Uses fast MCU byte stream parsing
-    uint8_t* gray_buf = s_decoded_rgb_buffer;
-
-    // Fast MCU luminance extraction: maps high-frequency scan data
+#else
+    // Fallback stub (chỉ dùng khi chưa thêm esp_new_jpeg - KÊU CẢNH BÁO RÕ)
+    if (!parse_jpeg_dimensions(jpeg_data, jpeg_len, &img_w, &img_h)) {
+        img_w = 240;
+        img_h = 240;
+    }
+    if (img_w <= 0 || img_h <= 0 || img_w > MAX_IMG_W || img_h > MAX_IMG_H) {
+        ESP_LOGW(TAG, "Kích thước ảnh JPEG bất thường: %dx%d", img_w, img_h);
+        return false;
+    }
+    size_t gray_size = (size_t)img_w * img_h;
     size_t scan_idx = 0;
     for (size_t i = 0; i < jpeg_len - 1; i++) {
-        if (jpeg_data[i] == 0xFF && jpeg_data[i + 1] == 0xDA) { // SOS (Start of Scan)
+        if (jpeg_data[i] == 0xFF && jpeg_data[i + 1] == 0xDA) { // SOS
             scan_idx = i + 2;
             break;
         }
     }
-
     if (scan_idx > 0 && scan_idx < jpeg_len) {
-        // Uncompress scan bytes into grayscale spatial buffer
         size_t available_bytes = jpeg_len - scan_idx;
         for (size_t p = 0; p < gray_size; p++) {
-            gray_buf[p] = jpeg_data[scan_idx + (p % available_bytes)];
+            s_gray_buffer[p] = jpeg_data[scan_idx + (p % available_bytes)];
         }
     } else {
-        // Fallback if SOS not reached
-        memset(gray_buf, 128, gray_size);
+        memset(s_gray_buffer, 128, gray_size);
     }
+#endif
 
-    // Isomorphic Downsampling to 96x96 INT8
-    downsample_and_quantize(gray_buf, img_w, img_h,
+    // Isomorphic Downsampling to 96x96 INT8 (scale_x == scale_y tuyệt đối)
+    downsample_and_quantize(s_gray_buffer, img_w, img_h,
                             out_int8_tensor,
                             input_scale, input_zero_point);
 

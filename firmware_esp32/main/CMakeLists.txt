@@ -1,3 +1,8 @@
+file(GLOB_RECURSE ESP_NN_SRCS
+    "esp_nn/src/*.c"
+    "esp_nn/src/*.S"
+)
+
 idf_component_register(
     SRCS
         "main.cpp"
@@ -7,7 +12,12 @@ idf_component_register(
         "pnp_solver.cpp"
         "adas_controller.cpp"
         "telemetry_sender.cpp"
-    INCLUDE_DIRS "."
+        "esp_nn_glue.cpp"
+        ${ESP_NN_SRCS}
+    INCLUDE_DIRS
+        "."
+        "esp_nn/include"
+        "esp_nn/src/common"
     REQUIRES
         esp_wifi
         esp_event
@@ -18,4 +28,6 @@ idf_component_register(
         lwip
         driver
         mbedtls
+        esp_new_jpeg
 )
+
