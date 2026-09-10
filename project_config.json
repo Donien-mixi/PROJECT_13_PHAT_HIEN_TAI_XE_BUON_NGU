@@ -2,7 +2,8 @@
   "project_name": "PROJECT_13_PHAT_HIEN_BUON_NGU",
   "title": "Hệ Thống Phát Hiện Tài Xế Ngủ Gật & Mất Tập Trung (Driver Drowsiness & Distraction Detection)",
   "target_hardware": "ESP32-S3 N16R8 (Xtensa LX7 @ 240MHz, 16MB Flash, 8MB Octal PSRAM)",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "changelog_v2": "Pipeline dữ liệu sạch (build_clean_dataset.py) + xóa mixup landmark + val giữ-out thật + MAR outer+inner/2w đồng bộ + esp_new_jpeg decoder thật",
 
   "model": {
     "name": "TinyDriverNet",

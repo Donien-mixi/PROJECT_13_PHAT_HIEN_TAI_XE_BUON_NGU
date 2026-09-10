@@ -33,14 +33,17 @@ firmware_esp32/
 ├── README.md                      # Tài liệu hướng dẫn nạp và cấu hình firmware
 └── main/
     ├── CMakeLists.txt             # Đăng ký các file nguồn và thư viện phụ thuộc
+    ├── idf_component.yml          # [v2.0] Dependency espressif/esp_new_jpeg (giải mã JPEG thật)
     ├── Kconfig.projbuild          # Menu cấu hình Wi-Fi, IP Laptop, GPIO
     ├── main.cpp                   # Điểm khởi chạy app_main và khởi tạo 2 FreeRTOS Task
-│   ├── tinydriver_model_data.h    # Mảng byte mô hình INT8 (~303KB, Spatial Head 191K params) căn lề 16-byte cho SIMD
-│   ├── wifi_stream_client.h/.cpp  # Nhận stream JPEG qua TCP, Double Buffering PSRAM (Core 0)
-    ├── image_decoder.h/.cpp       # Giải nén JPEG 1:1, nội suy Bilinear về 96x96 INT8
+    ├── tinydriver_model_data.h    # Mảng byte mô hình INT8 (~300KB) căn lề 16-byte cho SIMD
+    ├── wifi_stream_client.h/.cpp  # Nhận stream JPEG qua TCP, Double Buffering PSRAM (Core 0)
+    ├── image_decoder.h/.cpp       # [v2.0] Giải mã JPEG THẬT bằng esp_new_jpeg (SIMD) -> grayscale 96x96 INT8
     ├── ai_inference.h/.cpp        # Nạp TFLite Micro Arena (1.5MB PSRAM), nhân tăng tốc esp-nn
     ├── pnp_solver.h/.cpp          # Thuật toán POSIT/PnP thuần C++ tính Yaw, Pitch, Roll (<0.3ms)
-    ├── adas_controller.h/.cpp     # Máy trạng thái ADAS FSM (Calibration, Microsleep, Yawn, Distraction)
+    ├── adas_controller.h/.cpp     # Máy trạng thái ADAS FSM - [v2.0] MAR = (h_outer+h_inner)/(2w) khớp laptop/train
+    ├── esp_nn_glue.h/.cpp         # Glue ESP-NN SIMD kernels vào TFLite Micro (bypass path s8pad lỗi)
+    ├── esp_nn/                    # Nguồn ESP-NN vendor cục bộ
     └── telemetry_sender.h/.cpp    # Gửi gói tin UDP JSON về Laptop và điều khiển còi Buzzer/LED
 ```
 
@@ -88,6 +91,13 @@ cd d:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32
 ```bash
 idf.py set-target esp32s3
 ```
+
+> [!IMPORTANT]
+> **[v2.0] Dependency `esp_new_jpeg`:** Lần build đầu tiên cần internet để Component Manager
+> tự tải `espressif/esp_new_jpeg` (khai báo trong `main/idf_component.yml`). Đây là thư viện
+> giải mã JPEG baseline tối ưu SIMD ESP32-S3 — thay cho stub cũ từng cho ảnh rác vào tensor AI.
+> Nếu build lỗi "esp_jpeg_dec.h not found": chạy `idf.py add-dependency "espressif/esp_new_jpeg^1.0.2"`.
+> Lưu ý: chỉ hỗ trợ **baseline JPEG** (mặc định của OpenCV `imencode` trên Laptop — đã tương thích).
 
 ### Bước 3: Biên dịch dự án
 ```bash

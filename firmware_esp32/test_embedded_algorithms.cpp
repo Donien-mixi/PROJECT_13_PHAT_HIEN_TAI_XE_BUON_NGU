@@ -65,16 +65,16 @@ static void test_pnp_posit_solver() {
 
     pnp_solver_init();
 
-    // 3D model points
+    // 3D model points (đồng bộ 100% với MODEL_3D trong main/pnp_solver.cpp)
     const float MODEL[6][3] = {
         {   0.0f,    0.0f,    0.0f}, // P19: Nose Tip
-        {   0.0f,  -65.0f,  -35.0f}, // P21: Chin
-        { -43.0f,   32.0f,  -30.0f}, // P0:  Left Eye Outer
-        {  43.0f,   32.0f,  -30.0f}, // P6:  Right Eye Outer
-        { -30.0f,  -30.0f,  -20.0f}, // P12: Mouth Left
-        {  30.0f,  -30.0f,  -20.0f}  // P13: Mouth Right
+        {   0.0f,   65.0f,  -35.0f}, // P21: Chin (+Y points down)
+        { -43.0f,  -32.0f,  -30.0f}, // P0:  Left Eye Outer (-Y points up)
+        {  43.0f,  -32.0f,  -30.0f}, // P9:  Right Eye Outer (-Y points up)
+        { -30.0f,   30.0f,  -20.0f}, // P12: Mouth Left (+Y points down)
+        {  30.0f,   30.0f,  -20.0f}  // P13: Mouth Right (+Y points down)
     };
-    const int MAP[6] = {19, 21, 0, 6, 12, 13};
+    const int MAP[6] = {19, 21, 0, 9, 12, 13};
 
     struct TestCase {
         float true_yaw;
@@ -159,9 +159,11 @@ static void test_adas_fsm_logic() {
     base_lm[7] = {0.58f, 0.38f}; base_lm[11] = {0.58f, 0.41f};
     base_lm[8] = {0.62f, 0.38f}; base_lm[10] = {0.62f, 0.41f};
 
-    // Mouth normal: 12, 13, 14, 15
-    base_lm[12] = {0.42f, 0.65f}; base_lm[13] = {0.58f, 0.65f}; // h = 0.16
-    base_lm[14] = {0.50f, 0.63f}; base_lm[15] = {0.50f, 0.66f}; // v = 0.03 -> MAR = 0.187
+    // Mouth normal (P12..P17: outer and inner lips)
+    // MAR = (h_outer + h_inner) / (2 * w) = (0.03 + 0.02) / (2 * 0.16) = 0.156
+    base_lm[12] = {0.42f, 0.65f};  base_lm[13] = {0.58f, 0.65f};  // w = 0.16
+    base_lm[14] = {0.50f, 0.635f}; base_lm[15] = {0.50f, 0.665f}; // outer_h = 0.03
+    base_lm[16] = {0.50f, 0.640f}; base_lm[17] = {0.50f, 0.660f}; // inner_h = 0.02
 
     head_pose_t normal_pose = {0.0f, 0.0f, 0.0f, 0, 0, 350, true};
     adas_metrics_t metrics;
@@ -176,7 +178,6 @@ static void test_adas_fsm_logic() {
     assert(metrics.mar < 0.25f);
 
     // 2. Test Microsleep (Close eyes: v1 = v2 = 0.005 -> EAR ~ 0.05)
-    point2d_t closed_lm = base_lm[0];
     point2d_t drowsy_lm[22];
     memcpy(drowsy_lm, base_lm, sizeof(base_lm));
     drowsy_lm[1] = {0.38f, 0.40f}; drowsy_lm[5] = {0.38f, 0.405f};
@@ -195,10 +196,11 @@ static void test_adas_fsm_logic() {
     printf("  Chỉ số khi quay đầu: Yaw=%.1f° (Ngưỡng mất tập trung: |Yaw| > 30.0°)\n", metrics.pose.yaw);
     assert(fabsf(metrics.pose.yaw) > 30.0f);
 
-    // 4. Test Yawning (Mouth wide open: v = 0.10 -> MAR = 0.10 / 0.16 = 0.625)
+    // 4. Test Yawning (Mouth wide open: outer_h = 0.16, inner_h = 0.12 -> MAR = 0.28 / 0.32 = 0.875)
     point2d_t yawn_lm[22];
     memcpy(yawn_lm, base_lm, sizeof(base_lm));
-    yawn_lm[14] = {0.50f, 0.60f}; yawn_lm[15] = {0.50f, 0.70f};
+    yawn_lm[14] = {0.50f, 0.570f}; yawn_lm[15] = {0.50f, 0.730f}; // outer_h = 0.16
+    yawn_lm[16] = {0.50f, 0.590f}; yawn_lm[17] = {0.50f, 0.710f}; // inner_h = 0.12
     adas_controller_update(yawn_lm, &normal_pose, 25.0f, &metrics);
     printf("  Chỉ số khi ngáp: MAR=%.2f (Ngưỡng ngáp: MAR > 0.45)\n", metrics.mar);
     assert(metrics.mar > 0.50f);

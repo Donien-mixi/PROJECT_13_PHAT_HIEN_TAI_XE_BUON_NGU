@@ -249,8 +249,11 @@ class MediaPipeLandmarkExtractor:
             eye_y = float(eyes_center[1])
             d_eyes = float(np.linalg.norm(eye_r_center - eye_l_center))
             d_eye_nose = float(max(nose_y - eye_y, d_eyes * 0.45, 1.0))
+            chin_y = float(pts_px[21, 1])
+            d_eye_chin = float(max(chin_y - eye_y, d_eye_nose, 1.0))
 
-            h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40))
+            # [v2.0.5 SYNC] h_skull đồng bộ isomorphic_transform (có term cằm /1.20 tự giãn khi ngáp)
+            h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40, d_eye_chin / 1.20))
             face_size = float(round(h_skull * 2.05))
             face_cx = float((eye_x + nose_x) / 2.0)
             face_cy = float(eye_y + 0.32 * h_skull)
@@ -286,8 +289,11 @@ class MediaPipeLandmarkExtractor:
             eye_y = float(eyes_center[1])
             d_eyes = float(np.linalg.norm(eye_r_center - eye_l_center))
             d_eye_nose = float(max(nose_y - eye_y, d_eyes * 0.45, 1.0))
+            chin_y = float(pts_px[21, 1])
+            d_eye_chin = float(max(chin_y - eye_y, d_eye_nose, 1.0))
 
-            h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40))
+            # [v2.0.5 SYNC] h_skull đồng bộ isomorphic_transform (có term cằm /1.20 tự giãn khi ngáp)
+            h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40, d_eye_chin / 1.20))
             face_size = float(round(h_skull * 2.05))
             face_cx = float((eye_x + nose_x) / 2.0)
             face_cy = float(eye_y + 0.32 * h_skull)
@@ -372,16 +378,16 @@ class FaceTracker:
 
     def __init__(self, expansion_ratio=1.50, **kwargs):
         self.expansion_ratio = expansion_ratio
-        # One-Euro Filter: min_cutoff=0.35 triệt tiêu rung giật khi đứng yên, beta mở rộng tức thì khi xoay đầu
-        self.filter_cx = OneEuroFilter(min_cutoff=0.35, beta=0.015)
-        self.filter_cy = OneEuroFilter(min_cutoff=0.35, beta=0.015)
-        self.filter_S = OneEuroFilter(min_cutoff=0.25, beta=0.010)
+        # One-Euro Filter: min_cutoff=0.70 giữ ổn định khi đứng yên, beta=0.08 mở rộng tức thì khi cử động/xoay đầu (Zero-Lag)
+        self.filter_cx = OneEuroFilter(min_cutoff=0.70, beta=0.080)
+        self.filter_cy = OneEuroFilter(min_cutoff=0.70, beta=0.080)
+        self.filter_S = OneEuroFilter(min_cutoff=0.50, beta=0.040)
 
         self.smooth_cx = None
         self.smooth_cy = None
         self.smooth_S = None
-        self.hysteresis_pos = 4.5    # Ngưỡng trễ vị trí: dịch chuyển < 4.5px giữ nguyên box chống rung
-        self.hysteresis_scale = 0.045 # Ngưỡng trễ tỉ lệ: thay đổi scale < 4.5% giữ nguyên box chống giật
+        self.hysteresis_pos = 1.5    # Ngưỡng trễ vị trí: dịch chuyển < 1.5px giữ nguyên box chống rung (nhạy bén theo chuyển động)
+        self.hysteresis_scale = 0.020 # Ngưỡng trễ tỉ lệ: thay đổi scale < 2% giữ nguyên box chống giật
         self.last_detection_time = 0.0
         self.is_tracking = False
         self.enabled = True
@@ -461,10 +467,17 @@ class FaceTracker:
             if len(faces) > 0:
                 faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
                 fx, fy, fw, fh = faces[0]
+                # [v2.0.5 SYNC] Haar box -> mỏ neo Canonical (đồng bộ
+                # compute_canonical_anchor của isomorphic_transform.py, có term cằm):
+                # d_eyes ≈ 0.46*fw; d_eye_nose ≈ 0.45*d_eyes; d_eye_chin ≈ 2.2*d_eye_nose
+                # -> h = max(0.45d*2.10, d*1.40, 2.2*0.45d/1.345) ≈ 1.40*d_eyes
+                d_eyes_est = 0.46 * float(fw)
+                h_skull = max(d_eyes_est * 0.45 * 2.10, d_eyes_est * 1.40,
+                              d_eyes_est * 0.45 * 2.2 / 1.20)
+                target_S = float(np.clip(h_skull * 2.05, 160, default_S))
                 target_cx = float(fx + fw / 2.0)
-                target_cy = float(fy + fh * 0.44)
-                face_size = float(max(fw, fh))
-                target_S = float(np.clip(face_size * 1.45, 160, default_S))
+                # eye_y ≈ fy + 0.40*fh; cy = eye_y + 0.32*h_skull (giống canonical crop)
+                target_cy = float(fy + fh * 0.40 + 0.32 * h_skull)
                 return (target_cx, target_cy, target_S)
 
         return None
@@ -473,6 +486,9 @@ class FaceTracker:
         """
         Tính toán tâm sọ mặt và kích thước chuẩn hóa trực tiếp từ 22 landmarks của frame trước
         (Vòng lặp Landmark-Driven Tracking chuẩn mực của MediaPipe Face Mesh).
+        [v2.0.5 SYNC] Công thức mỏ neo Đồng bộ 1:1 với
+        training_tinyml/isomorphic_transform.compute_canonical_anchor() (có term cằm
+        d_eye_chin/1.345 — hộp tự giãn khi ngáp, không clip P21).
         """
         if landmarks_px is None or len(landmarks_px) != NUM_LANDMARKS:
             return None
@@ -484,10 +500,12 @@ class FaceTracker:
         eye_y = float(eyes_center[1])
         nose_x = float(pts[19, 0])
         nose_y = float(pts[19, 1])
+        chin_y = float(pts[21, 1])
 
         d_eyes = float(np.linalg.norm(eye_r_center - eye_l_center))
         d_eye_nose = float(max(nose_y - eye_y, d_eyes * 0.45, 1.0))
-        h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40))
+        d_eye_chin = float(max(chin_y - eye_y, d_eye_nose, 1.0))
+        h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40, d_eye_chin / 1.20))
         face_size = float(round(h_skull * 2.05))
         face_cx = float((eye_x + nose_x) / 2.0)
         face_cy = float(eye_y + 0.32 * h_skull)
@@ -581,12 +599,15 @@ class LocalTFLiteModel:
             self.input_details = self.interpreter.get_input_details()[0]
             self.output_details = self.interpreter.get_output_details()[0]
 
-            self.is_quantized = (self.input_details['dtype'] in [np.int8, np.uint8])
+            self.input_is_quantized = (self.input_details['dtype'] in [np.int8, np.uint8])
+            self.output_is_quantized = (self.output_details['dtype'] in [np.int8, np.uint8])
             self.is_loaded = True
             print(f"✅ ĐÃ NẠP MÔ HÌNH THÀNH CÔNG: {model_path}")
             print(f"   • Input Shape : {self.input_details['shape']} ({self.input_details['dtype'].__name__})")
             print(f"   • Output Shape: {self.output_details['shape']} ({self.output_details['dtype'].__name__})")
-            print(f"   • Quantized   : {self.is_quantized}")
+            precision_desc = "Full INT8" if (self.input_is_quantized and self.output_is_quantized) else \
+                             "Mixed-Precision (INT8 In / Float32 Out)" if self.input_is_quantized else "Float32"
+            print(f"   • Kiểu lượng tử: {precision_desc}")
         except Exception as e:
             print(f"❌ [LỖI] Không thể khởi tạo mô hình TFLite: {e}")
             self.is_loaded = False
@@ -598,14 +619,14 @@ class LocalTFLiteModel:
 
         img = face_gray_96x96.astype(np.float32)
 
-        if self.is_quantized:
+        if self.input_is_quantized:
             scale, zero_point = self.input_details['quantization']
             if scale == 0.0:
                 scale = 1.0 / 128.0
                 zero_point = 0
             # Chuẩn hóa về [-1.0, 1.0] rồi lượng tử hóa sang int8: (img - 128) / 128
             norm = (img - 128.0) / 128.0
-            quant = np.clip(np.round(norm / scale) + zero_point, -128, 127).astype(np.int8)
+            quant = np.clip(np.round(norm / scale) + zero_point, -128, 127).astype(self.input_details['dtype'])
             input_tensor = np.expand_dims(np.expand_dims(quant, axis=0), axis=-1)
         else:
             norm = (img - 128.0) / 128.0
@@ -615,12 +636,14 @@ class LocalTFLiteModel:
         self.interpreter.invoke()
         output_data = self.interpreter.get_tensor(self.output_details['index'])[0]
 
-        if self.is_quantized:
+        if self.output_is_quantized:
             o_scale, o_zero_point = self.output_details['quantization']
             if o_scale != 0.0:
                 output_data = (output_data.astype(np.float32) - o_zero_point) * o_scale
             else:
                 output_data = (output_data.astype(np.float32) + 128.0) / 255.0
+        else:
+            output_data = output_data.astype(np.float32)
 
         landmarks = np.clip(output_data.reshape((NUM_LANDMARKS, 2)), 0.0, 1.0)
         return landmarks
@@ -632,13 +655,16 @@ class LocalADASController:
     def __init__(self):
         self.calibrated = False
         self.calib_start_time = time.time()
-        self.calib_duration = 3.5
+        self.calib_duration = 5.0       # [SYNC 2025] = 5.0s đúng như firmware adas_controller.cpp
+
         self.ear_samples = []
         self.mar_samples = []
 
-        self.ear_threshold = 0.20
-        self.mar_threshold = 0.50
-        self.yaw_threshold = 25.0
+        # [SYNC 2025] Toàn bộ ngưỡng đồng bộ 1:1 với firmware_esp32/main/adas_controller.cpp
+        # và project_config.json -> laptop test ra số liệu nào, ESP32 chạy y hệt số liệu đó.
+        self.ear_threshold = 0.21       # = ear_default_threshold (project_config.json)
+        self.mar_threshold = 0.45       # = mar_default_threshold (công thức MAR mới outer+inner/2w)
+        self.yaw_threshold = 30.0       # = yaw_distraction_threshold_deg
 
         self.closed_eyes_start = None
         self.yawn_start = None
@@ -660,7 +686,7 @@ class LocalADASController:
         self.yawn_start = None
         self.distraction_start = None
         self.current_state = "CALIBRATING"
-        print("🎯 [ADAS] Bắt đầu tự hiệu chuẩn lại ngưỡng trong 3.5 giây...")
+        print("🎯 [ADAS] Bắt đầu tự hiệu chuẩn lại ngưỡng trong 5.0 giây...")
 
     def update(self, ear: float, mar: float, yaw: float, pitch: float):
         now = time.time()
@@ -675,8 +701,9 @@ class LocalADASController:
             if elapsed >= self.calib_duration:
                 base_ear = np.median(self.ear_samples) if self.ear_samples else 0.28
                 base_mar = np.median(self.mar_samples) if self.mar_samples else 0.18
-                self.ear_threshold = max(0.16, min(0.25, float(base_ear * 0.72)))
-                self.mar_threshold = max(0.48, float(base_mar * 1.70))
+                # [SYNC 2025] Hệ số hiệu chuẩn khớp firmware: EAR*0.75 clip [0.18,0.25], MAR*1.60 floor 0.40
+                self.ear_threshold = max(0.18, min(0.25, float(base_ear * 0.75)))
+                self.mar_threshold = max(0.40, float(base_mar * 1.60))
                 self.calibrated = True
                 print(f"\n🎯 [ADAS] HIỆU CHUẨN HOÀN TẤT: EAR_thresh={self.ear_threshold:.2f}, MAR_thresh={self.mar_threshold:.2f}")
             else:
@@ -695,7 +722,7 @@ class LocalADASController:
                 self.alarm_active = True
                 self.alarm_reason = f"Ngủ gật nhắm mắt {closed_duration:.1f}s"
                 is_microsleep = True
-            elif closed_duration >= 0.35:
+            elif closed_duration >= 0.50:   # [SYNC 2025] = SLOW_BLINK 0.5s của firmware
                 self.current_state = "WARNING: SLOW BLINK"
                 is_slow_blink = True
         else:
@@ -707,7 +734,7 @@ class LocalADASController:
             if self.yawn_start is None:
                 self.yawn_start = now
             yawn_dur = now - self.yawn_start
-            if yawn_dur >= 1.2:
+            if yawn_dur >= 1.5:   # [SYNC 2025] = YAWN_EVENT 1.5s của firmware
                 self.current_state = "YAWNING DETECTED"
                 is_yawn = True
                 if not self.yawn_timestamps or (now - self.yawn_timestamps[-1] > 4.0):
@@ -722,13 +749,13 @@ class LocalADASController:
             self.alarm_active = True
             self.alarm_reason = f"Mệt mỏi: Ngáp {len(self.yawn_timestamps)} lần / 3 phút"
 
-        # 4. Kiểm tra Mất Tập Trung (Quay đầu góc lớn)
+        # 4. Kiểm tra Mất Tập Trung (Quay đầu góc lớn) - [SYNC 2025] Yaw 30°/Pitch 25°/3.0s như firmware
         is_distracted = False
-        if abs(yaw) > self.yaw_threshold or abs(pitch) > 22.0:
+        if abs(yaw) > self.yaw_threshold or abs(pitch) > 25.0:
             if self.distraction_start is None:
                 self.distraction_start = now
             distract_dur = now - self.distraction_start
-            if distract_dur >= 2.5:
+            if distract_dur >= 3.0:
                 self.current_state = "ALARM: DISTRACTED!"
                 self.alarm_active = True
                 self.alarm_reason = f"Quay mặt góc {yaw:+.0f}° quá {distract_dur:.1f}s"
@@ -886,16 +913,17 @@ def draw_head_pose_axes(frame, rvec, tvec, camera_matrix, dist_coeffs, axis_len=
 class TerminalDiagnosticLogger:
     """
     Bộ in kết quả chẩn đoán chuyên sâu thời gian thực ra Terminal (Console Debugger).
-    Hỗ trợ 3 chế độ:
-      - 'FULL': In chi tiết tọa độ 22 điểm theo 4 nhóm giải phẫu, khoảng cách sinh học và sai số delta so với MediaPipe Teacher.
-      - 'COMPACT': In bảng tóm tắt 1 dòng trực quan mỗi 0.4s.
+    Được thiết kế trực quan, xúc tích, chống cuộn tràn màn hình và hỗ trợ đối chiếu song song:
+      - 'FULL': Bảng báo cáo định dạng chuẩn, chia 2 cột đối xứng, so sánh song song TinyDriver vs MediaPipe.
+      - 'COMPACT': 1 dòng tóm tắt xúc tích mỗi chu kỳ.
       - 'OFF': Tắt in terminal để giữ màn hình console yên tĩnh.
     """
-    def __init__(self, mode="FULL", interval_frames=12):
+    def __init__(self, mode="FULL", interval_sec=1.2):
         self.mode = mode  # "FULL", "COMPACT", "OFF"
-        self.interval_frames = interval_frames
-        self.frame_counter = 0
+        self.interval_sec = interval_sec
         self.last_log_time = 0.0
+        self.last_alarm_state = None
+        self.frame_counter = 0
 
     def toggle_mode(self):
         modes = ["FULL", "COMPACT", "OFF"]
@@ -904,146 +932,329 @@ class TerminalDiagnosticLogger:
         print(f"\n📢 [Terminal Debugger] Đã chuyển chế độ hiển thị: {self.mode}\n")
         return self.mode
 
+    def should_log(self, now, current_state=None):
+        if self.mode == "OFF":
+            return False
+        # Nếu có sự kiện báo động mới phát sinh -> kích hoạt in ngay lập tức
+        if current_state is not None and self.last_alarm_state is not None:
+            if current_state != self.last_alarm_state and "ALARM" in current_state:
+                return True
+        return (now - self.last_log_time) >= self.interval_sec
+
     def log(self, frame_idx, fps, active_mode, is_tracking, crop_box,
             landmarks_px, mp_landmarks_px,
             ear_l, ear_r, ear, mar, yaw, pitch, roll,
-            adas_ctrl, force=False):
+            adas_ctrl, force=False, frame_w=640, frame_h=480):
         if self.mode == "OFF" and not force:
             return
 
-        self.frame_counter += 1
         now = time.time()
-        # Throttled print: cứ mỗi interval_frames hoặc tối thiểu 0.35s để tránh lag GUI
-        if not force and (self.frame_counter % self.interval_frames != 0 or (now - self.last_log_time) < 0.35):
+        self.frame_counter += 1
+        if not force and not self.should_log(now, adas_ctrl.current_state):
             return
 
         self.last_log_time = now
+        self.last_alarm_state = adas_ctrl.current_state
         x1, y1, x2, y2 = crop_box
         box_w = max(1, x2 - x1)
 
-        # Tính toán sai số Delta so với MediaPipe Ground-Truth nếu có
+        # Tính toán dữ liệu MediaPipe Ground-Truth nếu có
         has_gt = (active_mode == "TINYDRIVER" and mp_landmarks_px is not None and landmarks_px is not None)
+        mp_ear_l, mp_ear_r, mp_ear, mp_mar = 0.0, 0.0, 0.0, 0.0
+        mp_yaw, mp_pitch, mp_roll = 0.0, 0.0, 0.0
         deltas = None
-        if has_gt:
-            deltas = np.linalg.norm(landmarks_px - mp_landmarks_px, axis=1) # (22,)
 
+        if has_gt:
+            deltas = np.linalg.norm(landmarks_px - mp_landmarks_px, axis=1)  # (22,)
+            mp_ear_l = compute_ear(mp_landmarks_px, LEFT_EYE_PTS)
+            mp_ear_r = compute_ear(mp_landmarks_px, RIGHT_EYE_PTS)
+            mp_ear = (mp_ear_l + mp_ear_r) / 2.0
+            mp_mar = compute_mar(mp_landmarks_px, MOUTH_PTS)
+            mp_yaw, mp_pitch, mp_roll, _, _, _ = solve_head_pose_pnp(mp_landmarks_px, frame_w, frame_h)
+
+        # -------------------------------------------------------------
+        # 1. CHẾ ĐỘ COMPACT (1 DÒNG XÚC TÍCH)
+        # -------------------------------------------------------------
         if self.mode == "COMPACT":
-            gt_str = f" | Δ_mean={np.mean(deltas):4.1f}px" if has_gt else ""
             alarm_tag = f"🚨 {adas_ctrl.current_state}" if adas_ctrl.alarm_active else f"✅ {adas_ctrl.current_state}"
-            print(f"[{active_mode[:10]}] #{frame_idx:04d} | FPS:{fps:4.1f} | EAR:{ear:.3f} | MAR:{mar:.3f} | Yaw:{yaw:+5.1f}° Pitch:{pitch:+5.1f}°{gt_str} | {alarm_tag}")
+            if has_gt:
+                d_l2 = np.mean(deltas)
+                print(f"[TD-vs-MP] #{frame_idx:04d} | {fps:4.1f}FPS | TD[EAR:{ear:.3f}, MAR:{mar:.3f}, Yaw:{yaw:+5.1f}°] | MP[EAR:{mp_ear:.3f}, MAR:{mp_mar:.3f}, Yaw:{mp_yaw:+5.1f}°] | Δ_L2:{d_l2:4.1f}px | {alarm_tag}")
+            elif active_mode == "MEDIAPIPE":
+                print(f"[MEDIAPIPE] #{frame_idx:04d} | {fps:4.1f}FPS | EAR:{ear:.3f} (L:{ear_l:.3f}, R:{ear_r:.3f}) | MAR:{mar:.3f} | Yaw:{yaw:+5.1f}° Pitch:{pitch:+5.1f}° | {alarm_tag}")
+            else:
+                print(f"[TINYDRIVER] #{frame_idx:04d} | {fps:4.1f}FPS | EAR:{ear:.3f} | MAR:{mar:.3f} | Yaw:{yaw:+5.1f}° Pitch:{pitch:+5.1f}° | {alarm_tag}")
             return
 
-        # Chế độ FULL: Bảng hiển thị chuyên sâu 22 điểm
-        sep = "=" * 94
-        sub_sep = "-" * 94
-        header = f"🔍 [TINYDRIVER ADAS DEBUG] - FRAME #{frame_idx:04d} | FPS: {fps:.1f} | ENGINE: {active_mode} | BÁM MẶT: {'ON' if is_tracking else 'OFF'}"
+        # -------------------------------------------------------------
+        # 2. CHẾ ĐỘ FULL (BẢNG TRỰC QUAN ĐẦY ĐỦ THÔNG TIN, 2 CỘT GỌN)
+        # -------------------------------------------------------------
+        pt_names = [
+            "P0  Khóe ngoài", "P1  Mí trên 1", "P2  Mí trên 2", "P3  Khóe trong", "P4  Mí dưới 2", "P5  Mí dưới 1",
+            "P6  Khóe trong", "P7  Mí trên 1", "P8  Mí trên 2", "P9  Khóe ngoài", "P10 Mí dưới 2", "P11 Mí dưới 1",
+            "P12 Khóe trái", "P13 Khóe phải", "P14 Môi tr ngoài", "P15 Môi d ngoài", "P16 Môi tr trong", "P17 Môi d trong",
+            "P18 Gốc mũi", "P19 Chóp mũi", "P20 Nhân trung", "P21 Đáy cằm"
+        ]
 
-        print("\n" + sep)
-        print(header)
-        print(sep)
-        print(f"📦 CROP KHUÔN MẶT 1:1 : X=[{x1}, {x2}] Y=[{y1}, {y2}] | Kích thước: {box_w}x{box_w} px")
-        print(f"⚡ TRẠNG THÁI ADAS FSM : {adas_ctrl.current_state} (Lý do: {adas_ctrl.alarm_reason or 'Hoạt động bình thường'})")
-        print(f"🎯 NGƯỠNG HIỆU CHUẨN   : EAR_thresh={adas_ctrl.ear_threshold:.3f} | MAR_thresh={adas_ctrl.mar_threshold:.3f} | Trạng thái: {'Đã Calib ✅' if adas_ctrl.calibrated else 'Đang Calib...'}")
+        col_w = 54
+        total_w = col_w * 2 + 3
 
-        if landmarks_px is None:
-            print("\n⚠️ [CHƯA PHÁT HIỆN ĐƯỢC 22 ĐIỂM LANDMARKS TRÊN KHUÔN MẶT]")
-            print(sep + "\n")
+        # Header Badge
+        print("\n" + "╔" + "═" * total_w + "╗")
+        if active_mode == "MEDIAPIPE":
+            title = f" 🌟 [ADAS DEBUG] #{frame_idx:04d} | FPS: {fps:4.1f} | ENGINE: MEDIAPIPE TEACHER (CHUẨN GROUND-TRUTH) | BÁM MẶT: {'ON' if is_tracking else 'OFF'}"
+        else:
+            gt_tag = "ĐANG ĐỐI CHIẾU MEDIAPIPE ✅" if has_gt else "MEDIAPIPE OFFLINE"
+            title = f" ⚡ [ADAS DEBUG] #{frame_idx:04d} | FPS: {fps:4.1f} | ENGINE: TINYDRIVERNET (INT8 EDGE) | {gt_tag}"
+        print(f"║{title:<{total_w}}║")
+        print("╚" + "═" * total_w + "╝")
+
+        calib_str = "Đã xong ✅" if adas_ctrl.calibrated else "Đang Calib..."
+        print(f" 📦 Hộp Cắt 1:1  : [{x1}, {y1}, {x2}, {y2}] ({box_w}x{box_w} px) | FSM: {adas_ctrl.current_state}")
+        print(f" 🎯 Ngưỡng ADAS  : EAR_thresh={adas_ctrl.ear_threshold:.3f} | MAR_thresh={adas_ctrl.mar_threshold:.3f} | Calib: {calib_str}\n")
+
+        if landmarks_px is None and mp_landmarks_px is None:
+            print(" ⚠️  [CHƯA PHÁT HIỆN ĐƯỢC 22 ĐIỂM MỐC TRÊN KHUÔN MẶT - ĐANG QUÉT...]\n")
+            print(" ⌨️  Phím: [d] Chế độ Log | [p] In ngay | [m] Đổi Engine | [f] Bám mặt | [r] Calib | [q] Thoát\n")
             return
 
-        # 1. Nhóm Mắt Trái (P0..P5)
-        w_eye_l = np.linalg.norm(landmarks_px[0] - landmarks_px[3])
-        h1_eye_l = np.linalg.norm(landmarks_px[1] - landmarks_px[5])
-        h2_eye_l = np.linalg.norm(landmarks_px[2] - landmarks_px[4])
-        delta_eye_l_str = f" | Δ_MP={np.mean(deltas[LEFT_EYE_PTS]):.2f}px" if has_gt else ""
-        print("\n" + sub_sep)
-        print(f"👁️  NHÓM MẮT TRÁI (Left Eye: P0 -> P5){delta_eye_l_str}")
-        print(f"   • W (Rộng): {w_eye_l:5.1f}px | H1(Mí 1): {h1_eye_l:4.1f}px | H2(Mí 2): {h2_eye_l:4.1f}px | EAR Trái: {ear_l:.3f} ({'NHẮM ⚠️' if ear_l < adas_ctrl.ear_threshold else 'MỞ ✅'})")
-        pt_names_l = ["P0(Khóe ngoài)", "P1(Mí trên 1)", "P2(Mí trên 2)", "P3(Khóe trong)", "P4(Mí dưới 2)", "P5(Mí dưới 1)"]
-        for i, idx in enumerate(LEFT_EYE_PTS):
-            px, py = landmarks_px[idx]
-            u = (px - x1) / box_w
-            v = (py - y1) / box_w
-            d_str = f" | Δ={deltas[idx]:4.1f}px" if has_gt else ""
-            print(f"     {pt_names_l[i]:<15}: ({px:5.1f}, {py:5.1f}) px  [u={u:5.3f}, v={v:5.3f}]{d_str}")
+        # =============================================================
+        # NHÁNH A: CHẾ ĐỘ MEDIAPIPE (THAM KHẢO CHUẨN THỰC TẾ)
+        # =============================================================
+        if active_mode == "MEDIAPIPE":
+            cur_pts = landmarks_px if landmarks_px is not None else mp_landmarks_px
+            w_eye_l = np.linalg.norm(cur_pts[0] - cur_pts[3])
+            h1_eye_l = np.linalg.norm(cur_pts[1] - cur_pts[5])
+            h2_eye_l = np.linalg.norm(cur_pts[2] - cur_pts[4])
+            w_eye_r = np.linalg.norm(cur_pts[6] - cur_pts[9])
+            h1_eye_r = np.linalg.norm(cur_pts[7] - cur_pts[11])
+            h2_eye_r = np.linalg.norm(cur_pts[8] - cur_pts[10])
+            w_mouth = np.linalg.norm(cur_pts[12] - cur_pts[13])
+            h_outer = np.linalg.norm(cur_pts[14] - cur_pts[15])
+            h_inner = np.linalg.norm(cur_pts[16] - cur_pts[17])
 
-        # 2. Nhóm Mắt Phải (P6..P11)
-        w_eye_r = np.linalg.norm(landmarks_px[6] - landmarks_px[9])
-        h1_eye_r = np.linalg.norm(landmarks_px[7] - landmarks_px[11])
-        h2_eye_r = np.linalg.norm(landmarks_px[8] - landmarks_px[10])
-        delta_eye_r_str = f" | Δ_MP={np.mean(deltas[RIGHT_EYE_PTS]):.2f}px" if has_gt else ""
-        print("\n" + sub_sep)
-        print(f"👁️  NHÓM MẮT PHẢI (Right Eye: P6 -> P11){delta_eye_r_str}")
-        print(f"   • W (Rộng): {w_eye_r:5.1f}px | H1(Mí 1): {h1_eye_r:4.1f}px | H2(Mí 2): {h2_eye_r:4.1f}px | EAR Phải: {ear_r:.3f} ({'NHẮM ⚠️' if ear_r < adas_ctrl.ear_threshold else 'MỞ ✅'})")
-        pt_names_r = ["P6(Khóe trong)", "P7(Mí trên 1)", "P8(Mí trên 2)", "P9(Khóe ngoài)", "P10(Mí dưới 2)", "P11(Mí dưới 1)"]
-        for i, idx in enumerate(RIGHT_EYE_PTS):
-            px, py = landmarks_px[idx]
-            u = (px - x1) / box_w
-            v = (py - y1) / box_w
-            d_str = f" | Δ={deltas[idx]:4.1f}px" if has_gt else ""
-            print(f"     {pt_names_r[i]:<15}: ({px:5.1f}, {py:5.1f}) px  [u={u:5.3f}, v={v:5.3f}]{d_str}")
-        print(f"   👉 EAR TRUNG BÌNH CẢ 2 MẮT: {ear:.3f} vs Ngưỡng {adas_ctrl.ear_threshold:.3f} -> {'⚠️ CẢNH BÁO NHẮM MẮT' if ear < adas_ctrl.ear_threshold else '✅ MẮT MỞ TỈNH TÁO'}")
+            dir_str = "CHÍNH DIỆN 🟢"
+            if yaw > 18: dir_str = "QUAY TRÁI ⬅️"
+            elif yaw < -18: dir_str = "QUAY PHẢI ➡️"
+            elif pitch > 15: dir_str = "CÚI ĐẦU ⬇️"
+            elif pitch < -15: dir_str = "NGỬA ĐẦU ⬆️"
 
-        # 3. Nhóm Miệng (P12..P17)
-        w_mouth = np.linalg.norm(landmarks_px[12] - landmarks_px[13])
-        h_outer = np.linalg.norm(landmarks_px[14] - landmarks_px[15])
-        h_inner = np.linalg.norm(landmarks_px[16] - landmarks_px[17])
-        delta_mouth_str = f" | Δ_MP={np.mean(deltas[MOUTH_PTS]):.2f}px" if has_gt else ""
-        print("\n" + sub_sep)
-        print(f"👄 NHÓM MIỆNG (Mouth: P12 -> P17){delta_mouth_str}")
-        print(f"   • Khóe môi Rộng: {w_mouth:5.1f}px | Dày môi ngoài: {h_outer:4.1f}px | Hở khoang trong: {h_inner:4.1f}px | MAR: {mar:.3f}")
-        pt_names_m = ["P12(Khóe trái)", "P13(Khóe phải)", "P14(Môi trên ngoài)", "P15(Môi dưới ngoài)", "P16(Môi trên trong)", "P17(Môi dưới trong)"]
-        for i, idx in enumerate(MOUTH_PTS):
-            px, py = landmarks_px[idx]
-            u = (px - x1) / box_w
-            v = (py - y1) / box_w
-            d_str = f" | Δ={deltas[idx]:4.1f}px" if has_gt else ""
-            print(f"     {pt_names_m[i]:<19}: ({px:5.1f}, {py:5.1f}) px  [u={u:5.3f}, v={v:5.3f}]{d_str}")
-        mouth_status = "⚠️ ĐANG NGÁP HÁ MIỆNG" if mar > adas_ctrl.mar_threshold else "✅ NGẬM BÌNH THƯỜNG"
-        print(f"   👉 ĐÁNH GIÁ MIỆNG: {mouth_status} (MAR={mar:.3f} vs Ngưỡng={adas_ctrl.mar_threshold:.3f}) | Đã đếm {len(adas_ctrl.yawn_timestamps)} lần ngáp/3phút")
+            t1, t2, t3, t4 = 27, 13, 38, 22
+            sep_top = f"┌{'─'*t1}┬{'─'*t2}┬{'─'*t3}┬{'─'*t4}┐"
+            sep_mid = f"├{'─'*t1}┼{'─'*t2}┼{'─'*t3}┼{'─'*t4}┤"
+            sep_bot = f"└{'─'*t1}┴{'─'*t2}┴{'─'*t3}┴{'─'*t4}┘"
 
-        # 4. Nhóm Mũi & Cằm (P18..P21)
-        h_face_axis = np.linalg.norm(landmarks_px[18] - landmarks_px[21])
-        delta_nc_str = f" | Δ_MP={np.mean(deltas[18:]):.2f}px" if has_gt else ""
-        print("\n" + sub_sep)
-        print(f"👃 NHÓM MŨI VÀ CẰM (Nose & Chin: P18 -> P21){delta_nc_str}")
-        print(f"   • Chiều cao trục mặt (Nasion P18 -> Cằm P21): {h_face_axis:5.1f}px")
-        pt_names_nc = ["P18(Gốc mũi Nasion)", "P19(Chóp mũi Tip)", "P20(Nhân trung Subnasale)", "P21(Đáy cằm Gnathion)"]
-        for i, idx in enumerate([18, 19, 20, 21]):
-            px, py = landmarks_px[idx]
-            u = (px - x1) / box_w
-            v = (py - y1) / box_w
-            d_str = f" | Δ={deltas[idx]:4.1f}px" if has_gt else ""
-            print(f"     {pt_names_nc[i]:<24}: ({px:5.1f}, {py:5.1f}) px  [u={u:5.3f}, v={v:5.3f}]{d_str}")
+            print(sep_top)
+            print(f"│ {'CHỈ SỐ SINH TRẮC CHUẨN':<{t1-1}}│ {'GIÁ TRỊ':<{t2-1}}│ {'CHI TIẾT ĐO ĐẠC HÌNH HỌC (PIXEL)':<{t3-1}}│ {'ĐÁNH GIÁ':<{t4-1}}│")
+            print(sep_mid)
+            eval_el = "MẮT MỞ ✅" if ear_l >= adas_ctrl.ear_threshold else "NHẮM MẮT ⚠️"
+            eval_er = "MẮT MỞ ✅" if ear_r >= adas_ctrl.ear_threshold else "NHẮM MẮT ⚠️"
+            eval_e = "TỈNH TÁO ✅" if ear >= adas_ctrl.ear_threshold else "CẢNH BÁO NHẮM ⚠️"
+            eval_m = "NGÁP HÁ TO ⚠️" if mar > adas_ctrl.mar_threshold else "NGẬM BÌNH THƯỜNG ✅"
+            print(f"│ {'EAR Mắt Trái (P0..P5)':<{t1-1}}│ {ear_l:<{t2-1}.3f}│ {f'W: {w_eye_l:4.1f}px | H1: {h1_eye_l:4.1f}, H2: {h2_eye_l:4.1f}':<{t3-1}}│ {eval_el:<{t4-1}}│")
+            print(f"│ {'EAR Mắt Phải (P6..P11)':<{t1-1}}│ {ear_r:<{t2-1}.3f}│ {f'W: {w_eye_r:4.1f}px | H1: {h1_eye_r:4.1f}, H2: {h2_eye_r:4.1f}':<{t3-1}}│ {eval_er:<{t4-1}}│")
+            print(f"│ {'EAR Trung Bình 2 Mắt':<{t1-1}}│ {ear:<{t2-1}.3f}│ {f'Ngưỡng hiệu chuẩn: {adas_ctrl.ear_threshold:.3f}':<{t3-1}}│ {eval_e:<{t4-1}}│")
+            print(f"│ {'MAR Há Miệng (P12..P17)':<{t1-1}}│ {mar:<{t2-1}.3f}│ {f'W: {w_mouth:4.1f}px | Dày: {h_outer:4.1f}, Hở: {h_inner:4.1f}':<{t3-1}}│ {eval_m:<{t4-1}}│")
+            print(f"│ {'3D Pose Yaw (Trái/Phải)':<{t1-1}}│ {f'{yaw:+5.1f}°':<{t2-1}}│ {'Góc quay ngang (Ngưỡng: ±30.0°)':<{t3-1}}│ {dir_str:<{t4-1}}│")
+            print(f"│ {'3D Pose Pitch (Cúi/Ngửa)':<{t1-1}}│ {f'{pitch:+5.1f}°':<{t2-1}}│ {'Góc ngửa/cúi   (Ngưỡng: ±25.0°)':<{t3-1}}│ {dir_str:<{t4-1}}│")
+            print(f"│ {'3D Pose Roll (Nghiêng)':<{t1-1}}│ {f'{roll:+5.1f}°':<{t2-1}}│ {'Góc nghiêng mặt theo phương ngang':<{t3-1}}│ {'CÂN BẰNG 🟢':<{t4-1}}│")
+            print(sep_bot)
 
-        # 5. 3D Head Pose
-        print("\n" + sub_sep)
-        dir_str = "CHÍNH DIỆN 🟢"
-        if yaw > 18: dir_str = "QUAY TRÁI ⬅️"
-        elif yaw < -18: dir_str = "QUAY PHẢI ➡️"
-        elif pitch > 15: dir_str = "CÚI ĐẦU ⬇️"
-        elif pitch < -15: dir_str = "NGỬA ĐẦU ⬆️"
-        print(f"📐 3D HEAD POSE (Góc Xoay Đầu PnP):")
-        print(f"   • Yaw (Trái/Phải): {yaw:+5.1f}° | Pitch (Cúi/Ngửa): {pitch:+5.1f}° | Roll (Nghiêng): {roll:+5.1f}°")
-        print(f"   • Hướng nhìn tài xế: {dir_str}")
+            # Bảng tọa độ 22 điểm chuẩn chia 2 cột
+            print(f"\n┌{'─' * (col_w + 2)}┬{'─' * (col_w + 2)}┐")
+            print(f"│ {'MẮT TRÁI (P0 - P5)          (X, Y) px      [u, v]':<{col_w}} │ {'MẮT PHẢI (P6 - P11)         (X, Y) px      [u, v]':<{col_w}} │")
+            print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+            for i in range(6):
+                idx_l = i
+                xl, yl = cur_pts[idx_l]
+                ul, vl = (xl - x1) / box_w, (yl - y1) / box_w
+                left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) px [u={ul:5.3f},v={vl:5.3f}]"
 
-        # 6. So sánh Sai số Tổng quát với Ground-Truth MediaPipe
-        if has_gt:
-            mean_all = np.mean(deltas)
-            max_all = np.max(deltas)
-            max_idx = np.argmax(deltas)
-            quality = "XUẤT SẮC (<4px)" if mean_all < 4.0 else ("TỐT (<8px)" if mean_all < 8.0 else "TRUNG BÌNH (<15px)" if mean_all < 15.0 else "LỆCH NHIỀU (Cần Retrain)")
-            print("\n" + sub_sep)
-            print(f"📊 ĐỐI CHIẾU SAI SỐ VỚI MEDIAPIPE TEACHER (GROUND-TRUTH):")
-            print(f"   • Sai số Trung bình (Mean L2 Error) : {mean_all:4.2f} px [{quality}]")
-            print(f"   • Sai số Lớn nhất (Max Error)       : {max_all:4.2f} px tại điểm P{max_idx}")
-            print(f"   • Sai số Mắt trái : {np.mean(deltas[LEFT_EYE_PTS]):4.2f} px | Mắt phải: {np.mean(deltas[RIGHT_EYE_PTS]):4.2f} px")
-            print(f"   • Sai số Miệng    : {np.mean(deltas[MOUTH_PTS]):4.2f} px | Mũi/Cằm : {np.mean(deltas[18:]):4.2f} px")
+                idx_r = i + 6
+                xr, yr = cur_pts[idx_r]
+                ur, vr = (xr - x1) / box_w, (yr - y1) / box_w
+                right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) px [u={ur:5.3f},v={vr:5.3f}]"
+                print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
 
-        print(sep)
-        print("⌨️  Phím bấm: [d] Đổi chế độ Log | [p] Snapshot in ngay | [m] Đổi Engine | [f] Bám mặt | [r] Calib | [q] Thoát\n")
+            print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+            print(f"│ {'MIỆNG (P12 - P17)           (X, Y) px      [u, v]':<{col_w}} │ {'MŨI & CẰM (P18 - P21)       (X, Y) px      [u, v]':<{col_w}} │")
+            print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+            for i in range(6):
+                idx_l = 12 + i
+                xl, yl = cur_pts[idx_l]
+                ul, vl = (xl - x1) / box_w, (yl - y1) / box_w
+                left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) px [u={ul:5.3f},v={vl:5.3f}]"
+
+                if i < 4:
+                    idx_r = 18 + i
+                    xr, yr = cur_pts[idx_r]
+                    ur, vr = (xr - x1) / box_w, (yr - y1) / box_w
+                    right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) px [u={ur:5.3f},v={vr:5.3f}]"
+                else:
+                    right_str = ""
+                print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
+            print(f"└{'─' * (col_w + 2)}┴{'─' * (col_w + 2)}┘")
+
+        # =============================================================
+        # NHÁNH B: CHẾ ĐỘ TINYDRIVER (ĐỐI CHIẾU SONG SONG VỚI MEDIAPIPE)
+        # =============================================================
+        else:
+            cur_pts = landmarks_px
+            if has_gt:
+                # 1. Bảng đối chiếu song song
+                t1, t2, t3, t4, t5 = 26, 15, 15, 15, 30
+                sep_top = f"┌{'─'*t1}┬{'─'*t2}┬{'─'*t3}┬{'─'*t4}┬{'─'*t5}┐"
+                sep_mid = f"├{'─'*t1}┼{'─'*t2}┼{'─'*t3}┼{'─'*t4}┼{'─'*t5}┤"
+                sep_bot = f"└{'─'*t1}┴{'─'*t2}┴{'─'*t3}┴{'─'*t4}┴{'─'*t5}┘"
+
+                dir_str = "CHÍNH DIỆN 🟢"
+                if yaw > 18: dir_str = "QUAY TRÁI ⬅️"
+                elif yaw < -18: dir_str = "QUAY PHẢI ➡️"
+                elif pitch > 15: dir_str = "CÚI ĐẦU ⬇️"
+                elif pitch < -15: dir_str = "NGỬA ĐẦU ⬆️"
+
+                d_ear_l = ear_l - mp_ear_l
+                d_ear_r = ear_r - mp_ear_r
+                d_ear = ear - mp_ear
+                d_mar = mar - mp_mar
+                d_yaw = yaw - mp_yaw
+                d_pitch = pitch - mp_pitch
+                d_roll = roll - mp_roll
+
+                print(sep_top)
+                print(f"│ {'CHỈ SỐ SINH TRẮC & POSE':<{t1-1}}│ {'TINYDRIVER':<{t2-1}}│ {'MEDIAPIPE':<{t3-1}}│ {'ĐỘ LỆCH (Δ)':<{t4-1}}│ {'ĐÁNH GIÁ & CẢNH BÁO':<{t5-1}}│")
+                print(sep_mid)
+                eval_ear_l = "Khớp tốt ✅" if abs(d_ear_l) < 0.035 else "Lệch mi ⚠️"
+                eval_ear_r = "Khớp tốt ✅" if abs(d_ear_r) < 0.035 else "Lệch mi ⚠️"
+                eval_ear = "MẮT MỞ TỈNH TÁO ✅" if ear >= adas_ctrl.ear_threshold else "⚠️ CẢNH BÁO NHẮM MẮT"
+                eval_mar = "NGẬM BÌNH THƯỜNG ✅" if mar <= adas_ctrl.mar_threshold else "⚠️ CẢNH BÁO NGÁP"
+                print(f"│ {'EAR Mắt Trái':<{t1-1}}│ {ear_l:<{t2-1}.3f}│ {mp_ear_l:<{t3-1}.3f}│ {f'{d_ear_l:+6.3f}':<{t4-1}}│ {eval_ear_l:<{t5-1}}│")
+                print(f"│ {'EAR Mắt Phải':<{t1-1}}│ {ear_r:<{t2-1}.3f}│ {mp_ear_r:<{t3-1}.3f}│ {f'{d_ear_r:+6.3f}':<{t4-1}}│ {eval_ear_r:<{t5-1}}│")
+                print(f"│ {'EAR Trung Bình':<{t1-1}}│ {ear:<{t2-1}.3f}│ {mp_ear:<{t3-1}.3f}│ {f'{d_ear:+6.3f}':<{t4-1}}│ {eval_ear:<{t5-1}}│")
+                print(f"│ {'MAR Há Miệng':<{t1-1}}│ {mar:<{t2-1}.3f}│ {mp_mar:<{t3-1}.3f}│ {f'{d_mar:+6.3f}':<{t4-1}}│ {eval_mar:<{t5-1}}│")
+                print(f"│ {'3D Pose Yaw (Trái/Phải)':<{t1-1}}│ {f'{yaw:+5.1f}°':<{t2-1}}│ {f'{mp_yaw:+5.1f}°':<{t3-1}}│ {f'{d_yaw:+5.1f}°':<{t4-1}}│ {dir_str:<{t5-1}}│")
+                print(f"│ {'3D Pose Pitch (Cúi/Ngửa)':<{t1-1}}│ {f'{pitch:+5.1f}°':<{t2-1}}│ {f'{mp_pitch:+5.1f}°':<{t3-1}}│ {f'{d_pitch:+5.1f}°':<{t4-1}}│ {dir_str:<{t5-1}}│")
+                print(f"│ {'3D Pose Roll (Nghiêng)':<{t1-1}}│ {f'{roll:+5.1f}°':<{t2-1}}│ {f'{mp_roll:+5.1f}°':<{t3-1}}│ {f'{d_roll:+5.1f}°':<{t4-1}}│ {'CÂN BẰNG 🟢':<{t5-1}}│")
+                print(sep_bot)
+
+                mean_all = float(np.mean(deltas))
+                max_all = float(np.max(deltas))
+                max_idx = int(np.argmax(deltas))
+                qual = "XUẤT SẮC (<4px)" if mean_all < 4.0 else ("TỐT (<8px)" if mean_all < 8.0 else "TRUNG BÌNH (<15px)" if mean_all < 15.0 else "LỆCH NHIỀU (Cần Retrain)")
+                print(f" 📊 Sai số L2 so với MediaPipe: TB = {mean_all:4.2f}px [{qual}] | Lớn nhất: {max_all:4.2f}px (tại {pt_names[max_idx]})")
+                print(f"    • Mắt T: {np.mean(deltas[LEFT_EYE_PTS]):4.2f}px | Mắt P: {np.mean(deltas[RIGHT_EYE_PTS]):4.2f}px | Miệng: {np.mean(deltas[MOUTH_PTS]):4.2f}px | Mũi/Cằm: {np.mean(deltas[18:]):4.2f}px")
+
+                # 2. Bảng 22 điểm đối chiếu 2 cột song song
+                print(f"\n┌{'─' * (col_w + 2)}┬{'─' * (col_w + 2)}┐")
+                print(f"│ {'MẮT TRÁI (P0 - P5)     TINYDRIVER vs MP    Δ(px)':<{col_w}} │ {'MẮT PHẢI (P6 - P11)    TINYDRIVER vs MP    Δ(px)':<{col_w}} │")
+                print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                for i in range(6):
+                    idx_l = i
+                    xl, yl = cur_pts[idx_l]
+                    mxl, myl = mp_landmarks_px[idx_l]
+                    dl = deltas[idx_l]
+                    fl = "!" if dl > 8.0 else " "
+                    left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) MP:({mxl:5.1f},{myl:5.1f}) {fl}Δ{dl:4.1f}"
+
+                    idx_r = i + 6
+                    xr, yr = cur_pts[idx_r]
+                    mxr, myr = mp_landmarks_px[idx_r]
+                    dr = deltas[idx_r]
+                    fr = "!" if dr > 8.0 else " "
+                    right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) MP:({mxr:5.1f},{myr:5.1f}) {fr}Δ{dr:4.1f}"
+                    print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
+
+                print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                print(f"│ {'MIỆNG (P12 - P17)      TINYDRIVER vs MP    Δ(px)':<{col_w}} │ {'MŨI & CẰM (P18 - P21)  TINYDRIVER vs MP    Δ(px)':<{col_w}} │")
+                print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                for i in range(6):
+                    idx_l = 12 + i
+                    xl, yl = cur_pts[idx_l]
+                    mxl, myl = mp_landmarks_px[idx_l]
+                    dl = deltas[idx_l]
+                    fl = "!" if dl > 8.0 else " "
+                    left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) MP:({mxl:5.1f},{myl:5.1f}) {fl}Δ{dl:4.1f}"
+
+                    if i < 4:
+                        idx_r = 18 + i
+                        xr, yr = cur_pts[idx_r]
+                        mxr, myr = mp_landmarks_px[idx_r]
+                        dr = deltas[idx_r]
+                        fr = "!" if dr > 8.0 else " "
+                        right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) MP:({mxr:5.1f},{myr:5.1f}) {fr}Δ{dr:4.1f}"
+                    else:
+                        right_str = ""
+                    print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
+                print(f"└{'─' * (col_w + 2)}┴{'─' * (col_w + 2)}┘")
+            else:
+                # Trường hợp không có MediaPipe Teacher (chạy độc lập TinyDriver)
+                t1, t2, t3, t4 = 27, 13, 38, 22
+                sep_top = f"┌{'─'*t1}┬{'─'*t2}┬{'─'*t3}┬{'─'*t4}┐"
+                sep_mid = f"├{'─'*t1}┼{'─'*t2}┼{'─'*t3}┼{'─'*t4}┤"
+                sep_bot = f"└{'─'*t1}┴{'─'*t2}┴{'─'*t3}┴{'─'*t4}┘"
+
+                dir_str = "CHÍNH DIỆN 🟢"
+                if yaw > 18: dir_str = "QUAY TRÁI ⬅️"
+                elif yaw < -18: dir_str = "QUAY PHẢI ➡️"
+                elif pitch > 15: dir_str = "CÚI ĐẦU ⬇️"
+                elif pitch < -15: dir_str = "NGỬA ĐẦU ⬆️"
+
+                eval_e = "TỈNH TÁO ✅" if ear >= adas_ctrl.ear_threshold else "CẢNH BÁO NHẮM ⚠️"
+                eval_m = "NGÁP HÁ TO ⚠️" if mar > adas_ctrl.mar_threshold else "NGẬM BÌNH THƯỜNG ✅"
+
+                print(sep_top)
+                print(f"│ {'CHỈ SỐ SINH TRẮC (TINYDRIVER)':<{t1-1}}│ {'GIÁ TRỊ':<{t2-1}}│ {'THÔNG SỐ SO SÁNH':<{t3-1}}│ {'ĐÁNH GIÁ':<{t4-1}}│")
+                print(sep_mid)
+                print(f"│ {'EAR Mắt Trái (P0..P5)':<{t1-1}}│ {ear_l:<{t2-1}.3f}│ {'Khoảng cách mi mắt trái':<{t3-1}}│ {'MẮT MỞ ✅' if ear_l >= adas_ctrl.ear_threshold else 'NHẮM ⚠️':<{t4-1}}│")
+                print(f"│ {'EAR Mắt Phải (P6..P11)':<{t1-1}}│ {ear_r:<{t2-1}.3f}│ {'Khoảng cách mi mắt phải':<{t3-1}}│ {'MẮT MỞ ✅' if ear_r >= adas_ctrl.ear_threshold else 'NHẮM ⚠️':<{t4-1}}│")
+                print(f"│ {'EAR Trung Bình':<{t1-1}}│ {ear:<{t2-1}.3f}│ {f'Ngưỡng hiệu chuẩn: {adas_ctrl.ear_threshold:.3f}':<{t3-1}}│ {eval_e:<{t4-1}}│")
+                print(f"│ {'MAR Há Miệng':<{t1-1}}│ {mar:<{t2-1}.3f}│ {f'Ngưỡng ngáp: {adas_ctrl.mar_threshold:.3f}':<{t3-1}}│ {eval_m:<{t4-1}}│")
+                print(f"│ {'3D Pose Yaw (Trái/Phải)':<{t1-1}}│ {f'{yaw:+5.1f}°':<{t2-1}}│ {'Ngưỡng quay đầu: ±30.0°':<{t3-1}}│ {dir_str:<{t4-1}}│")
+                print(f"│ {'3D Pose Pitch (Cúi/Ngửa)':<{t1-1}}│ {f'{pitch:+5.1f}°':<{t2-1}}│ {'Ngưỡng cúi/ngửa: ±25.0°':<{t3-1}}│ {dir_str:<{t4-1}}│")
+                print(f"│ {'3D Pose Roll (Nghiêng)':<{t1-1}}│ {f'{roll:+5.1f}°':<{t2-1}}│ {'Góc nghiêng ngang':<{t3-1}}│ {'CÂN BẰNG 🟢':<{t4-1}}│")
+                print(sep_bot)
+                print(" ℹ️  MediaPipe Teacher: Không khả dụng để đối chiếu song song.")
+
+                if cur_pts is not None:
+                    print(f"\n┌{'─' * (col_w + 2)}┬{'─' * (col_w + 2)}┐")
+                    print(f"│ {'MẮT TRÁI (P0 - P5)          (X, Y) px      [u, v]':<{col_w}} │ {'MẮT PHẢI (P6 - P11)         (X, Y) px      [u, v]':<{col_w}} │")
+                    print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                    for i in range(6):
+                        idx_l = i
+                        xl, yl = cur_pts[idx_l]
+                        ul, vl = (xl - x1) / box_w, (yl - y1) / box_w
+                        left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) px [u={ul:5.3f},v={vl:5.3f}]"
+
+                        idx_r = i + 6
+                        xr, yr = cur_pts[idx_r]
+                        ur, vr = (xr - x1) / box_w, (yr - y1) / box_w
+                        right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) px [u={ur:5.3f},v={vr:5.3f}]"
+                        print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
+
+                    print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                    print(f"│ {'MIỆNG (P12 - P17)           (X, Y) px      [u, v]':<{col_w}} │ {'MŨI & CẰM (P18 - P21)       (X, Y) px      [u, v]':<{col_w}} │")
+                    print(f"├{'─' * (col_w + 2)}┼{'─' * (col_w + 2)}┤")
+                    for i in range(6):
+                        idx_l = 12 + i
+                        xl, yl = cur_pts[idx_l]
+                        ul, vl = (xl - x1) / box_w, (yl - y1) / box_w
+                        left_str = f"{pt_names[idx_l]:<16}: ({xl:5.1f},{yl:5.1f}) px [u={ul:5.3f},v={vl:5.3f}]"
+
+                        if i < 4:
+                            idx_r = 18 + i
+                            xr, yr = cur_pts[idx_r]
+                            ur, vr = (xr - x1) / box_w, (yr - y1) / box_w
+                            right_str = f"{pt_names[idx_r]:<16}: ({xr:5.1f},{yr:5.1f}) px [u={ur:5.3f},v={vr:5.3f}]"
+                        else:
+                            right_str = ""
+                        print(f"│ {left_str:<{col_w}} │ {right_str:<{col_w}} │")
+                    print(f"└{'─' * (col_w + 2)}┴{'─' * (col_w + 2)}┘")
+
+        print(" ⌨️  Phím: [d] Chế độ Log | [p] In ngay | [m] Đổi Engine | [f] Bám mặt | [r] Calib | [q] Thoát\n")
 
 
-def draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, roll, adas_ctrl, fps, is_real_ai, is_tracking, active_mode="TINYDRIVER", log_mode="FULL", pnp_data=None):
+
+def draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, roll, adas_ctrl, fps, is_real_ai, is_tracking, active_mode="TINYDRIVER", log_mode="FULL", pnp_data=None, mp_landmarks_px=None):
     """
     Tạo bố cục màn hình đôi Cyberpunk Widescreen (960x480):
       - Khung hình bên trái (640x480): Hình camera thô + Bám mặt + 22 điểm + 3D Pose vector.
@@ -1075,6 +1286,11 @@ def draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, ro
     cv2.putText(frame, box_tag, (x1 + 6, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, roi_color, 1)
 
     # 2. Vẽ 22 điểm mốc sinh học và 3 trục quay đầu 3D trên camera
+    # Nếu ở chế độ TINYDRIVER và có MediaPipe Ground-Truth, vẽ trước các điểm mốc chuẩn màu xám nhạt để quan sát độ trùng khớp
+    if active_mode == "TINYDRIVER" and mp_landmarks_px is not None:
+        for (mpx, mpy) in mp_landmarks_px:
+            cv2.circle(frame, (int(round(mpx)), int(round(mpy))), 2, (140, 140, 140), 1)
+
     if landmarks_px is not None:
         left_pts = np.array([landmarks_px[i] for i in LEFT_EYE_PTS], dtype=np.int32)
         right_pts = np.array([landmarks_px[i] for i in RIGHT_EYE_PTS], dtype=np.int32)
@@ -1229,6 +1445,7 @@ def main():
     parser.add_argument("--model", type=str, default=None, help="Đường dẫn đến file .tflite tùy chỉnh")
     parser.add_argument("--synthetic", action="store_true", help="Chạy chế độ giả lập mô phỏng tài xế (không cần camera)")
     parser.add_argument("--log-mode", type=str, default="FULL", choices=["FULL", "COMPACT", "OFF"], help="Chế độ in Terminal (FULL, COMPACT, OFF)")
+    parser.add_argument("--log-interval", type=float, default=1.2, help="Khoảng thời gian giữa 2 lần xuất log Terminal (giây, mặc định 1.2s)")
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent.parent
@@ -1242,7 +1459,7 @@ def main():
     mp_engine = MediaPipeLandmarkExtractor()
     adas_controller = LocalADASController()
     face_tracker = FaceTracker(expansion_ratio=1.35, ema_alpha=0.15, deadband_pos=6.0, deadband_size=8.0)
-    terminal_logger = TerminalDiagnosticLogger(mode=args.log_mode, interval_frames=12)
+    terminal_logger = TerminalDiagnosticLogger(mode=args.log_mode, interval_sec=args.log_interval)
 
     active_mode = "MEDIAPIPE" if mp_engine.is_loaded else "TINYDRIVER"
 
@@ -1255,6 +1472,7 @@ def main():
         else:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Khử độ trễ đệm 4-5 frame nội bộ của OpenCV DirectShow
 
     print("\n👉 Bảng điều khiển đang hiển thị trên màn hình (Bố cục Widescreen 960x480).")
     print(f"💎 Chế độ khởi tạo: {active_mode}")
@@ -1270,6 +1488,7 @@ def main():
     frame_count = 0
     t_prev = time.time()
     last_tracked_landmarks = None
+    last_mp_landmarks_px = None
 
     # Tách bộ lọc One-Euro thích ứng theo từng vùng giải phẫu sinh học:
     #   • Mắt: Cực nhạy (min_cutoff=1.8, beta=0.06) bắt chớp mắt 100-300ms, không làm trễ hay méo EAR
@@ -1333,26 +1552,25 @@ def main():
         landmarks_px = None
 
         if not args.synthetic:
-            # 1. Định vị khuôn mặt chuẩn xác (MediaPipe Landmark-Driven Tracking Loop)
-            # Theo nguyên lý MediaPipe Face Mesh: Nếu frame trước đã có landmarks,
-            # tái sử dụng ngay để tạo khung crop cho frame tiếp theo (triệt tiêu 100% rung giật của detector).
+            # 1. Định vị khuôn mặt toàn cảnh (Full-Frame Face Detection & Tracking)
+            # MediaPipe Teacher hoặc Haar Cascade luôn là nguồn định vị mặt chuẩn xác trên khung hình 640x480:
             detected_face_info = None
 
-            if active_mode == "TINYDRIVER" and last_tracked_landmarks is not None and face_tracker.enabled:
+            if mp_engine.is_loaded:
+                # MediaPipe trích xuất khuôn mặt và 22 điểm Ground-Truth
+                mp_landmarks_px, mp_face_info = mp_engine.extract(frame)
+                if mp_landmarks_px is not None:
+                    last_mp_landmarks_px = mp_landmarks_px
+                if mp_face_info is not None:
+                    detected_face_info = mp_face_info
+
+            if detected_face_info is None and face_tracker.enabled:
+                # Fallback nếu không có MediaPipe: Dò bằng Haar Cascade đa tầng
+                detected_face_info = face_tracker.detect_face_haar(frame)
+
+            if detected_face_info is None and last_tracked_landmarks is not None and face_tracker.enabled:
+                # Fallback quán tính ngắn hạn nếu cả 2 bộ dò tạm thời miss 1 frame
                 detected_face_info = face_tracker.get_target_from_landmarks(last_tracked_landmarks)
-
-            # Nếu chưa có landmark hoặc mất dấu, kích hoạt bộ dò định vị lại khuôn mặt
-            if detected_face_info is None:
-                if mp_engine.is_loaded:
-                    mp_landmarks_px, mp_face_info = mp_engine.extract(frame)
-                    if mp_face_info is not None:
-                        detected_face_info = mp_face_info
-
-                if detected_face_info is None and face_tracker.enabled:
-                    detected_face_info = face_tracker.detect_face_haar(frame)
-            elif mp_engine.is_loaded and terminal_logger.mode != "OFF" and (frame_count % 3 == 0):
-                # Khi ở chế độ TINYDRIVER, định kỳ lấy MediaPipe Teacher để đối chiếu sai số Ground-Truth
-                mp_landmarks_px, _ = mp_engine.extract(frame)
 
             # Cập nhật khung cắt 1:1 theo vị trí khuôn mặt thực tế
             if face_tracker.enabled:
@@ -1452,6 +1670,9 @@ def main():
         t_prev = now
 
         # 4. In kết quả chẩn đoán chuyên sâu 22 điểm ra Terminal (Console Debugger)
+        if mp_landmarks_px is None and last_mp_landmarks_px is not None:
+            mp_landmarks_px = last_mp_landmarks_px
+
         terminal_logger.log(
             frame_idx=frame_count,
             fps=fps,
@@ -1467,13 +1688,16 @@ def main():
             yaw=yaw,
             pitch=pitch,
             roll=roll,
-            adas_ctrl=adas_controller
+            adas_ctrl=adas_controller,
+            frame_w=w,
+            frame_h=h
         )
 
         # 5. Vẽ HUD Màn Hình Đôi Cyberpunk (960x480)
         hud_canvas = draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, roll,
                               adas_controller, fps, ai_model.is_loaded, is_tracking,
-                              active_mode=active_mode, log_mode=terminal_logger.mode, pnp_data=pnp_data)
+                              active_mode=active_mode, log_mode=terminal_logger.mode, pnp_data=pnp_data,
+                              mp_landmarks_px=mp_landmarks_px)
 
         cv2.imshow("TinyDriver ADAS - Local Model Tester (Project 13)", hud_canvas)
         key = cv2.waitKey(1) & 0xFF
@@ -1500,11 +1724,17 @@ def main():
             terminal_logger.toggle_mode()
         elif key == ord('p'):
             # Chụp nhanh và in chi tiết toàn bộ 22 điểm mốc ra Terminal ngay lập tức
+            if active_mode == "TINYDRIVER" and mp_engine.is_loaded and mp_landmarks_px is None and not args.synthetic:
+                mp_landmarks_px, _ = mp_engine.extract(frame)
+                if mp_landmarks_px is not None:
+                    last_mp_landmarks_px = mp_landmarks_px
+                elif last_mp_landmarks_px is not None:
+                    mp_landmarks_px = last_mp_landmarks_px
             terminal_logger.log(
                 frame_idx=frame_count, fps=fps, active_mode=active_mode, is_tracking=is_tracking,
                 crop_box=crop_box, landmarks_px=landmarks_px, mp_landmarks_px=mp_landmarks_px,
                 ear_l=ear_l, ear_r=ear_r, ear=ear, mar=mar, yaw=yaw, pitch=pitch, roll=roll,
-                adas_ctrl=adas_controller, force=True
+                adas_ctrl=adas_controller, force=True, frame_w=w, frame_h=h
             )
         elif key == ord('r'):
             adas_controller.recalibrate()

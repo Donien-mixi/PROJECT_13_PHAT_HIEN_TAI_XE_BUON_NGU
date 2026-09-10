@@ -55,27 +55,59 @@ conda activate projet_13
 Chạy lệnh quản trị:
 ```powershell
 python tools/project_manager.py --status
+
+# Hoặc chạy toàn bộ 8 bài kiểm chuẩn tự động 1-click (Đồng bộ, TCP/UDP, PnP C++, 3-Way, Biên):
+python tools/run_all_tests.py
 ```
-Nếu hệ thống báo tất cả các module đều tồn tại, bạn sẵn sàng chuyển sang Bước 2!
+Nếu hệ thống báo tất cả các module đều tồn tại và bài test đạt 100%, bạn sẵn sàng chuyển sang Bước 2!
 
 ---
 
-## 🧠 BƯỚC 1.5: TIỀN XỬ LÝ CÁC TẬP DỮ LIỆU CỘNG ĐỒNG (BENCHMARK DATASETS)
+## 🧠 BƯỚC 1.5: XÂY DỰNG DỮ LIỆU SẠCH (BUILD CLEAN DATASET - BẢN 2025)
 
-Để mô hình AI có khả năng **tổng quát hóa cao nhất, nhận diện chính xác bất kỳ khuôn mặt tài xế nào trong cộng đồng**:
+> [!CAUTION]
+> Bộ dữ liệu cũ (yawn_faces.zip + drowsiness Roboflow) chỉ có ~400 mẫu thật, nhiều ảnh
+> crop cận cảnh thiếu cằm, KHÔNG có nhãn landmark chuẩn, cộng thêm Mixup landmark bị lỗi
+> → là nguyên nhân gốc khiến mô hình cũ học vẹt, landmark lệch vị trí và không tracking.
+> Pipeline cũ đã bị XÓA SẠCH. Bắt buộc dùng pipeline mới dưới đây.
 
-Chạy lệnh tiền xử lý tự động:
+Để mô hình AI có khả năng **tổng quát hóa cao nhất, nhận diện chính xác bất kỳ khuôn mặt tài xế nào** (kể cả góc quay đầu lớn, đeo kính, ban đêm):
+
+Chạy lệnh xây dựng dữ liệu sạch tự động:
 ```powershell
 python tools/project_manager.py --preprocess
+# hoặc trực tiếp (khuyến nghị: thêm FaceSynthetics của Microsoft — link trực tiếp, không auth):
+python tools/build_clean_dataset.py --download-aflw2000 --download-facesynth
 ```
-*(Nếu có thêm thư mục ảnh dữ liệu tài xế khác của bạn, bạn có thể truyền: `python tools/preprocess_dataset.py --data-dir "duong_dan_thu_muc"`)*
+
+> [!WARNING]
+> **[v2.0.5 — Mỏ neo cằm + chống template collapse]**
+> 1. **Template collapse**: model v2.0.3 đạt NME canonical 6.62% nhưng LIVE sai 17-23px vì
+>    canonical crop ép mắt luôn ở v≈0.344 → model học THUỘC template vị trí. Đã sửa bằng
+>    **Macro-Jitter affine** (dịch ±7%, scale 0.85-1.18, xoay ±10° mọi mẫu train) + gate
+>    **NME JITTER** (chỉ số quyết định, kèm tỉ lệ Jitter/Canon < 2.0x).
+> 2. **Mỏ neo cằm**: công thức box cũ không chứa nổi cằm khi ngáp → 33-39% mẫu bị clip
+>    P21 thành label bẩn. Đã thêm term `d_eye_chin/1.20` (đồng bộ 1 nơi:
+>    `compute_canonical_anchor` — train/label/tracking/live demo dùng cùng công thức).
+>    Kết quả: landmark_clipped 1044 → **8**; ngáp 200 → **515**; |Yaw|≥40°: 173 → **555**.
+> 3. **300W-LP hiện không có link tải tự động** (cbsr 404, Drive ID cũ chết) — chỉ tải
+>    thủ công. Phương án tự động đáng tin: **FaceSynthetics** (Microsoft, 1000 mặt 512×512
+>    nhãn 68-pt iBUG chính xác pixel).
 
 👉 Lệnh này sẽ:
-1. Quét qua toàn bộ các tập dữ liệu tài xế cộng đồng (bộ ảnh tài xế lái xe trong cabin ngày/đêm + bộ ảnh ngáp thật).
-2. Dùng mô hình Thầy MediaPipe FaceMesh dán nhãn chuẩn 22 điểm Ground-Truth theo đúng giải phẫu học khuôn mặt người.
-3. Cắt ô vuông chuẩn hóa Isomorphic Skull Anchor $96 \times 96$ Grayscale (đồng bộ 100% với ESP32-S3).
-4. Xuất các ảnh kiểm tra trực quan có vẽ 22 điểm vào thư mục **`output/preprocessed_preview/`** để bạn mở xem trực tiếp độ bám dính của mí mắt và khóe môi.
-5. Xuất file dữ liệu chuẩn **`training_tinyml/preprocessed_driver_dataset.npz`**.
+1. **Tự tải AFLW2000-3D** (~83 MB, 2000 ảnh có nhãn 68-pt 3D chuẩn, phủ góc quay đầu yaw ±90° — giải quyết triệt để lỗi không tracking khi đầu quay). *Lưu ý: nếu mạng nhà bạn chặn server CBSR (kiểm tra bằng lệnh này báo "Tải thất bại"), đừng lo — Bước 2 trên Colab sẽ tự động build dữ liệu này vì mạng Colab tải được.*
+2. Tự dán nhãn 22 điểm bằng **MediaPipe Teacher** cho mọi thư mục ảnh bạn bỏ vào `datasets/raw_faces/<ten>/` (WFLW, YawDD, ảnh tự chụp webcam...).
+3. Lọc qua **6 cổng chất lượng (QA Gates)**: landmark không cắt mép, mặt đủ lớn (2 mắt ≥ 10px), không nhòe (Laplacian), góc quay trong giới hạn, chống trùng lặp (aHash).
+4. **Chia Train/Val giữ-out NGHIÊM NGẶT theo hash tên file** — tập val không hề xuất hiện lúc train (trước đây val lấy từ generator là ảo).
+5. Xuất ảnh kiểm tra trực quan có vẽ 22 điểm vào `output/preprocessed_preview/` và báo cáo `output/dataset_report.md` (kiểm tra phân bố góc Yaw — cột ±40..90° phải có mẫu, nếu trống phải bổ sung 300W-LP).
+
+**Nguồn dữ liệu nên bổ sung thủ công** (tải về bỏ vào `datasets/raw_faces/`):
+- [300W](https://ibug.doc.ic.ac.uk/resources/facial-points/) — 3.748 ảnh + nhãn .pts 68 điểm.
+- [300W-LP](https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/) — 61.225 ảnh tổng hợp góc quay ±90° (khuyến nghị mạnh).
+- [WFLW](https://wywu.github.io/projects/LAB/WFLW.html) — 9.8k ảnh đa điều kiện (chỉ cần thư mục ảnh).
+- [YawDD](https://sites.google.com/site/yawddf/) — video tài xế ngáp thật, trích frame.
+
+**Chuẩn chất lượng phải đạt trước khi train:** tổng mẫu ≥ 5.000 (lý tưởng ≥ 20.000), mẫu |Yaw| ≥ 40° ≥ 200. Sau train xong, bắt buộc chạy `python evaluation/eval_nme_holdout.py` — NME < 6% mới được nạp ESP32.
 
 ---
 
@@ -99,9 +131,12 @@ python tools/project_manager.py --pack-colab
 
 ```python
 # =====================================================================
-# BẤM NÚT PLAY ĐỂ BẮT ĐẦU HUẤN LUYỆN TINYDRIVERNET (ĐỒ ÁN 13)
+# BẤM NÚT PLAY ĐỂ BẮT ĐẦU HUẤN LUYỆN TINYDRIVERNET (ĐỒ ÁN 13 - BẢN 2025)
 # =====================================================================
 from google.colab import files
+
+# Cài sẵn thư viện Mô hình Thầy MediaPipe (tránh phụ thuộc auto-install)
+!pip install -q mediapipe
 
 # Xóa file zip cũ nếu có trên Colab để đảm bảo luôn giải nén gói mới nhất
 !rm -f training_package*.zip
@@ -118,8 +153,11 @@ files.download('tinydriver_esp32_package.zip')
 
 5. Nhấn nút **Play (Run cell)**:
    - Một nút **"Choose Files" (Chọn tệp)** sẽ xuất hiện: Bạn chọn file `training_package.zip` vừa tạo ở Bước 2.1.
-   - Colab sẽ tự động giải nén, đồng bộ dữ liệu người thật **YawDD (ngáp tài xế)** và **CEW (mắt nhắm)**, dán nhãn qua **MediaPipe Teacher**, huấn luyện mạng `TinyDriverNet` (Spatial Head ~191K params) bằng hàm mất mát **Biometric-Weighted Wing Loss** (Mắt x2.0, Miệng x1.8), lượng tử hóa sang **Full-Integer INT8** (~303 KB), vẽ biểu đồ Loss và đóng gói thành file **`tinydriver_esp32_package.zip`**.
+   - **Nếu gói chưa kèm `preprocessed_driver_dataset.npz`** (bạn chưa build dữ liệu ở Bước 1.5 vì mạng chặn): Colab **tự động tải AFLW2000-3D (~83 MB) và tự build dữ liệu sạch** với đầy đủ 6 QA Gates + Train/Val giữ-out — bạn không phải làm gì thêm!
+   - Colab huấn luyện mạng `TinyDriverNet` PFLD-Edge (~191K params) bằng **Adaptive Biometric Wing Loss + Geometric EAR/MAR constraint**, đo **NME trên tập val giữ-out THẬT mỗi epoch** (không còn val ảo từ generator) và chọn best model theo NME, sau đó lượng tử hóa **Mixed-Precision INT8** (Convs INT8 + Regression Head Float32), xuất file C Header căn lề 16-byte cho ESP-NN và đóng gói thành **`tinydriver_esp32_package.zip`**.
+   - ⚡ **[v2.0.7 - STATIC-EXPAND] Tối ưu Colab T4:** augmentation được **tiền-tính 1 lần** bằng đúng thuật toán gốc (x6 bản/ảnh, ~3 phút), phần train chỉ còn GPU thuần + photometric jitter bằng TF graph ops → **toàn bộ 60 epochs ≈ 15-25 phút** (thay vì 2-5 giờ). Tự động fallback: STATIC → FAST (song song py_function) → pipeline chuẩn. Thuật toán tăng cường/loss/kiến trúc **không đổi** — chỉ đổi cách thực thi.
    - Khi hoàn tất, trình duyệt sẽ **tự động tải file `tinydriver_esp32_package.zip` về thư mục Downloads của máy bạn**!
+   - 📊 **Đọc kết quả train:** dòng `Real-Val NME` cuối cùng — **< 6% là ĐẠT**. Nếu ≥ 8%, đừng nạp ESP32 mà hãy bổ sung dữ liệu (300W-LP/WFLW) rồi train lại.
 
 ---
 
@@ -134,9 +172,16 @@ python tools/project_manager.py deploy-model tinydriver_esp32_package.zip
 *(Nếu bạn để file zip ở thư mục khác, hãy truyền đường dẫn tới file đó, ví dụ: `python tools/project_manager.py deploy-model "C:\Users\...\Downloads\tinydriver_esp32_package.zip"`)*
 
 Hệ thống sẽ tự động:
-- Đặt file `tinydriver_model_data.h` (~1.92 MB) vào `firmware_esp32/main/` (để nạp vào ESP32).
-- Đặt file `tinydriver_model.tflite` (~303 KB) vào `host_laptop/models/` và `training_tinyml/` (để chạy thử trên Laptop).
+- Đặt file `tinydriver_model_data.h` (~1.9 MB) vào `firmware_esp32/main/` (để nạp vào ESP32).
+- Đặt file `tinydriver_model.tflite` (~300 KB) vào `host_laptop/models/` và `training_tinyml/` (để chạy thử trên Laptop).
 - Lưu biểu đồ huấn luyện `training_loss.png` vào `training_tinyml/`.
+
+### 3.1. ⛔ CỔNG NGHIỆM THU BẮT BUỘC: Đo NME giữ-out (KHÔNG ĐƯỢC BỎ QUA)
+```powershell
+python evaluation/eval_nme_holdout.py
+```
+- **NME < 6%** → ĐẠT, được phép sang Bước 4.
+- **NME ≥ 8%** → ❌ DỪNG: mô hình sẽ lặp lại lỗi cũ (landmark lệch, tracking trôi). Bổ sung dữ liệu vào `datasets/raw_faces/` + build lại + train lại.
 
 ---
 
@@ -146,9 +191,24 @@ Trước khi mất thời gian nạp sang ESP32, bạn hãy kiểm tra chất l�
 
 ### 4.1. Chạy với Webcam thật của máy tính
 ```powershell
+# Chạy bình thường (chu kỳ log mặc định 1.2s rất êm và dễ đọc)
 python host_laptop/local_model_tester.py --cam 0
+
+# Tùy chỉnh chu kỳ xuất log chậm hơn (ví dụ 2 giây/lần)
+python host_laptop/local_model_tester.py --cam 0 --log-interval 2.0
+
+# Khởi động sẵn ở chế độ COMPACT (in 1 dòng tóm tắt so sánh)
+python host_laptop/local_model_tester.py --cam 0 --log-mode COMPACT
 ```
-*(Nếu máy bạn có nhiều camera, bạn có thể thử `--cam 1` hoặc `--cam 2`)*
+*(Nếu máy bạn có nhiều camera, bạn có thể thay `--cam 0` bằng `--cam 1` hoặc `--cam 2`)*
+
+> [!IMPORTANT]
+> **Đồng bộ laptop = ESP32 (bản 2025):** toàn bộ ngưỡng ADAS (Calib 5s, EAR×0.75,
+> MAR×1.60, Slow Blink 0.5s, Microsleep 1.5s, Ngáp 1.5s, Mất tập trung Yaw 30°/Pitch 25°/3.0s)
+> và công thức MAR `(h_outer + h_inner) / (2*w)` đã được đồng bộ **1:1** giữa
+> `local_model_tester.py` và firmware `adas_controller.cpp`. Bộ test laptop ra số liệu
+> thế nào thì ESP32 hành xử y hệt. Crop lúc suy luận cũng dùng đúng mỏ neo Canonical
+> như lúc huấn luyện — nếu vẫn thấy landmark lệch, kiểm tra `output/dataset_report.md`.
 
 ### 4.2. Chạy với chế độ mô phỏng (nếu không có camera ngoài)
 ```powershell
@@ -160,7 +220,13 @@ python host_laptop/local_model_tester.py --synthetic
 - **Thử nhắm mắt $\ge 1.5$ giây:** Thanh EAR tụt xuống viền đỏ, dòng chữ `ALARM: MICROSLEEP!` kích hoạt và **loa laptop sẽ phát tiếng còi hú bíp bíp** (`winsound.Beep`).
 - **Thử ngáp há to miệng $\ge 1.5$ giây:** Thanh MAR vọt lên màu tím, ghi nhận trạng thái `YAWNING DETECTED`. Nếu ngáp 3 lần trong 3 phút, còi hú báo động mệt mỏi `ALARM: FATIGUE!`.
 - **Thử quay mặt sang trái/phải quá $30^\circ$ trong 3 giây:** Trục vector 3D nghiêng đi và kích hoạt báo động mất tập trung `ALARM: DISTRACTED!`.
-- **Bấm phím `q` hoặc `ESC`** để thoát kiểm thử.
+- **Các phím tắt điều khiển trực tiếp trên màn hình camera:**
+  - **Phím `d`**: Chuyển đổi chế độ log Terminal (`FULL` bảng 2 cột $\rightarrow$ `COMPACT` 1 dòng $\rightarrow$ `OFF`).
+  - **Phím `p`**: Chụp nhanh (snapshot) và in chi tiết toàn bộ 22 điểm mốc tọa độ ra Terminal ngay lập tức.
+  - **Phím `m`**: Đổi Engine giữa `TINYDRIVER` (AI cục bộ) và `MEDIAPIPE` (Ground-Truth chuẩn) để đối chiếu sai số.
+  - **Phím `f`**: Bật / Tắt chế độ tự động bám mặt 1:1 (`BAM MAT 1:1` vs `CAT TAM CO DINH`).
+  - **Phím `r`**: Hiệu chuẩn lại baseline khuôn mặt của tài xế (`RECALIBRATE`).
+  - **Phím `q` hoặc `ESC`**: Thoát kiểm thử.
 
 👉 Khi bạn đã thấy mô hình phản hồi chính xác và nhạy bén với khuôn mặt của mình, bạn tự tin chuyển sang nạp vào ESP32-S3!
 
@@ -254,6 +320,9 @@ Hệ thống sẽ tự động thực thi 5 bài kiểm chuẩn trong chưa đ�
 
 | Hiện tượng | Nguyên nhân khả dĩ | Cách khắc phục triệt để |
 | :--- | :--- | :--- |
+| **`build_clean_dataset.py` báo tải AFLW2000 thất bại** | Mạng nhà bạn chặn server CBSR (Trung Quốc) | Bỏ qua Bước 1.5, chạy thẳng Bước 2 — Colab sẽ **tự động tải AFLW2000 (~83MB) và build dataset**. Hoặc tải thủ công qua Kaggle (`mohamedadlyi/aflw2000-3d`) rồi `--aflw2000-zip <file.zip>`. |
+| **`idf.py build` lỗi không tìm thấy `esp_jpeg_dec.h`** | Component `esp_new_jpeg` chưa được tải | Đảm bảo có internet khi build lần đầu (Component Manager tự tải từ `main/idf_component.yml`), hoặc chạy: `idf.py add-dependency "espressif/esp_new_jpeg^1.0.2"`. |
+| **Landmark vẫn lệch / tracking trôi sau khi train lại** | Dataset thiếu góc quay lớn hoặc thiếu mẫu | Mở `output/dataset_report.md`: cột Yaw ±40..90° phải có ≥ 200 mẫu, tổng ≥ 5.000 mẫu. Thiếu thì bổ sung 300W-LP/WFLW rồi build + train lại. Kiểm tra NME bằng `python evaluation/eval_nme_holdout.py` (≥ 8% là chưa đạt). |
 | **Báo lỗi `No module named cv2` hoặc `numpy`** | Chưa kích hoạt môi trường Conda `projet_13` | Chạy lệnh: `conda activate projet_13` trước khi thực thi bất kỳ lệnh Python nào. |
 | **ESP32 không kết nối được Wi-Fi** | Sai tên Wi-Fi, mật khẩu hoặc dùng Wi-Fi 5GHz | ESP32 chỉ hỗ trợ Wi-Fi băng tần 2.4GHz. Hãy bật Hotspot 2.4GHz từ điện thoại hoặc kiểm tra lại `menuconfig`. |
 | **ESP32 kết nối Wi-Fi nhưng báo `Connection refused`** | Sai địa chỉ IP của Laptop hoặc tường lửa Windows chặn cổng 8888 | 1. Kiểm tra lại IP bằng `ipconfig`.<br>2. Đảm bảo chạy `host_ip_cam.py` TRƯỚC KHI bật nguồn ESP32.<br>3. Cho phép Python đi qua Windows Firewall (hoặc tạm tắt Public Firewall khi demo). |

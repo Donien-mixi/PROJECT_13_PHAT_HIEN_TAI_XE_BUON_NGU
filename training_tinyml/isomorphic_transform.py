@@ -14,6 +14,54 @@ except (ImportError, ValueError):
     from .config import IMAGE_WIDTH, IMAGE_HEIGHT, BBOX_EXPANSION_RATIO
 
 
+def compute_canonical_anchor(pts_px):
+    """
+    [v2.0.5 - DỒN MỎ NEO CHÀN] Tính (cx, cy, S) hộp canonical từ 22 điểm pixel.
+    Đồng bộ 1 nơi duy nhất cho: canonical_face_crop (train/label) và
+    host_laptop (get_target_from_landmarks / detect_face_haar / camera_streamer).
+
+    Công thức:
+      d_eyes    = khoảng cách tâm 2 mắt
+      d_eye_nose= max(nose_y - eye_y, 0.45*d_eyes, 1.0)
+      d_eye_chin= max(chin_y - eye_y, d_eye_nose, 1.0)   [MỚI v2.0.5]
+      h_skull   = max(d_eye_nose*2.10, d_eyes*1.40, d_eye_chin/1.20)  [MỚI]
+      S         = 2.05 * h_skull (số chẵn)
+      cx        = (eye_x + nose_x) / 2
+      cy        = eye_y + 0.32 * h_skull
+
+    Term d_eye_chin/1.20 đến từ điều kiện "đáy hộp phải chứa được cằm CÓ DƯ
+    an toàn":
+      đáy = cy + S/2 = eye_y + 0.32h + 1.025h >= chin_y + 0.07*S
+      => h >= d_eye_chin / 1.20  (cho cằm dư ~7% chiều cao hộp)
+    [LỖI v2.0.5a ĐÃ SỬA: dùng /1.345 làm cằm CHẠM ĐÚNG biên (margin=0)
+    -> vẫn bị gate margin loại oan 33-39% mẫu — giữ nguyên đếm rejection!]
+    Với mặt nhắm miệng bình thường (d_eye_chin ~ 2.2*d_eye_nose) term này
+    KHÔNG chiếm ưu tiên (2.1*d_eye_nose vẫn lớn hơn) -> layout không đổi cho
+    mặt chính diện; chỉ TỰ GIÃN khi miệng há to (ngáp) -> cằm luôn nằm trong
+    hộp với biên an toàn 7%.
+    """
+    pts = np.asarray(pts_px, dtype=np.float32)
+    eye_left_center = np.mean(pts[:6, :], axis=0)
+    eye_right_center = np.mean(pts[6:12, :], axis=0)
+    eyes_center = (eye_left_center + eye_right_center) / 2.0
+
+    eye_x = float(eyes_center[0])
+    eye_y = float(eyes_center[1])
+    nose_x = float(pts[19, 0])
+    nose_y = float(pts[19, 1])
+    chin_y = float(pts[21, 1])
+
+    d_eyes = float(np.linalg.norm(eye_right_center - eye_left_center))
+    d_eye_nose = float(max(nose_y - eye_y, d_eyes * 0.45, 1.0))
+    d_eye_chin = float(max(chin_y - eye_y, d_eye_nose, 1.0))
+
+    # [v2.0.5b] /1.20 cho cằm dư 7% chiều cao hộp (bản /1.345 làm cằm chạm biên)
+    h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40, d_eye_chin / 1.20))
+    cx = float((eye_x + nose_x) / 2.0)
+    cy = float(eye_y + 0.32 * h_skull)
+    return cx, cy, h_skull
+
+
 def canonical_face_crop(image, landmarks_px, jitter=False):
     """
     Chuẩn hóa hình học khuôn mặt Canonical Anatomical Anchor (InsightFace & MediaPipe).
@@ -31,28 +79,11 @@ def canonical_face_crop(image, landmarks_px, jitter=False):
     h_img, w_img = image.shape[:2]
     pts = np.array(landmarks_px, dtype=np.float32)
 
-    # Tâm mắt trái và mắt phải
-    eye_left_center = np.mean(pts[:6, :], axis=0)
-    eye_right_center = np.mean(pts[6:12, :], axis=0)
-    eyes_center = (eye_left_center + eye_right_center) / 2.0
-
-    eye_x = float(eyes_center[0])
-    eye_y = float(eyes_center[1])
-    nose_x = float(pts[19, 0])
-    nose_y = float(pts[19, 1])
-
-    # Trục nhân trắc học sọ mặt (Rigid Upper Facial Skull Anchor)
-    d_eyes = float(np.linalg.norm(eye_right_center - eye_left_center))
-    d_eye_nose = float(max(nose_y - eye_y, d_eyes * 0.45, 1.0))
-
-    # Chiều cao sọ mặt chuẩn hóa từ cấu trúc xương cứng (Scale-Invariant)
-    h_skull = float(max(d_eye_nose * 2.10, d_eyes * 1.40))
+    # [v2.0.5] Mỏ neo canonical dùng chung (có term cằm — chống clip P21 khi ngáp)
+    cx, cy, h_skull = compute_canonical_anchor(pts)
     square_size = int(round(h_skull * 2.05))
     if square_size % 2 != 0:
         square_size += 1
-
-    cx = float((eye_x + nose_x) / 2.0)
-    cy = float(eye_y + 0.32 * h_skull)
 
     # Micro-Jitter (Chống nhiễu detector nhưng giữ nguyên vùng mắt/miệng chuẩn MediaPipe)
     if jitter:

@@ -146,6 +146,18 @@ def build_tinydriver_net(input_shape=INPUT_SHAPE, output_dims=OUTPUT_DIMS, inclu
     return model
 
 
+def get_deploy_model(model):
+    """
+    Extracts landmark-only deployment model from multi-task training model.
+    Guarantees single-input single-output graph for TFLite Micro.
+    """
+    if isinstance(model.output, dict) and "landmarks_output" in model.output:
+        return models.Model(inputs=model.input, outputs=model.output["landmarks_output"], name="TinyDriver_DeployNet")
+    elif isinstance(model.output, (list, tuple)) and len(model.output) > 1:
+        return models.Model(inputs=model.input, outputs=model.output[0], name="TinyDriver_DeployNet")
+    return model
+
+
 if __name__ == "__main__":
     # Test model summary and tensor shapes
     deploy_model = build_tinydriver_net(include_pose_head=False)

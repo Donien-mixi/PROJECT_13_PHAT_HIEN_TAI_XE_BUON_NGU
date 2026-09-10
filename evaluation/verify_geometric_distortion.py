@@ -26,10 +26,11 @@ def compute_ear(eye_pts):
     return (v1 + v2) / (2.0 * h) if h > 1e-5 else 0.0
 
 def compute_mar(mouth_pts):
-    # mouth_pts: 6 points [p12 (left), p13 (right), p14 (top), p15 (bottom), ...]
-    v = euclidean_dist(mouth_pts[2], mouth_pts[3]) # p14, p15
-    h = euclidean_dist(mouth_pts[0], mouth_pts[1]) # p12, p13
-    return v / h if h > 1e-5 else 0.0
+    # mouth_pts: 6 points [p12 (left), p13 (right), p14 (top outer), p15 (bot outer), p16 (top inner), p17 (bot inner)]
+    h_outer = euclidean_dist(mouth_pts[2], mouth_pts[3]) # p14, p15
+    h_inner = euclidean_dist(mouth_pts[4], mouth_pts[5]) # p16, p17
+    w = euclidean_dist(mouth_pts[0], mouth_pts[1])        # p12, p13
+    return (h_outer + h_inner) / (2.0 * w) if w > 1e-5 else 0.0
 
 def generate_driver_face_landmarks(cx, cy, face_size):
     """

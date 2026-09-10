@@ -159,6 +159,8 @@ def cmd_deploy_model(args):
                         extracted_files["tflite"] = full_p
                     elif f.endswith(".png"):
                         extracted_files["plot"] = full_p
+                    elif f.endswith(".npz") and "val_holdout" in f.lower():
+                        extracted_files["val_holdout"] = full_p
         except Exception as e:
             print(f"❌ [LỖI] Không thể giải nén file ZIP: {e}")
             sys.exit(1)
@@ -174,6 +176,8 @@ def cmd_deploy_model(args):
                     extracted_files["tflite"] = full_p
                 elif f.endswith(".png"):
                     extracted_files["plot"] = full_p
+                elif f.endswith(".npz") and "val_holdout" in f.lower():
+                    extracted_files["val_holdout"] = full_p
 
     # Trường hợp 3: Nạp trực tiếp 1 file .tflite hoặc .h
     elif source_path.is_file():
@@ -181,6 +185,8 @@ def cmd_deploy_model(args):
             extracted_files["tflite"] = source_path
         elif source_path.suffix.lower() == ".h":
             extracted_files["header"] = source_path
+        elif source_path.suffix.lower() == ".npz" and "val_holdout" in source_path.name.lower():
+            extracted_files["val_holdout"] = source_path
 
     # Tiến hành copy và xác nhận
     deployed_count = 0
@@ -209,6 +215,12 @@ def cmd_deploy_model(args):
         dst = ROOT_DIR / "training_tinyml" / "training_loss.png"
         shutil.copy2(src, dst)
         print(f"  ✅ Đã nạp Biểu đồ Loss: {dst.relative_to(ROOT_DIR)}")
+
+    if "val_holdout" in extracted_files:
+        dst = ROOT_DIR / "training_tinyml" / "val_holdout.npz"
+        shutil.copy2(extracted_files["val_holdout"], dst)
+        print(f"  ✅ Đã nạp Val giữ-out : {dst.relative_to(ROOT_DIR)} (cho cổng eval_nme_holdout.py)")
+        deployed_count += 1
 
     # Dọn dẹp thư mục tạm nếu có
     temp_extract_dir = ROOT_DIR / "tools" / "_temp_extract"
@@ -288,11 +300,11 @@ def cmd_sync(args):
 
 
 def cmd_preprocess(args):
-    """Kích hoạt công cụ tiền xử lý và gán nhãn 22 điểm dữ liệu cộng đồng chuẩn."""
+    """Kích hoạt pipeline dữ liệu SẠCH mới (300W/AFLW2000/WFLW/YawDD + QA gates + split giữ-out)."""
     print("=" * 70)
-    print("🧠 TIỀN XỬ LÝ & GÁN NHÃN 22 ĐIỂM DỮ LIỆU CỘNG ĐỒNG (PREPROCESSING)")
+    print("🧬 TIỀN XỬ LÝ DỮ LIỆU SẠCH (BUILD CLEAN DATASET - bản 2025)")
     print("=" * 70)
-    preprocess_script = ROOT_DIR / "tools" / "preprocess_dataset.py"
+    preprocess_script = ROOT_DIR / "tools" / "build_clean_dataset.py"
     if not preprocess_script.exists():
         print(f"❌ Không tìm thấy script: {preprocess_script}")
         return
@@ -325,7 +337,6 @@ def cmd_pack_colab(args):
         "distillation.py",
         "export_tflite.py",
         "run_colab_train.py",
-        "yawn_faces.zip",
         "preprocessed_driver_dataset.npz",
     ]
 
@@ -333,18 +344,24 @@ def cmd_pack_colab(args):
         for fname in included_files:
             fpath = training_dir / fname
             if fpath.exists():
-                zf.write(fpath, arcname=f"training_tinyml/{fname}")
-                zf.write(fpath, arcname=fname)
-                print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024:.1f} KB)")
+                # [v2.0.4] npz dataset có thể ~200MB -> chỉ ghi 1 lần (bản ghi 2 lần
+                # arcname trùng làm gói phình đôi). run_colab_train tìm được ở cả 2 vị trí.
+                if fname == "preprocessed_driver_dataset.npz":
+                    zf.write(fpath, arcname=f"training_tinyml/{fname}")
+                    print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024 / 1024:.1f} MB)")
+                else:
+                    zf.write(fpath, arcname=f"training_tinyml/{fname}")
+                    zf.write(fpath, arcname=fname)
+                    print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024:.1f} KB)")
             else:
                 if fname != "preprocessed_driver_dataset.npz":
                     print(f"  ⚠️ Cảnh báo thiếu file: {fname}")
 
-        # Thêm file script tiền xử lý nếu có
-        preprocess_script = ROOT_DIR / "tools" / "preprocess_dataset.py"
-        if preprocess_script.exists():
-            zf.write(preprocess_script, arcname="preprocess_dataset.py")
-            print(f"  ✓ Đã nén công cụ tiền xử lý: preprocess_dataset.py")
+        # Thêm script build dữ liệu sạch (Colab tự build nếu npz chưa có)
+        build_script = ROOT_DIR / "tools" / "build_clean_dataset.py"
+        if build_script.exists():
+            zf.write(build_script, arcname="build_clean_dataset.py")
+            print(f"  ✓ Đã nén script build dữ liệu sạch: build_clean_dataset.py")
 
     size_kb = zip_path.stat().st_size / 1024
     print("=" * 70)

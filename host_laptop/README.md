@@ -11,6 +11,13 @@ Thư mục `host_laptop/` chứa toàn bộ mã nguồn của trạm máy tính 
 > Laptop **CHỈ** đóng vai trò là một camera IP truyền khung hình JPEG vuông qua mạng Wi-Fi và nhận kết quả JSON để vẽ HUD.
 > **TUYỆT ĐỐI KHÔNG** chạy bất kỳ thuật toán AI nào (MediaPipe, PyTorch, TensorFlow...) trên Laptop. Mọi tính toán AI, giải mã ảnh, đo EAR/MAR và ước lượng Head Pose $Yaw, Pitch, Roll$ đều chạy 100% trên chip vi điều khiển **ESP32-S3 N16R8**.
 
+> [!NOTE]
+> **[v2.0] Đồng bộ 1:1 với firmware (bản sửa 2025):**
+> 1. `local_model_tester.py` — Haar box được chuyển sang **mỏ neo Canonical Anatomical** (cùng công thức `canonical_face_crop` lúc huấn luyện), triệt tiêu lệch hệ thống crop train/inference từng khiến landmark lệch + tracking trôi.
+> 2. Ngưỡng ADAS đồng bộ firmware: Calib **5.0s**, EAR_thresh = base×**0.75** (clip 0.18–0.25), MAR_thresh = base×**1.60** (floor 0.40), Slow Blink **0.5s**, Microsleep **1.5s**, Ngáp **1.5s** (3 lần/180s), Mất tập trung **Yaw 30° / Pitch 25° / 3.0s**.
+> 3. Công thức MAR thống nhất: `(h_outer + h_inner) / (2 * w_mouth)` — giống hệt `wing_loss.py` và `adas_controller.cpp`.
+> 4. Trước khi nạp ESP32, bắt buộc chạy gate: `python evaluation/eval_nme_holdout.py` (NME giữ-out < 6%).
+
 ---
 
 ## 🏗️ Cấu Trúc Mã Nguồn

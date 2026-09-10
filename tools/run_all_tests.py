@@ -61,6 +61,8 @@ def main():
 
     py_exe = sys.executable
 
+    cpp_test_exe = ROOT_DIR / "firmware_esp32" / "test_embedded_algorithms.exe"
+
     test_suites = [
         (
             "Cấu hình & Đồng bộ",
@@ -71,6 +73,16 @@ def main():
             "Giai đoạn 2 (Host IP Cam & HUD)",
             [py_exe, "host_laptop/test_phase2_pipeline.py"],
             "Kiểm thử 5 bài test TCP stream, Isomorphic crop, HUD Telemetry"
+        ),
+        (
+            "Giai đoạn 3.1 (PnP & FaceTracker)",
+            [py_exe, "tools/verify_pnp_and_aug.py"],
+            "Kiểm thử giải thuật POSIT PnP, FaceTracker Hysteresis, Eyeglasses Aug"
+        ),
+        (
+            "Giai đoạn 3.2 (Cơ học & 3-Way Sampling)",
+            [py_exe, "tools/verify_fixes.py"],
+            "Kiểm thử giải phẫu cằm ngáp, cân bằng 3 trạng thái (33/33/33) & Focal Loss"
         ),
         (
             "Giai đoạn 4.1 (Kiểm chuẩn Hình học)",
@@ -88,6 +100,13 @@ def main():
             "Kiểm thử độ chính xác trên 1.200 mẫu môi trường khắc nghiệt"
         ),
     ]
+
+    if cpp_test_exe.exists():
+        test_suites.insert(4, (
+            "Giai đoạn 3.3 (Thuật toán C++ ESP32)",
+            [str(cpp_test_exe)],
+            "Kiểm thử POSIT PnP (<2us) & ADAS FSM viết bằng pure C++"
+        ))
 
     results = []
     total_start = time.time()

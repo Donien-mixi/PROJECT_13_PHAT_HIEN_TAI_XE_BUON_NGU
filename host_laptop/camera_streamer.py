@@ -60,7 +60,10 @@ class CameraStreamer:
         self.cap = None
         if not self.use_synthetic:
             try:
-                self.cap = cv2.VideoCapture(self.camera_src)
+                # Ưu tiên DirectShow trên Windows để khởi động nhanh và triệt tiêu độ trễ
+                self.cap = cv2.VideoCapture(self.camera_src, cv2.CAP_DSHOW)
+                if not self.cap.isOpened():
+                    self.cap = cv2.VideoCapture(self.camera_src)
                 if not self.cap.isOpened():
                     print(f"⚠️ [Camera] Không thể mở Webcam index={camera_src}. Tự động chuyển sang chế độ Mô Phỏng (Synthetic Driver Mode)!")
                     self.use_synthetic = True
@@ -68,7 +71,8 @@ class CameraStreamer:
                 else:
                     self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
                     self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    print(f"📷 [Camera] Đã mở thành công Webcam index={camera_src} (640x480)")
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Khử trễ đệm 4-5 frame nội bộ của OpenCV DirectShow
+                    print(f"📷 [Camera] Đã mở thành công Webcam index={camera_src} (640x480, Buffer=1)")
             except Exception as e:
                 print(f"⚠️ [Camera] Lỗi mở Webcam ({e}). Chuyển sang chế độ Mô Phỏng!")
                 self.use_synthetic = True
@@ -207,10 +211,15 @@ class CameraStreamer:
                         if len(faces) > 0:
                             faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
                             fx, fy, fw, fh = faces[0]
+                            # [v2.0.5 SYNC] Haar -> mỏ neo Canonical (đồng bộ
+                            # compute_canonical_anchor của isomorphic_transform.py):
+                            # d_eyes ≈ 0.46*fw; h ≈ 1.40*d_eyes; S = 2.05*h; cy = eye_y + 0.32*h
+                            d_eyes_est = 0.46 * float(fw)
+                            h_skull = max(d_eyes_est * 0.45 * 2.10, d_eyes_est * 1.40,
+                                          d_eyes_est * 0.45 * 2.2 / 1.20)
                             target_cx = (fx + fw / 2.0) * 2.0
-                            target_cy = (fy + fh * 0.52) * 2.0
-                            face_size = max(fw, fh) * 2.0
-                            target_S = float(np.clip(face_size * 1.50, 160, default_S))
+                            target_cy = ((fy + fh * 0.40) * 2.0) + 0.32 * h_skull
+                            target_S = float(np.clip(h_skull * 2.05, 160, default_S))
                             break
 
             # Apply Anti-Jitter Deadband and Exponential Moving Average (EMA) smoothing

@@ -18,6 +18,32 @@ Tài liệu này vạch ra kiến trúc kỹ thuật, cơ sở khoa học và l�
 | **Giai đoạn 3** | Xây Dựng Firmware ESP32-S3 Edge AI (Dual-Core) | **HOÀN THÀNH (100%)** | `firmware_esp32/`, FreeRTOS Core 0/Core 1, POSIT PnP pure C++, Pass 100% `test_embedded_algorithms.cpp` |
 | **Giai đoạn 4** | Kiểm Thử Nghiệm Thu & Đánh Giá Định Lượng | **HOÀN THÀNH (100%)** | `evaluation/`, Méo hình học $0.00\%$, 36.4 FPS, Độ trễ 31.7ms, 96.5% Acc, `bao_cao_danh_gia_dinh_luong.md` |
 
+> [!WARNING]
+> **CHANGELOG v2.0.0 (Bản sửa 2025 — sửa lỗi landmark lệch + tracking trôi):**
+> Bản train cũ bị lỗi nghiêm trọng do: (1) dữ liệu bẩn ~400 mẫu (bộ Hazeeq là YOLO bbox không có landmark, yawn_faces thiếu cằm), (2) **Mixup landmark** tạo label ảo → Mean-Face Collapse, (3) crop lúc inference lệch với crop lúc train, (4) val lấy từ generator là ảo, (5) firmware chỉ có stub JPEG decoder. Đã sửa toàn bộ:
+> 1. **`tools/build_clean_dataset.py`** — pipeline dữ liệu mới: 300W/AFLW2000-3D/WFLW/YawDD + MediaPipe Teacher, 6 QA Gates, anti-duplicate, Train/Val giữ-out theo hash. Dữ liệu cũ đã xóa sạch.
+> 2. Xóa Mixup landmark; kính augment 55%→18%; tilt ±2.5°→±5°; chọn best model theo **NME giữ-out thật**.
+> 3. `local_model_tester.py` — Haar box chuyển sang **mỏ neo Canonical** khớp 100% lúc train; ngưỡng ADAS đồng bộ 1:1 firmware (5s calib, EAR×0.75, MAR×1.60, blink 0.5s, yawn 1.5s, distract 30°/25°/3.0s).
+> 4. Firmware `adas_controller.cpp` — công thức MAR đổi thành `(h_outer+h_inner)/(2w)` khớp laptop/train.
+> 5. Firmware `image_decoder.cpp` — giải mã JPEG **thật** bằng `esp_new_jpeg` (trước là stub ảnh rác) + `idf_component.yml`.
+> 6. Cổng nghiệm thu mới: `evaluation/eval_nme_holdout.py` — **NME giữ-out < 6% mới được nạp ESP32**.
+> Số liệu Giai đoạn 4 trong bảng trên là kết quả mô phỏng cũ, cần đo lại sau khi train mô hình v2.0.
+>
+> **v2.0.4 (Sửa template collapse):** Model v2.0.3 pass NME canonical 6.62% nhưng LIVE sai
+> 17–23px (log `test_laptop.txt`): canonical crop ép mắt luôn ở v≈0.344 → model học thuộc
+> template vị trí thay vì định vị pixel, vòng lặp anchor tự tham chiếu → box bám template
+> không bám mặt. Đã sửa: **Macro-Jitter affine động** (dịch ±7%, scale 0.85–1.18, xoay ±10°,
+> áp dụng mọi mẫu train — kiểm chứng pixel-exact 0.695px), **gate NME JITTER** làm chỉ số
+> quyết định + tỉ lệ Jitter/Canon < 2.0x, thêm nguồn **FaceSynthetics** (Microsoft, 1000 mặt
+> 512×512 nhãn 68-pt iBUG chính xác pixel, link trực tiếp không auth).
+>
+> **v2.0.5 (Mỏ neo cằm):** Công thức box canonical cũ không chứa nổi cằm khi ngáp →
+> 33–39% mẫu bị clip P21 thành label bẩn (margin=0.0000). Thêm term `d_eye_chin/1.20`
+> vào `compute_canonical_anchor()` (đồng bộ 1 nơi cho train/label/tracking/live demo;
+> hệ số 1.20 cho cằm dư 7% — bản /1.345 làm cằm chạm biên đã sửa). Kết quả rebuild:
+> landmark_clipped **1044 → 8**, tổng mẫu **1658 → 2306** (train 2111/val 195), ngáp
+> **200 → 515**, |Yaw|≥40° **173 → 555 (đạt)**.
+
 ---
 
 ## 1. Cơ Sở Khoa Học & Phân Tích Kỹ Thuật
@@ -178,7 +204,7 @@ ESP32-S3 có 2 nhân Xtensa 240MHz:
 - [x] **Bước 1.1:** Tạo thư mục `training_tinyml/` chứa pipeline huấn luyện Python.
 - [x] **Bước 1.2 (TRỌNG TÂM ĐỒNG BỘ):** Xây dựng module `isomorphic_transform.py`: Chuẩn hóa mọi ảnh huấn luyện sang tỉ lệ vuông $1:1$ (Square Bounding Box expansion) trước khi resize về $96 \times 96$, trích xuất 22 landmarks chuẩn.
 - [x] **Bước 1.3:** Định nghĩa kiến trúc mạng `TinyDriverNet` và tích hợp hàm mất mát `WingLoss`.
-- [x] **Bước 1.4:** Huấn luyện mô hình và kiểm chuẩn sai số trên tập test (WFLW/300W/NTHU-DDD + bộ sinh tổng hợp 3.500 ảnh).
+- [x] **Bước 1.4 (BẢN 2025 - PIPELINE DỮ LIỆU SẠCH):** Xây dựng `tools/build_clean_dataset.py`: ingest 300W/AFLW2000-3D/WFLW/YawDD + MediaPipe Teacher, 6 QA gates, anti-duplicate, train/val split giữ-out theo hash. Đã xóa sạch dữ liệu cũ (yawn_faces + Hazeeq Roboflow) và bỏ Mixup landmark gây Mean-Face Collapse. Đánh giá bằng NME giữ-out thật (`evaluation/eval_nme_holdout.py`, ngưỡng NME < 6% mới nạp ESP32).
 - [x] **Bước 1.5:** Viết script `export_tflite.py` lượng tử hóa Full-Integer INT8 với Representative Dataset và xuất header C `tinydriver_model_data.h`. Đã đóng gói tự động huấn luyện 1-Click trên Google Colab qua gói `training_package.zip` (xem hướng dẫn chi tiết tại `huong_dan_chay_project.md`).
 
 ### 🔹 Giai đoạn 2: Xây Dựng Laptop Host Camera IP Chuẩn Hóa Tỉ Lệ

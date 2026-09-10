@@ -22,14 +22,22 @@ import tensorflow as tf
 # - Môi dưới (P15, P17)                        : 5.0 (ép bám sát viền môi dưới khi hạ miệng)
 # - Trục mũi (P18, P19, P20)                   : 2.0 (neo giữ trục đối xứng khuôn mặt)
 # - Đáy cằm (P21)                              : 4.5 (buộc cằm phải di chuyển theo xương hàm dưới)
+# Biometric weighting vector for 22 points (44 coordinates):
+# Tối ưu hóa đặc thù cho Edge ADAS (phát hiện nhắm mắt ngủ gật & ngáp há miệng):
+# - Mí mắt di động (P1, P2, P4, P5, P7, P8, P10, P11): 5.0 (ép cực mạnh vi chuyển động chớp mắt/nhắm mắt)
+# - Khóe mắt (P0, P3, P6, P9)                         : 3.0 (neo giữ hốc mắt)
+# - Khóe miệng (P12, P13) & Môi trên (P14, P16)       : 3.0 (neo giữ vòm miệng trên)
+# - Môi dưới (P15, P17)                               : 5.0 (ép bám sát viền môi dưới khi hạ miệng)
+# - Trục mũi (P18, P19, P20)                          : 1.5 (neo giữ trục đối xứng khuôn mặt)
+# - Đáy cằm (P21)                                     : 3.5 (buộc cằm phải di chuyển theo xương hàm dưới)
 POINT_WEIGHTS = [
-    2.5, 3.0, 3.0, 2.5, 3.0, 3.0,  # P0..P5: Mắt trái
-    2.5, 3.0, 3.0, 2.5, 3.0, 3.0,  # P6..P11: Mắt phải
-    2.5, 2.5,                      # P12, P13: Khóe miệng trái & phải
-    2.5, 3.0,                      # P14, P15: Môi trên ngoài, Môi dưới ngoài
-    2.5, 3.0,                      # P16, P17: Môi trên trong, Môi dưới trong
+    3.0, 5.0, 5.0, 3.0, 5.0, 5.0,  # P0..P5: Mắt trái (Mí trên P1,P2 và Mí dưới P4,P5 x5.0)
+    3.0, 5.0, 5.0, 3.0, 5.0, 5.0,  # P6..P11: Mắt phải (Mí trên P7,P8 và Mí dưới P10,P11 x5.0)
+    3.0, 3.0,                      # P12, P13: Khóe miệng trái & phải
+    3.0, 5.0,                      # P14, P15: Môi trên ngoài, Môi dưới ngoài (P15 x5.0)
+    3.0, 5.0,                      # P16, P17: Môi trên trong, Môi dưới trong (P17 x5.0)
     1.5, 1.5, 1.5,                 # P18, P19, P20: Nasion, Chóp mũi, Nhân trung
-    2.5                            # P21: Đáy cằm (Gnathion bám theo hàm dưới)
+    3.5                            # P21: Đáy cằm (Gnathion bám theo hàm dưới khi ngáp)
 ]
 BIOMETRIC_WEIGHTS_44 = np.array(
     [w for pt_w in POINT_WEIGHTS for w in (pt_w, pt_w)],
@@ -112,11 +120,11 @@ def compute_tensor_mar(pts_44):
 
 class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
     """
-    Combined PFLD-style Landmark Loss:
-      L_total = L_Wing(landmarks) + lambda_ear * L_EAR + lambda_mar * L_MAR
+    Combined PFLD-style Landmark Loss with Asymmetric Focal Penalties:
+      L_total = L_Wing(landmarks)/44 + lambda_ear * L_Focal_EAR + lambda_mar * L_Focal_MAR
     """
     def __init__(self, w=10.0, epsilon=1.5, image_scale=96.0,
-                 ear_weight=15.0, mar_weight=20.0,
+                 ear_weight=40.0, mar_weight=35.0,
                  name="adaptive_biometric_wing_loss", **kwargs):
         super(AdaptiveBiometricWingLoss, self).__init__(name=name, **kwargs)
         self.w = float(w)
@@ -147,31 +155,34 @@ class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
         loss2 = abs_diff - self.c
         elementwise_loss = tf.where(tf.less(abs_diff, self.w), loss1, loss2)
 
-        # Apply Biometric Weights
+        # Apply Biometric Weights & Chuẩn hóa chia 44.0 để Coord Loss ở mức hợp lý (~20.0)
         weighted_elem_loss = elementwise_loss * self.weights_tensor
-        coord_loss = tf.reduce_mean(tf.reduce_sum(weighted_elem_loss, axis=-1))
+        coord_loss = tf.reduce_mean(tf.reduce_sum(weighted_elem_loss, axis=-1)) / 44.0
 
-        # 2. Geometric EAR Loss (Left & Right Eyes, dimensionless [0, 1])
+        # 2. Geometric EAR Loss với Asymmetric Focal Weight (phạt gấp 3.0 lần khi nhắm mắt mà đoán mở)
         ear_l_true, ear_r_true = compute_tensor_ear(y_true)
         ear_l_pred, ear_r_pred = compute_tensor_ear(y_pred)
-        ear_diff = tf.abs(ear_l_true - ear_l_pred) + tf.abs(ear_r_true - ear_r_pred)
+        focal_ear_l = tf.where(ear_l_true < 0.20, 3.0, 1.0)
+        focal_ear_r = tf.where(ear_r_true < 0.20, 3.0, 1.0)
+        ear_diff = focal_ear_l * tf.abs(ear_l_true - ear_l_pred) + focal_ear_r * tf.abs(ear_r_true - ear_r_pred)
         ear_loss = tf.reduce_mean(ear_diff)
 
-        # 3. Geometric MAR Loss (Mouth / Yawn, dimensionless [0, 1])
+        # 3. Geometric MAR Loss với Focal Weight (phạt gấp 2.5 lần khi ngáp mà đoán ngậm)
         mar_true = compute_tensor_mar(y_true)
         mar_pred = compute_tensor_mar(y_pred)
-        mar_diff = tf.abs(mar_true - mar_pred)
+        focal_mar = tf.where(mar_true > 0.45, 2.5, 1.0)
+        mar_diff = focal_mar * tf.abs(mar_true - mar_pred)
         mar_loss = tf.reduce_mean(mar_diff)
 
-        # 4. Geometric Mouth Width Loss (Khóe miệng P12 - P13)
+        # 4. Geometric Mouth Width Loss (Khóe miệng P12 - P13 chuẩn hóa)
         pts_true_px = tf.reshape(y_true_px, [-1, 22, 2])
         pts_pred_px = tf.reshape(y_pred_px, [-1, 22, 2])
         w_mouth_true = _compute_point_distance(pts_true_px[:, 12, :], pts_true_px[:, 13, :])
         w_mouth_pred = _compute_point_distance(pts_pred_px[:, 12, :], pts_pred_px[:, 13, :])
         mouth_w_diff = tf.abs(w_mouth_true - w_mouth_pred)
-        mouth_w_loss = tf.reduce_mean(mouth_w_diff)
+        mouth_w_loss = tf.reduce_mean(mouth_w_diff) / 96.0
 
-        total_loss = coord_loss + (self.ear_weight * ear_loss) + (self.mar_weight * mar_loss) + (0.5 * mouth_w_loss)
+        total_loss = coord_loss + (self.ear_weight * ear_loss) + (self.mar_weight * mar_loss) + (1.0 * mouth_w_loss)
         return total_loss
 
     def get_config(self):

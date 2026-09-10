@@ -10,6 +10,7 @@ Features:
 import sys
 import os
 import glob
+import time
 import urllib.request
 import zipfile
 import cv2
@@ -44,6 +45,72 @@ except (ImportError, ValueError):
     from .distillation import estimate_pose_from_landmarks
 
 
+def apply_macro_affine_jitter(image, landmarks_norm, shift_range=0.07,
+                              scale_range=(0.85, 1.18), rot_range=10.0,
+                              border=cv2.BORDER_REFLECT, rng=None):
+    """
+    [FIX v2.0.4 - CHỐNG TEMPLATE COLLAPSE] Random affine MACRO quanh tâm khung 96x96:
+      - Dịch chuyển +/- shift_range (7% khung ~ +/-6.7px)
+      - Scale [0.85, 1.18]
+      - Xoay +/- rot_range độ
+    Bản cũ chỉ jitter vi mô +/-1.5px -> vị trí mắt trong crop gần như hằng số
+    (v=0.344 cố định) -> mô hình học thuộc TEMPLATE vị trí canonical thay vì
+    định vị pixel thật -> landmark lệch 17-23px khi gặp mặt có tỉ lệ giải phẫu
+    khác population + tracking bám template chứ không bám mặt.
+
+    Image và landmark được transform bằng CÙNG ma trận affine M (đảm bảo khớp
+    pixel-exact). borderMode=REFLECT tránh viền đen giả.
+    Returns: (img (96,96,1) uint8, lms (22,2) norm)
+    """
+    img2d = image[:, :, 0] if image.ndim == 3 else image
+    h, w = img2d.shape[:2]
+    ang = float(np.random.uniform(-rot_range, rot_range) if rng is None
+                else rng.uniform(-rot_range, rot_range))
+    scale = float(np.random.uniform(*scale_range) if rng is None
+                  else rng.uniform(*scale_range))
+    dx = float(np.random.uniform(-shift_range, shift_range) if rng is None
+               else rng.uniform(-shift_range, shift_range)) * w
+    dy = float(np.random.uniform(-shift_range, shift_range) if rng is None
+               else rng.uniform(-shift_range, shift_range)) * h
+
+    M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), ang, scale)
+    M[0, 2] += dx
+    M[1, 2] += dy
+    M = M.astype(np.float32)
+
+    out = cv2.warpAffine(img2d, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=border)
+
+    pts = np.asarray(landmarks_norm, dtype=np.float32).reshape(-1, 2).copy()
+    pts_px = pts * np.array([w, h], dtype=np.float32)
+    ones = np.hstack([pts_px, np.ones((len(pts_px), 1), dtype=np.float32)])
+    out_px = ones @ M.T
+    out_norm = np.clip(out_px / np.array([w, h], dtype=np.float32), 0.0, 1.0)
+
+    return np.expand_dims(out, axis=-1), out_norm
+
+
+def make_jittered_val_copy(val_imgs, val_lms, copies=2, seed=123,
+                           shift_range=0.05, scale_range=(0.90, 1.12), rot_range=7.0):
+    """
+    [BẢN 2025] Tạo bản sao val với jitter affine xác định (seed cố định) để đo
+    NME LOCALIZATION thật. NME trên val canonical không phát hiện được template
+    collapse (mắt luôn ở v=0.344 trong canonical crop) — chính là lỗ hổng khiến
+    model cũ pass gate 6.62% nhưng live sai 17-23px.
+    Returns: (imgs (copies*N,96,96,1), lms (copies*N,44))
+    """
+    rng = np.random.RandomState(seed)
+    imgs_out, lms_out = [], []
+    for c in range(copies):
+        for i in range(len(val_imgs)):
+            img, lms = apply_macro_affine_jitter(
+                val_imgs[i], val_lms[i].reshape(22, 2),
+                shift_range=shift_range, scale_range=scale_range,
+                rot_range=rot_range, border=cv2.BORDER_REFLECT, rng=rng)
+            imgs_out.append(img)
+            lms_out.append(lms.flatten())
+    return np.array(imgs_out, dtype=np.uint8), np.array(lms_out, dtype=np.float32)
+
+
 def apply_cabin_data_augmentation(image, landmarks_norm):
     """
     In-Cabin Environmental & Spatial Data Augmentation.
@@ -61,15 +128,10 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
         img = img[:, :, 0]
     lm = landmarks_norm.copy()
 
-    # 1. Spatial Sub-Pixel Micro-Jitter (+/- 1.5px trong ô 96x96)
-    # Hấp thụ nhiễu sub-pixel của detector nhưng giữ nguyên vùng mắt/mũi/miệng căn giữa
-    if np.random.rand() > 0.60:
-        dx = float(np.random.uniform(-1.5, 1.5))
-        dy = float(np.random.uniform(-1.5, 1.5))
-        M_shift = np.array([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32)
-        img = cv2.warpAffine(img, M_shift, (96, 96), borderMode=cv2.BORDER_REFLECT)
-        lm[:, 0] = np.clip(lm[:, 0] + (dx / 96.0), 0.0, 1.0)
-        lm[:, 1] = np.clip(lm[:, 1] + (dy / 96.0), 0.0, 1.0)
+    # 1. [MACRO-JITTER v2.0.4] Random affine dịch +/-7%, scale 0.85-1.18, xoay +/-10°
+    #    ÁP DỤNG LUÔN trong train: phá tính bất biến vị trí canonical -> ép mô hình
+    #    ĐỊNH VỊ pixel thật thay vì học thuộc template. (Bản cũ chỉ +/-1.5px 40% thời gian.)
+    img_u8, lm = apply_macro_affine_jitter(img.astype(np.uint8), lm)
 
     # 2. Photometric: Random Brightness & Contrast
     alpha = np.random.uniform(0.75, 1.25)
@@ -96,7 +158,9 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
         img = cv2.filter2D(img, -1, kernel)
 
     # 6. Realistic Eyeglasses Frames, Bridge, and Specular Lens Glare (Mô phỏng kính mắt & bóng phản quang thực tế)
-    if np.random.rand() > 0.45:
+    # [FIX 2025] Hạ xác suất từ 55% xuống 18%: trước đây 55% mẫu bị đeo "kính ellipse đen"
+    # làm phân bố huấn luyện lệch nặng khỏi thế giới thực.
+    if np.random.rand() < 0.18:
         left_eye_pts = lm[0:6] * 96.0
         right_eye_pts = lm[6:12] * 96.0
         cx_l, cy_l = np.mean(left_eye_pts, axis=0)
@@ -156,9 +220,9 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
         lm_flipped[13] = tmp_m
         lm = lm_flipped
 
-    # 8. Micro-Tilt (+/- 2.5 độ, giữ nguyên quy chuẩn xoay thẳng mặt MediaPipe)
+    # 8. Micro-Tilt (+/- 5 độ: tăng mạnh bất biến xoay đầu so với ±2.5° cũ)
     if np.random.rand() > 0.70:
-        angle = float(np.random.uniform(-2.5, 2.5))
+        angle = float(np.random.uniform(-5.0, 5.0))
         M = cv2.getRotationMatrix2D((48.0, 48.0), angle, 1.0)
         img = cv2.warpAffine(img, M, (96, 96), borderMode=cv2.BORDER_REFLECT)
         rad = math.radians(-angle)
@@ -403,62 +467,18 @@ def extract_teacher_landmarks_from_image(image_bgr, teacher, jitter=False):
 
 def download_drowsiness_benchmark_dataset(target_dir):
     """
-    Downloads & extracts full-face benchmark datasets:
-    1. Driver Drowsiness Dataset (In-Cabin Full Face)
-    2. Human Yawning & Fatigue Dataset (Full Face Yawning)
+    [DEPRECATED 2025] Bộ Hazeeq drowsiness.zip là dataset YOLO bbox (Roboflow export):
+    chỉ có khung bao, KHÔNG có nhãn landmark, nhiều ảnh crop cận cảnh thiếu cằm/mắt
+    -> nguyên nhân chính gây label bẩn cho mô hình trước đây. KHÔNG còn tự tải bộ này.
+
+    Thay thế: dùng tools/build_clean_dataset.py (300W / AFLW2000-3D / WFLW / YawDD
+    + MediaPipe Teacher + 6 QA gates + train/val split giữ-out thật).
     """
     os.makedirs(target_dir, exist_ok=True)
-    print(f"[DatasetLoader] Kiểm tra thư mục dữ liệu buồn ngủ: {target_dir}")
-
-    # 1. Check local yawn_faces.zip
-    candidate_yawn_zips = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "yawn_faces.zip"),
-        "yawn_faces.zip",
-        os.path.join("training_tinyml", "yawn_faces.zip"),
-        os.path.join(target_dir, "yawn_faces.zip")
-    ]
-    for bz in candidate_yawn_zips:
-        if os.path.exists(bz) and zipfile.is_zipfile(bz):
-            print(f"  [BUNDLE] Đã tìm thấy gói ảnh ngáp người thật: {bz}. Đang giải nén...")
-            try:
-                with zipfile.ZipFile(bz, 'r') as zf:
-                    zf.extractall(target_dir)
-                print("  [OK] Đã giải nén thành công dữ liệu ngáp ngủ thực tế!")
-            except Exception as e:
-                print(f"  [WARNING] Lỗi giải nén {bz}: {e}")
-            break
-
-    # 2. Download In-Cabin Driver Drowsiness
-    cabin_url = "https://raw.githubusercontent.com/hazeeq911/Driver-Drowsiness-Detection/main/drowsiness.zip"
-    cabin_zip_path = os.path.join(target_dir, "drowsiness_cabin.zip")
-
-    existing_images = []
-    for ext in ['*.jpg', '*.png', '*.jpeg', '*.JPG', '*.PNG']:
-        existing_images.extend(glob.glob(os.path.join(target_dir, '**', ext), recursive=True))
-
-    if len(existing_images) < 100:
-        print("  [DOWNLOAD] Đang tải bộ dữ liệu tài xế trong cabin ô tô (Full Face Drowsiness, ~6.8MB)...")
-        try:
-            req = urllib.request.Request(cabin_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=45) as resp, open(cabin_zip_path, 'wb') as out_f:
-                import shutil
-                shutil.copyfileobj(resp, out_f)
-
-            if os.path.exists(cabin_zip_path) and zipfile.is_zipfile(cabin_zip_path):
-                with zipfile.ZipFile(cabin_zip_path, 'r') as zf:
-                    zf.extractall(target_dir)
-                os.remove(cabin_zip_path)
-                print("  [OK] Đã giải nén thành công bộ dữ liệu tài xế trong cabin!")
-        except Exception as e:
-            print(f"  [WARNING] Không tải được từ {cabin_url} ({e})")
-            if os.path.exists(cabin_zip_path):
-                try: os.remove(cabin_zip_path)
-                except Exception: pass
-
-    found_imgs = []
-    for ext in ['*.jpg', '*.png', '*.jpeg', '*.JPG', '*.PNG']:
-        found_imgs.extend(glob.glob(os.path.join(target_dir, '**', ext), recursive=True))
-    print(f"[DatasetLoader] [DATA-READY] Tổng cộng tìm thấy {len(found_imgs)} ảnh FULL MẶT thực tế trong {target_dir}!")
+    print("[DatasetLoader] [DEPRECATED] Không còn tự tải bộ Hazeeq drowsiness (dữ liệu YOLO bbox, không có landmark).")
+    print("  👉 Dùng lệnh mới: python tools/build_clean_dataset.py --download-aflw2000")
+    print("     Hoặc bỏ ảnh chuẩn (300W/WFLW/YawDD/ảnh tự chụp) vào datasets/raw_faces/<ten>/ rồi chạy:")
+    print("     python tools/build_clean_dataset.py")
     return target_dir
 
 
@@ -526,6 +546,20 @@ def build_or_load_drowsiness_cache(data_dir, cache_path, teacher=None, max_sampl
     return images_arr, lms_arr, poses_arr
 
 
+def compute_sample_ear(lms_44):
+    """Tính EAR trung bình của 2 mắt để phân loại nhắm mắt vs mở mắt."""
+    pts = lms_44.reshape((22, 2))
+    w_l = float(np.linalg.norm(pts[0] - pts[3]))
+    h1_l = float(np.linalg.norm(pts[1] - pts[5]))
+    h2_l = float(np.linalg.norm(pts[2] - pts[4]))
+    ear_l = (h1_l + h2_l) / (2.0 * max(w_l, 1e-4))
+    w_r = float(np.linalg.norm(pts[6] - pts[9]))
+    h1_r = float(np.linalg.norm(pts[7] - pts[11]))
+    h2_r = float(np.linalg.norm(pts[8] - pts[10]))
+    ear_r = (h1_r + h2_r) / (2.0 * max(w_r, 1e-4))
+    return (ear_l + ear_r) / 2.0
+
+
 def compute_sample_mar(lms_44):
     """Tính MAR của 1 mẫu để phân loại ngáp vs bình thường."""
     pts = lms_44.reshape((22, 2))
@@ -540,11 +574,11 @@ def compute_sample_mar(lms_44):
 
 class DriverLandmarkDataset:
     """
-    Multi-Task Data Pipeline for TinyDriver PFLD-Edge:
+    Multi-Task Data Pipeline for TinyDriver PFLD-Edge (bản nâng cấp 3-Way Balanced Sampling):
       - Delivers (x_image, {"landmarks_output": 44, "pose_output": 3}).
-      - Triệt tiêu Mean-Face Collapse bằng cơ chế Balanced 50/50 Class-Conditional Sampling:
-        + 50% mẫu Ngáp / Há miệng to (MAR >= 0.45).
-        + 50% mẫu Tỉnh táo / Ngủ gật nhắm mắt (MAR < 0.35).
+      - Cân bằng 3 trạng thái sinh học bắt buộc: ~33% Nhắm mắt / ~33% Ngáp / ~34% Tỉnh táo.
+      - Triệt tiêu 100% hiện tượng Mean-State Collapse (không còn bị kẹt ở mắt mở/ngậm miệng).
+      - Val giữ-out THẬT đọc từ cột 'split' của build_clean_dataset.py.
       - Áp dụng Translation & Scale Jitter và Cabin Environmental Augmentation.
     """
     def __init__(self, data_dir=None, cache_path=None, use_synthetic=False,
@@ -558,8 +592,11 @@ class DriverLandmarkDataset:
         self.real_landmarks = None
         self.real_poses = None
 
+        self.closed_indices = []
         self.yawn_indices = []
         self.normal_indices = []
+        self.train_indices = []
+        self.val_indices = []
 
         if not self.use_synthetic:
             # Ưu tiên số 1: Nạp trực tiếp từ preprocessed_driver_dataset.npz
@@ -577,7 +614,16 @@ class DriverLandmarkDataset:
                         self.real_images = data['images']
                         self.real_landmarks = data['landmarks']
                         self.real_poses = data['poses'] if 'poses' in data else np.zeros((len(self.real_images), 3), dtype=np.float32)
-                        print(f"[DatasetLoader] [SUCCESS] Đã nạp thành công {len(self.real_images)} mẫu ảnh người thật từ: {p_path}")
+                        # Đọc cột split: split=0 -> train, split=1 -> VAL GIỮ-OUT THẬT
+                        if 'split' in data:
+                            split_arr = data['split'].astype(np.int32)
+                            self.train_indices = list(np.where(split_arr == 0)[0])
+                            self.val_indices = list(np.where(split_arr == 1)[0])
+                        else:
+                            self.train_indices = list(range(len(self.real_images)))
+                            self.val_indices = []
+                        print(f"[DatasetLoader] [SUCCESS] Đã nạp {len(self.real_images)} mẫu thật từ: {p_path}")
+                        print(f"  • Train: {len(self.train_indices)} | Val giữ-out: {len(self.val_indices)}")
                         break
                     except Exception as e:
                         print(f"[WARNING] [DatasetLoader] Lỗi đọc {p_path}: {e}")
@@ -595,47 +641,112 @@ class DriverLandmarkDataset:
                     )
 
         if self.real_images is not None and len(self.real_images) > 0:
-            for idx, lm in enumerate(self.real_landmarks):
+            # Phân tách 3 nhóm độc lập từ tập TRAIN:
+            pool_for_pools = self.train_indices if self.train_indices else list(range(len(self.real_images)))
+            for idx in pool_for_pools:
+                lm = self.real_landmarks[idx]
+                ear_val = compute_sample_ear(lm)
                 mar_val = compute_sample_mar(lm)
-                if mar_val >= 0.40:
+                if ear_val < 0.20:
+                    self.closed_indices.append(idx)
+                elif mar_val >= 0.40:
                     self.yawn_indices.append(idx)
                 else:
                     self.normal_indices.append(idx)
 
-            print(f"[DatasetLoader] [REAL-DATA] Kích hoạt luồng huấn luyện Thực Tế: {len(self.real_images)} mẫu người thật!")
-            print(f"  • Mẫu ngáp/há miệng thật (MAR >= 0.40): {len(self.yawn_indices)} mẫu")
-            print(f"  • Mẫu ngậm miệng/nhắm mắt thật       : {len(self.normal_indices)} mẫu")
-            self.total_samples = max(len(self.real_images) * 8, self.synthetic_count, 6000)
+            print(f"[DatasetLoader] [REAL-DATA] Kích hoạt luồng huấn luyện Thực Tế (3-Way Balanced Sampling): {len(self.train_indices)} mẫu train!")
+            print(f"  • Mẫu nhắm mắt/microsleep thật (EAR < 0.20): {len(self.closed_indices)} mẫu")
+            print(f"  • Mẫu ngáp/há miệng thật      (MAR >= 0.40): {len(self.yawn_indices)} mẫu")
+            print(f"  • Mẫu tỉnh táo/bình thường    (Attentive)   : {len(self.normal_indices)} mẫu")
+            self.total_samples = max(len(self.real_images) * 4, self.synthetic_count, 4000)
         else:
             print(f"[DatasetLoader] [SYNTHETIC] Kích hoạt luồng huấn luyện Sinh Trắc Học Tăng Cường ({self.synthetic_count} mẫu)...")
             self.use_synthetic = True
             self.total_samples = self.synthetic_count
 
+    @staticmethod
+    def _normalize_image(img):
+        """Chuẩn hóa [-1.0, 1.0] đồng bộ 100% với ESP32-S3: (pixel - 128) / 128."""
+        img_norm = (img.astype(np.float32) - 128.0) / 128.0
+        if len(img_norm.shape) == 2:
+            img_norm = np.expand_dims(img_norm, axis=-1)
+        elif len(img_norm.shape) == 3 and img_norm.shape[-1] != 1:
+            img_norm = img_norm[:, :, :1]
+        return img_norm
+
+    def get_val_arrays(self):
+        """Trả về (images, landmarks, poses) của tập VAL GIỮ-OUT THẬT để đo NME."""
+        if self.val_indices:
+            idxs = np.array(self.val_indices, dtype=np.int64)
+            return (self.real_images[idxs], self.real_landmarks[idxs], self.real_poses[idxs])
+        if self.real_images is not None and len(self.real_images) > 0:
+            n_val = max(int(len(self.real_images) * 0.08), 8)
+            return (self.real_images[-n_val:], self.real_landmarks[-n_val:], self.real_poses[-n_val:])
+        return None
+
+    def _generate_real_val_generator(self, num_samples):
+        """VAL GIỮ-OUT THẬT: duyệt tuần tự các mẫu split=1, KHÔNG augment, KHÔNG mixup."""
+        np.random.seed(42)
+        if self.val_indices:
+            order = np.random.permutation(np.array(self.val_indices, dtype=np.int64))
+        elif self.real_images is not None and len(self.real_images) > 0:
+            print("[DatasetLoader] [VAL-WARN] npz thiếu cột 'split' -> dùng 8% cuối làm val.")
+            n_val = max(int(len(self.real_images) * 0.08), 8)
+            order = np.arange(len(self.real_images) - n_val, len(self.real_images))
+        else:
+            print("[DatasetLoader] [VAL-WARN] Không có dữ liệu thật -> val fallback synthetic.")
+            for i in range(num_samples):
+                force_st = 'normal' if (i % 2 == 0) else 'yawn'
+                img, lms, pose = generate_synthetic_driver_sample(i, apply_aug=False, force_state=force_st)
+                yield self._normalize_image(img), {"landmarks_output": lms.astype(np.float32),
+                                                   "pose_output": pose.astype(np.float32)}
+            return
+
+        for i in range(num_samples):
+            idx = int(order[i % len(order)])
+            img = self.real_images[idx].copy()
+            lms = self.real_landmarks[idx].copy()
+            pose = self.real_poses[idx].copy()
+            yield self._normalize_image(img), {"landmarks_output": lms.astype(np.float32),
+                                               "pose_output": pose.astype(np.float32)}
+
     def generate_data_generator(self, num_samples, split='train'):
-        """Generator yielding (image_norm, {"landmarks_output": lms, "pose_output": pose}) with 50/50 balance."""
-        np.random.seed(42 if split == 'val' else None)
+        """Generator yielding (image_norm, {"landmarks_output": lms, "pose_output": pose}).
+        split='train': Cân bằng 3 trạng thái (33% Nhắm mắt : 33% Ngáp : 34% Tỉnh táo) + cabin augment.
+        split='val': giữ-out thật."""
+        if split == 'val':
+            yield from self._generate_real_val_generator(num_samples)
+            return
         apply_aug = (split == 'train') and self.augment
 
+        has_real_closed = len(self.closed_indices) > 0
         has_real_yawns = len(self.yawn_indices) > 0
         has_real_normals = len(self.normal_indices) > 0
 
         for i in range(num_samples):
-            is_yawn_slot = (i % 2 == 1) # 50% thời gian là slot ngáp / há miệng
+            slot = i % 3  # Cân bằng 3 trạng thái đồng đều
 
-            if is_yawn_slot:
-                # Slot ngáp (MAR >= 0.40): 100% dữ liệu người thật khi khả dụng
-                if not self.use_synthetic and has_real_yawns:
+            if slot == 0:
+                # Slot nhắm mắt (EAR < 0.20): 100% mẫu mắt nhắm
+                if not self.use_synthetic and has_real_closed and (np.random.rand() > 0.15):
+                    idx = np.random.choice(self.closed_indices)
+                    img = self.real_images[idx].copy()
+                    lms = self.real_landmarks[idx].copy()
+                    pose = self.real_poses[idx].copy()
+                    if apply_aug:
+                        lms_22 = lms.reshape((22, 2))
+                        img, lms_22 = apply_cabin_data_augmentation(img, lms_22)
+                        lms = lms_22.flatten()
+                        pose = estimate_pose_from_landmarks(lms_22)
+                else:
+                    img, lms, pose = generate_synthetic_driver_sample(i, apply_aug=apply_aug, force_state='microsleep')
+            elif slot == 1:
+                # Slot ngáp (MAR >= 0.40): 100% mẫu ngáp há miệng
+                if not self.use_synthetic and has_real_yawns and (np.random.rand() > 0.10):
                     idx = np.random.choice(self.yawn_indices)
                     img = self.real_images[idx].copy()
                     lms = self.real_landmarks[idx].copy()
                     pose = self.real_poses[idx].copy()
-                    # Biometric Mixup giữa 2 ảnh ngáp thật để tăng sự đa dạng biểu cảm
-                    if apply_aug and np.random.rand() > 0.50 and len(self.yawn_indices) > 1:
-                        idx2 = np.random.choice(self.yawn_indices)
-                        lam = float(np.random.uniform(0.30, 0.70))
-                        img = (lam * img.astype(np.float32) + (1.0 - lam) * self.real_images[idx2].astype(np.float32)).astype(np.uint8)
-                        lms = lam * lms + (1.0 - lam) * self.real_landmarks[idx2]
-                        pose = lam * pose + (1.0 - lam) * self.real_poses[idx2]
                     if apply_aug:
                         lms_22 = lms.reshape((22, 2))
                         img, lms_22 = apply_cabin_data_augmentation(img, lms_22)
@@ -644,36 +755,220 @@ class DriverLandmarkDataset:
                 else:
                     img, lms, pose = generate_synthetic_driver_sample(i, apply_aug=apply_aug, force_state='yawn')
             else:
-                # Slot ngậm miệng / nhắm mắt ngủ gật: 100% dữ liệu người thật khi khả dụng
+                # Slot tỉnh táo / mắt mở / ngậm miệng bình thường
                 if not self.use_synthetic and has_real_normals:
                     idx = np.random.choice(self.normal_indices)
                     img = self.real_images[idx].copy()
                     lms = self.real_landmarks[idx].copy()
                     pose = self.real_poses[idx].copy()
-                    # Biometric Mixup giữa 2 ảnh mắt bình thường / nhắm mắt thật
-                    if apply_aug and np.random.rand() > 0.50 and len(self.normal_indices) > 1:
-                        idx2 = np.random.choice(self.normal_indices)
-                        lam = float(np.random.uniform(0.30, 0.70))
-                        img = (lam * img.astype(np.float32) + (1.0 - lam) * self.real_images[idx2].astype(np.float32)).astype(np.uint8)
-                        lms = lam * lms + (1.0 - lam) * self.real_landmarks[idx2]
-                        pose = lam * pose + (1.0 - lam) * self.real_poses[idx2]
                     if apply_aug:
                         lms_22 = lms.reshape((22, 2))
                         img, lms_22 = apply_cabin_data_augmentation(img, lms_22)
                         lms = lms_22.flatten()
                         pose = estimate_pose_from_landmarks(lms_22)
                 else:
-                    force_st = 'microsleep' if (i % 4 == 0) else 'normal'
-                    img, lms, pose = generate_synthetic_driver_sample(i, apply_aug=apply_aug, force_state=force_st)
+                    img, lms, pose = generate_synthetic_driver_sample(i, apply_aug=apply_aug, force_state='normal')
 
             # Chuẩn hóa về [-1.0, 1.0] đồng bộ 100% với ESP32-S3 (pixel - 128) / 128
-            img_norm = (img.astype(np.float32) - 128.0) / 128.0
-            if len(img_norm.shape) == 2:
-                img_norm = np.expand_dims(img_norm, axis=-1)
-            elif len(img_norm.shape) == 3 and img_norm.shape[-1] != 1:
-                img_norm = img_norm[:, :, :1]
+            img_norm = self._normalize_image(img)
 
             yield img_norm, {"landmarks_output": lms.astype(np.float32), "pose_output": pose.astype(np.float32)}
+
+    def _augment_and_normalize(self, img_t, lms_t, pose_t):
+        """Chạy trong worker song song: augment NumPy/CV2 + chuẩn hóa [-1,1]."""
+        img = img_t.numpy()
+        lms = lms_t.numpy()
+        if img.dtype != np.uint8:
+            img = img.astype(np.uint8)
+        lms_22 = lms.reshape(22, 2)
+        img_aug, lms_aug = apply_cabin_data_augmentation(img, lms_22)
+        pose_aug = estimate_pose_from_landmarks(lms_aug)
+        img_norm = (img_aug.astype(np.float32) - 128.0) / 128.0
+        if len(img_norm.shape) == 2:
+            img_norm = np.expand_dims(img_norm, axis=-1)
+        elif len(img_norm.shape) == 3 and img_norm.shape[-1] != 1:
+            img_norm = img_norm[:, :, :1]
+        return img_norm, lms_aug.flatten().astype(np.float32), pose_aug.astype(np.float32)
+
+    def _augment_map_fn(self, img_t, lms_t, pose_t):
+        out = tf.py_function(
+            self._augment_and_normalize, [img_t, lms_t, pose_t],
+            [tf.float32, tf.float32, tf.float32]
+        )
+        img_a, lms_a, pose_a = out
+        return (
+            tf.reshape(img_a, [IMAGE_HEIGHT, IMAGE_WIDTH, 1]),
+            {
+                "landmarks_output": tf.reshape(lms_a, [NUM_LANDMARKS * 2]),
+                "pose_output": tf.reshape(pose_a, [3]),
+            },
+        )
+
+    def _build_raw_pools(self):
+        """Pool ảnh THÔ tách làm 3 nhóm: closed (nhắm mắt) / yawn (ngáp) / normal (tỉnh táo)."""
+        if self.real_images is not None and len(self.real_images) > 0:
+            c_idx = np.array(self.closed_indices, dtype=np.int64) if self.closed_indices else np.array(self.normal_indices[:50], dtype=np.int64)
+            y_idx = np.array(self.yawn_indices, dtype=np.int64) if self.yawn_indices else np.array(self.normal_indices[:50], dtype=np.int64)
+            n_idx = np.array(self.normal_indices, dtype=np.int64)
+            return (
+                (self.real_images[c_idx], self.real_landmarks[c_idx], self.real_poses[c_idx]),
+                (self.real_images[y_idx], self.real_landmarks[y_idx], self.real_poses[y_idx]),
+                (self.real_images[n_idx], self.real_landmarks[n_idx], self.real_poses[n_idx]),
+            )
+        # Synthetic fallback
+        n_third = max(self.synthetic_count // 3, 64)
+        c_i, c_l, c_p = [], [], []
+        y_i, y_l, y_p = [], [], []
+        n_i, n_l, n_p = [], [], []
+        for i in range(n_third):
+            img, lm, pose = generate_synthetic_driver_sample(i, apply_aug=False, force_state='microsleep')
+            c_i.append(img); c_l.append(lm); c_p.append(pose)
+        for i in range(n_third):
+            img, lm, pose = generate_synthetic_driver_sample(i, apply_aug=False, force_state='yawn')
+            y_i.append(img); y_l.append(lm); y_p.append(pose)
+        for i in range(n_third):
+            img, lm, pose = generate_synthetic_driver_sample(i, apply_aug=False, force_state='normal')
+            n_i.append(img); n_l.append(lm); n_p.append(pose)
+        return (
+            (np.array(c_i, np.uint8), np.array(c_l, np.float32), np.array(c_p, np.float32)),
+            (np.array(y_i, np.uint8), np.array(y_l, np.float32), np.array(y_p, np.float32)),
+            (np.array(n_i, np.uint8), np.array(n_l, np.float32), np.array(n_p, np.float32))
+        )
+
+    def _light_graph_jitter_fn(self, img_t, lms_t, pose_t):
+        """Photometric jitter bằng TF graph ops (C++, không GIL) — giữ tính động photometric."""
+        img = tf.cast(img_t, tf.float32)
+        img = tf.image.random_brightness(img, 0.12)
+        img = tf.image.random_contrast(img, 0.90, 1.10)
+        noise = tf.random.normal(tf.shape(img), stddev=2.5)
+        img = tf.clip_by_value(img + noise, 0.0, 255.0)
+        img = (img - 128.0) / 128.0
+        return img, {"landmarks_output": lms_t, "pose_output": pose_t}
+
+    def _preexpand_pools(self, expand_factor=6):
+        """Pre-expand pool closed/yawn/normal cân bằng 33/33/34 với augment nguyên bản, song song thread."""
+        from concurrent.futures import ThreadPoolExecutor
+        (nc_img, nc_lms, nc_pose), (ny_img, ny_lms, ny_pose), (nn_img, nn_lms, nn_pose) = self._build_raw_pools()
+        total = max(len(self.real_images) * expand_factor, 4000) if self.real_images is not None \
+            else max(self.synthetic_count, 4000)
+        n_closed = total // 3
+        n_yawn = total // 3
+        n_norm = total - n_closed - n_yawn
+
+        def expand_pool(pool, count, tag):
+            out_i, out_l, out_p = [], [], []
+            if len(pool[0]) == 0:
+                return out_i, out_l, out_p
+            def _one(k):
+                idx = k % len(pool[0])
+                img = pool[0][idx].copy()
+                lms22 = pool[1][idx].reshape(22, 2).copy()
+                img_a, lms_a = apply_cabin_data_augmentation(img, lms22)
+                pose_a = estimate_pose_from_landmarks(lms_a)
+                return img_a, lms_a.flatten().astype(np.float32), pose_a.astype(np.float32)
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                for r in ex.map(_one, range(count)):
+                    out_i.append(r[0]); out_l.append(r[1]); out_p.append(r[2])
+            return out_i, out_l, out_p
+
+        print(f"    [STATIC-EXPAND] Đang tiền-tính {total} bản augment cân bằng 3 trạng thái "
+              f"({n_closed} nhắm mắt + {n_yawn} ngáp + {n_norm} tỉnh táo, expand_factor={expand_factor})...")
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            fc = ex.submit(expand_pool, (nc_img, nc_lms, nc_pose), n_closed, "closed")
+            fy = ex.submit(expand_pool, (ny_img, ny_lms, ny_pose), n_yawn, "yawn")
+            fn = ex.submit(expand_pool, (nn_img, nn_lms, nn_pose), n_norm, "normal")
+            ci, cl, cp = fc.result()
+            yi, yl, yp = fy.result()
+            ni, nl, np_ = fn.result()
+        all_i = np.array(ci + yi + ni, dtype=np.uint8)
+        all_l = np.array(cl + yl + nl, dtype=np.float32)
+        all_p = np.array(cp + yp + np_, dtype=np.float32)
+        print(f"    [STATIC-EXPAND] Xong trong {time.time() - t0:.1f}s "
+              f"({len(all_i)} mẫu: {len(ci)} nhắm mắt / {len(yi)} ngáp / {len(ni)} tỉnh táo, RAM ~{all_i.nbytes/1e6:.0f}MB)")
+        return all_i, all_l, all_p
+
+    def get_static_expanded_dataset(self, batch_size=64, val_split=0.15, expand_factor=6):
+        """Pipeline NHANH NHẤT: augmentation pre-computed + jitter nhẹ bằng TF graph.
+        Trả về cùng cấu trúc get_tf_dataset. Không đổi kiến trúc/loss/logic model."""
+        if tf is None:
+            raise RuntimeError("TensorFlow không khả dụng.")
+        all_i, all_l, all_p = self._preexpand_pools(expand_factor=expand_factor)
+
+        ds = tf.data.Dataset.from_tensor_slices((all_i, all_l, all_p))
+        ds = ds.shuffle(8192, reshuffle_each_iteration=True)
+        ds = ds.map(self._light_graph_jitter_fn, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+        # Val giữ-out thật: giữ nguyên generator (không augment)
+        val_samples = max(int(all_i.shape[0] * val_split), 64)
+        val_ds = tf.data.Dataset.from_generator(
+            lambda: self.generate_data_generator(val_samples, split='val'),
+            output_signature=(
+                tf.TensorSpec(shape=(IMAGE_HEIGHT, IMAGE_WIDTH, 1), dtype=tf.float32),
+                {
+                    "landmarks_output": tf.TensorSpec(shape=(NUM_LANDMARKS * 2,), dtype=tf.float32),
+                    "pose_output": tf.TensorSpec(shape=(3,), dtype=tf.float32)
+                }
+            )
+        ).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+        train_samples = all_i.shape[0] - val_samples
+        return ds, val_ds, train_samples, val_samples
+
+    def get_fast_tf_dataset(self, batch_size=64, val_split=0.15):
+        """Pipeline huấn luyện SONG SONG: chọn mẫu bằng tf ops + augmentation qua
+        py_function num_parallel_calls=AUTOTUNE. Trả về cùng cấu trúc get_tf_dataset."""
+        if tf is None:
+            raise RuntimeError("TensorFlow không khả dụng. Vui lòng cài tensorflow.")
+
+        (nc_img, nc_lms, nc_pose), (ny_img, ny_lms, ny_pose), (nn_img, nn_lms, nn_pose) = self._build_raw_pools()
+        n_closed, n_yawn, n_norm = len(nc_img), len(ny_img), len(nn_img)
+        cat_img = tf.constant(np.concatenate([nc_img, ny_img, nn_img], axis=0), dtype=tf.uint8)
+        cat_lms = tf.constant(np.concatenate([nc_lms, ny_lms, nn_lms], axis=0), dtype=tf.float32)
+        cat_pose = tf.constant(np.concatenate([nc_pose, ny_pose, nn_pose], axis=0), dtype=tf.float32)
+
+        offset_closed = tf.constant(0, tf.int64)
+        offset_yawn = tf.constant(n_closed, tf.int64)
+        offset_norm = tf.constant(n_closed + n_yawn, tf.int64)
+
+        def _pick(i):
+            slot = tf.random.uniform([], 0, 3, tf.int32)
+            rc = tf.random.uniform([], 0, max(n_closed, 1), tf.int64) + offset_closed
+            ry = tf.random.uniform([], 0, max(n_yawn, 1), tf.int64) + offset_yawn
+            rn = tf.random.uniform([], 0, max(n_norm, 1), tf.int64) + offset_norm
+            return tf.switch_case(slot, {
+                0: lambda: rc,
+                1: lambda: ry,
+                2: lambda: rn
+            }, default=lambda: rn)
+
+        ds = tf.data.Dataset.range(max(self.total_samples, 2048))
+        ds = ds.map(_pick, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = ds.shuffle(4096)
+        ds = ds.map(
+            lambda idx: (tf.gather(cat_img, idx), tf.gather(cat_lms, idx), tf.gather(cat_pose, idx)),
+            num_parallel_calls=tf.data.AUTOTUNE
+        )
+        # Augmentation SONG SONG (thuật toán nguyên bản trong py_function)
+        ds = ds.map(self._augment_map_fn, num_parallel_calls=tf.data.AUTOTUNE)
+        ds = ds.repeat().batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+        # Val giữ-out thật: giữ nguyên generator (không augment, đã đủ nhanh)
+        val_samples = max(int(self.total_samples * val_split), 64)
+        val_ds = tf.data.Dataset.from_generator(
+            lambda: self.generate_data_generator(val_samples, split='val'),
+            output_signature=(
+                tf.TensorSpec(shape=(IMAGE_HEIGHT, IMAGE_WIDTH, 1), dtype=tf.float32),
+                {
+                    "landmarks_output": tf.TensorSpec(shape=(NUM_LANDMARKS * 2,), dtype=tf.float32),
+                    "pose_output": tf.TensorSpec(shape=(3,), dtype=tf.float32)
+                }
+            )
+        ).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+
+        train_samples = self.total_samples - val_samples
+        return ds, val_ds, train_samples, val_samples
 
     def get_tf_dataset(self, batch_size=64, val_split=0.15):
         """Builds optimized tf.data.Dataset for train and validation."""

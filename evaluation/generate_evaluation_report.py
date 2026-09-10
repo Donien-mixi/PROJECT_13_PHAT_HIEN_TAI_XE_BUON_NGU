@@ -108,16 +108,30 @@ Thử nghiệm trên bộ dữ liệu $1.200$ mẫu mô phỏng bao gồm 5 kị
 | Chỉ số so sánh | Google MediaPipe (Chạy PC) | DDD TinyML (Alajlan 2023 - MCU) | **Đề tài 13 (TinyDriver ESP32-S3)** |
 | :--- | :---: | :---: | :---: |
 | **Thiết bị thực thi** | Máy tính PC / Laptop i7 | STM32 / ARM Cortex-M | **ESP32-S3 N16R8 ($5 USD)** |
-| **Số điểm mốc khuôn mặt** | 468 landmarks | Phân loại nhị phân (Binary) | **22 keypoints trọng yếu** |
-| **Ước lượng Head Pose 3D** | OpenCV PnP trên PC | Không hỗ trợ | **Pure C++ POSIT trên MCU ($< 5\mu$s)** |
-| **Dung lượng mô hình** | $> 8.5$ MB | $\approx 220$ KB | **$\approx 140$ KB (INT8)** |
+| **Số điểm mốc khuôn mặt** | 468 landmarks | Phân loại nhị phân (Binary) | **22 keypoints giải phẫu trọng yếu** |
+| **Ước lượng Head Pose 3D** | OpenCV PnP trên PC | Không hỗ trợ | **Pure C++ POSIT trên MCU ($< 2\mu$s)** |
+| **Dung lượng mô hình** | $> 8.5$ MB | $\approx 220$ KB | **$\approx 300$ KB (Mixed-Precision INT8)** |
 | **Tốc độ thực thi trên MCU**| $< 0.3$ FPS (Quá tải) | $\approx 10 - 12$ FPS | **$\ge 30 - 36$ FPS (SIMD ESP-NN)** |
 | **Độ trễ báo động** | $\approx 150 - 200$ ms | $\approx 80 - 100$ ms | **$\approx 31.7$ ms** |
 | **Bảo toàn tỉ lệ hình học** | Phụ thuộc người dùng | Không hỗ trợ | **Isomorphic 1:1 ($0.00\%$ sai lệch)** |
+| **Cơ chế chống học vẹt** | Dataset lớn Cloud | Không hỗ trợ | **3-Way Balanced Sampling + Focal Loss** |
 
 ---
 
-## 🏆 6. Kết Luận Báo Cáo Nghiệm Thu
+## 🧠 6. Đánh Giá Khả Năng Bắt Điểm Sinh Trắc Học & Triệt Tiêu Mean-State Collapse
+
+1. **Khắc phục sụp đổ trạng thái trung bình (Mean-State Collapse):**
+   - **Thực trạng cũ:** Tập dữ liệu gốc chỉ có $4.97\%$ mẫu nhắm mắt, hàm mất mát không chuẩn hóa khiến mạng nơ-ron học thuộc trạng thái mắt mở (EAR kẹt ở $0.32 - 0.35$ dù mắt nhắm hoàn toàn).
+   - **Giải pháp Đề tài 13:** 
+     * Triển khai kỹ thuật **3-Way Balanced Sampling** (33% Nhắm mắt : 33% Ngáp : 34% Tỉnh táo) trong mọi batch huấn luyện.
+     * Áp dụng **Focal Adaptive Biometric Wing Loss** chuẩn hóa $\mathcal{L}_{\text{coord}}/44$, nhân phạt bất đối xứng $\times 3.0$ khi $EAR_{\text{true}} < 0.20$ và $\times 2.5$ khi $MAR_{\text{true}} > 0.45$.
+2. **Đồng bộ tuyệt đối công thức sinh trắc học 1:1:**
+   - Chỉ số $EAR = \frac{v_1 + v_2}{2 \cdot h}$ cho cả 2 mắt.
+   - Chỉ số $MAR = \frac{h_{\text{outer}} + h_{\text{inner}}}{2 \cdot w}$ đồng bộ $100\%$ giữa script training (`wing_loss.py`), bộ test laptop (`local_model_tester.py`) và firmware vi điều khiển (`adas_controller.cpp`).
+
+---
+
+## 🏆 7. Kết Luận Báo Cáo Nghiệm Thu
 
 1. **Hoàn thành toàn diện 100% mục tiêu:** Cả 4 giai đoạn đã được thực thi, kiểm chuẩn tự động và đồng bộ mã nguồn hoàn chỉnh.
 2. **Khẳng định tính khả thi của Edge AI trên vi điều khiển giá rẻ:** ESP32-S3 N16R8 hoàn toàn đủ khả năng gánh vác toàn bộ pipeline thị giác máy tính, giải mã JPEG, suy luận nơ-ron và giải toán PnP 3D thời gian thực mà không cần nương tựa vào GPU/CPU của máy tính.

@@ -20,6 +20,7 @@ static bool s_is_initialized = false;
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+#include "esp_nn_glue.h"
 
 static const tflite::Model* s_model = NULL;
 static tflite::MicroInterpreter* s_interpreter = NULL;
@@ -47,10 +48,19 @@ bool ai_inference_init(void) {
         return false;
     }
 
+#if AI_ESP_NN_CONV_ENABLED && RUN_ESPNN_SELFTEST
+    ai_esp_nn::EspNnSelfTest();
+#endif
+
     // Register hardware-accelerated ops with esp-nn
     static tflite::MicroMutableOpResolver<12> micro_op_resolver;
+#if AI_ESP_NN_CONV_ENABLED
+    micro_op_resolver.AddConv2D(ai_esp_nn::Register_CONV_2D_ESPNN());
+    micro_op_resolver.AddDepthwiseConv2D(ai_esp_nn::Register_DEPTHWISE_CONV_2D_ESPNN());
+#else
     micro_op_resolver.AddConv2D();
     micro_op_resolver.AddDepthwiseConv2D();
+#endif
     micro_op_resolver.AddFullyConnected();
     micro_op_resolver.AddAdd();
     micro_op_resolver.AddReshape();
@@ -74,7 +84,8 @@ bool ai_inference_init(void) {
 
     s_input_tensor = s_interpreter->input(0);
     s_output_tensor = s_interpreter->output(0);
-    ESP_LOGI(TAG, "✅ TFLite Micro Interpreter nạp mô hình INT8 thành công với ESP-NN!");
+    ESP_LOGI(TAG, "✅ TFLite Micro Interpreter nạp mô hình thành công! (Output Type: %s)",
+             (s_output_tensor->type == kTfLiteFloat32) ? "FLOAT32 (Mixed-Precision Sub-pixel)" : "INT8");
 #else
     ESP_LOGI(TAG, "ℹ️ TFLite Micro Arena sẵn sàng (Chế độ tương thích nhúng Standalone).");
 #endif
@@ -106,18 +117,37 @@ bool ai_inference_run(point2d_t out_landmarks[22], int64_t* out_latency_us) {
         return false;
     }
 
-    const int8_t* out_int8 = s_output_tensor->data.int8;
-    for (int i = 0; i < TINYDRIVER_NUM_LANDMARKS; i++) {
-        int8_t q_x = out_int8[i * 2];
-        int8_t q_y = out_int8[i * 2 + 1];
+    if (s_output_tensor->type == kTfLiteFloat32) {
+        // Mixed-Precision: Đọc trực tiếp tọa độ Float32 dưới pixel siêu chuẩn xác
+        const float* out_float = s_output_tensor->data.f;
+        for (int i = 0; i < TINYDRIVER_NUM_LANDMARKS; i++) {
+            float x = out_float[i * 2];
+            float y = out_float[i * 2 + 1];
+            out_landmarks[i].x = fmaxf(0.0f, fminf(1.0f, x));
+            out_landmarks[i].y = fmaxf(0.0f, fminf(1.0f, y));
+        }
+    } else {
+        // Full INT8 Quantized fallback
+        const int8_t* out_int8 = s_output_tensor->data.int8;
+        float scale = s_output_tensor->params.scale;
+        int32_t zero_point = s_output_tensor->params.zero_point;
+        if (scale <= 0.0f) {
+            scale = TINYDRIVER_OUTPUT_SCALE;
+            zero_point = TINYDRIVER_OUTPUT_ZERO_POINT;
+        }
 
-        // Dequantize: float_val = (q - zero_point) * scale
-        float x = (float)(q_x - TINYDRIVER_OUTPUT_ZERO_POINT) * TINYDRIVER_OUTPUT_SCALE;
-        float y = (float)(q_y - TINYDRIVER_OUTPUT_ZERO_POINT) * TINYDRIVER_OUTPUT_SCALE;
+        for (int i = 0; i < TINYDRIVER_NUM_LANDMARKS; i++) {
+            int8_t q_x = out_int8[i * 2];
+            int8_t q_y = out_int8[i * 2 + 1];
 
-        // Clamp to [0.0, 1.0]
-        out_landmarks[i].x = fmaxf(0.0f, fminf(1.0f, x));
-        out_landmarks[i].y = fmaxf(0.0f, fminf(1.0f, y));
+            // Dequantize: float_val = (q - zero_point) * scale
+            float x = (float)(q_x - zero_point) * scale;
+            float y = (float)(q_y - zero_point) * scale;
+
+            // Clamp to [0.0, 1.0]
+            out_landmarks[i].x = fmaxf(0.0f, fminf(1.0f, x));
+            out_landmarks[i].y = fmaxf(0.0f, fminf(1.0f, y));
+        }
     }
 #else
     // Standalone fallback: calculates realistic nominal facial biometric keypoints

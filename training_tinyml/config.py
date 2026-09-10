@@ -77,9 +77,13 @@ EPOCHS = 60
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
 
-# Wing Loss Parameters (Feng et al., CVPR 2018)
+# Wing Loss & Biometric Focal Loss Parameters
 WING_W = 10.0
 WING_EPSILON = 2.0
+EAR_LOSS_WEIGHT = 40.0
+MAR_LOSS_WEIGHT = 35.0
+FOCAL_EAR_GAMMA = 3.0
+FOCAL_MAR_GAMMA = 2.5
 
 # ==============================================================================
 # 5. ADAS Thresholds (Aligned with firmware_esp32)
@@ -88,7 +92,9 @@ DEFAULT_EAR_THRESHOLD = 0.22
 MICROSLEEP_TIME_SEC = 1.5
 SLOW_BLINK_TIME_SEC = 0.5
 
-DEFAULT_MAR_THRESHOLD = 0.50
+# [SYNC 2025] MAR dùng công thức (h_outer + h_inner) / (2*w) - đồng bộ wing_loss.py,
+# local_model_tester.py và firmware adas_controller.cpp. Ngưỡng khớp project_config.json.
+DEFAULT_MAR_THRESHOLD = 0.45
 YAWN_DURATION_SEC = 1.5
 YAWN_FATIGUE_COUNT = 3
 YAWN_WINDOW_SEC = 180.0

@@ -60,8 +60,8 @@ try:
     from tinydriver_net import build_tinydriver_net
     from wing_loss import AdaptiveBiometricWingLoss
     from dataset_loader import (
-        DriverLandmarkDataset, generate_synthetic_driver_sample,
-        download_drowsiness_benchmark_dataset
+        DriverLandmarkDataset,
+        generate_synthetic_driver_sample
     )
     from distillation import MediaPipeTeacher, PFLDMultiTaskModel
     from export_tflite import convert_model_to_c_array
@@ -86,8 +86,10 @@ def representative_dataset_gen(num_samples=300):
             if count >= num_samples:
                 break
     else:
+        states = ['microsleep', 'yawn', 'normal']
         for i in range(num_samples):
-            img, _, _ = generate_synthetic_driver_sample(i, apply_aug=True)
+            force_st = states[i % 3]
+            img, _, _ = generate_synthetic_driver_sample(i, apply_aug=True, force_state=force_st)
             img_norm = (img.astype(np.float32) - 128.0) / 128.0
             if len(img_norm.shape) == 2:
                 img_norm = np.expand_dims(img_norm, axis=-1)
@@ -105,6 +107,45 @@ def compute_nme(y_true, y_pred):
     return tf.reduce_mean(mean_point_error / interocular_dist)
 
 
+def evaluate_real_nme(deploy_model, val_imgs, val_lms, batch_size=64):
+    """
+    [FIX 2025] Đo NME trên tập VAL GIỮ-OUT THẬT (ảnh thật, không augment, không trùng train).
+    Trước đây val lấy từ generator cùng phân bố train -> loss val ảo, mô hình overfit không phát hiện được.
+    Returns: {"nme": float, "parts": {eye, mouth, nose_chin}, "worst_pt", "worst_px"}
+    """
+    preds = []
+    for s in range(0, len(val_imgs), batch_size):
+        x = (val_imgs[s:s + batch_size].astype(np.float32) - 128.0) / 128.0
+        p = deploy_model(x, training=False).numpy()
+        preds.append(p)
+    pred = np.concatenate(preds, axis=0).astype(np.float32)
+    true = val_lms.astype(np.float32)
+
+    pt_t = true.reshape(-1, NUM_LANDMARKS, 2)
+    pt_p = pred.reshape(-1, NUM_LANDMARKS, 2)
+    iod = np.linalg.norm(pt_t[:, 0, :] - pt_t[:, 9, :], axis=-1)
+    iod = np.maximum(iod, 1e-4)
+    err = np.linalg.norm(pt_t - pt_p, axis=-1)          # (N, 22) đơn vị chuẩn hóa
+
+    nme = float(np.mean(np.mean(err, axis=-1) / iod))
+    parts = {
+        "eye": list(range(0, 12)),
+        "mouth": list(range(12, 18)),
+        "nose_chin": list(range(18, 22)),
+    }
+    # [FIX v2.0.3] err la mang 2 chieu (N, 22) sau khi norm -> chi duoc index 2 chieu err[:, v]
+    part_nme = {k: float(np.mean(np.mean(err[:, v], axis=-1) / iod)) for k, v in parts.items()}
+    per_sample_mean = np.mean(err, axis=-1)
+    worst_sample = int(np.argmax(per_sample_mean))
+    worst_pt = int(np.argmax(err[worst_sample]))
+    return {
+        "nme": nme,
+        "parts": part_nme,
+        "worst_pt": worst_pt,
+        "worst_px": float(err[worst_sample, worst_pt] * IMAGE_WIDTH),
+    }
+
+
 def main():
     global g_dataset_mgr
 
@@ -113,7 +154,7 @@ def main():
     print("   Kiến trúc: MobileNetV2 MBConv + Multi-Scale Fusion + Auxiliary 3D Pose Head")
     print("   Hàm mất mát: Adaptive Biometric Wing Loss + Geometric EAR/MAR Constraint Loss")
     print("   Tăng cường: Bounding Box Translation & Scale Jitter (Triệt tiêu Mean Face)")
-    print("   Mục tiêu:   Full-Integer INT8 cho ESP32-S3 N16R8 (<250 KB)")
+    print("   Mục tiêu:   Mixed-Precision INT8 (Convs INT8 + Head Float32) cho ESP32-S3 N16R8")
     print("=" * 75)
 
     # 1. Kiểm tra phần cứng GPU
@@ -157,13 +198,43 @@ def main():
             teacher=teacher
         )
     else:
-        print("  ℹ️ Không thấy preprocessed_driver_dataset.npz đóng gói sẵn, tiến hành tải & giải nén...")
-        dataset_dir = Path("./datasets/drowsiness_benchmark").resolve()
-        download_drowsiness_benchmark_dataset(str(dataset_dir))
-        cache_path = work_dir / "drowsiness_cache.npz"
+        # [BẢN 2025] Tự động BUILD DỮ LIỆU SẠCH ngay trên Colab (mạng Colab tải được
+        # AFLW2000-3D ~83MB từ CBSR). Nếu máy cá nhân bị chặn mạng, bước này vẫn chạy được.
+        print("  ℹ️ Không thấy preprocessed_driver_dataset.npz trong gói -> TỰ ĐỘNG build dữ liệu sạch trên Colab...")
+        build_script = CURRENT_DIR / "build_clean_dataset.py"
+        if not build_script.exists():
+            build_script = CURRENT_DIR / "tools" / "build_clean_dataset.py"
+        if not build_script.exists():
+            print("  ❌ Thiếu build_clean_dataset.py trong gói! Hãy chạy lại: python tools/project_manager.py --pack-colab")
+            sys.exit(1)
+        import subprocess as _sp
+        # [FIX v2.0.1] Truyền --output-npz TUYỆT ĐỐI vào thư mục training_tinyml của gói
+        # để không phụ thuộc vị trí build_clean_dataset.py nằm ở đâu (root gói hay tools/).
+        _explicit_npz = (CURRENT_DIR / "training_tinyml" / "preprocessed_driver_dataset.npz").resolve()
+        _explicit_npz.parent.mkdir(parents=True, exist_ok=True)
+        _r = _sp.run(
+            [sys.executable, str(build_script),
+             "--download-aflw2000",
+             "--download-facesynth",
+             "--output-npz", str(_explicit_npz)],
+            cwd=str(CURRENT_DIR)
+        )
+        if _r.returncode != 0:
+            print("  ❌ Build dataset trên Colab thất bại! Kiểm tra kết nối mạng của Colab")
+            print("     hoặc build npz trên máy cá nhân rồi pack lại gói.")
+            sys.exit(1)
+        # Sau khi build, npz nằm ở ./training_tinyml/ hoặc ./
+        preprocessed_file = None
+        for cand in preprocessed_npz_candidates + [_explicit_npz]:
+            if cand.exists():
+                preprocessed_file = cand
+                break
+        if preprocessed_file is None:
+            print("  ❌ Build xong nhưng không tìm thấy npz kết quả!")
+            sys.exit(1)
+        print(f"  ✓ Dataset sạch đã sẵn sàng: {preprocessed_file}")
         dataset_mgr = DriverLandmarkDataset(
-            data_dir=str(dataset_dir),
-            cache_path=str(cache_path),
+            cache_path=str(preprocessed_file),
             synthetic_count=5000,
             augment=True,
             teacher=teacher
@@ -171,15 +242,63 @@ def main():
 
     g_dataset_mgr = dataset_mgr
 
-    train_ds, val_ds, n_train, n_val = dataset_mgr.get_tf_dataset(batch_size=BATCH_SIZE)
+    # [v2.0.7 - TỐI ƯU COLAB T4] 3 tầng pipeline, ưu tiên nhanh nhất trước:
+    #   1. STATIC-EXPAND: pre-tính augment 1 lần + jitter nhẹ TF graph -> epoch ~15-25s
+    #      (thủ thuật cộng đồng: nút cổ chai là py_function CPU 2-vCPU, không phải GPU)
+    #   2. FAST (py_function song song)  ~120s/epoch
+    #   3. Chuẩn single-thread           ~290s/epoch
+    # Cả 3 dùng CÙNG thuật toán augment + cùng loss + cùng kiến trúc -> logic không đổi.
+    train_ds = val_ds = None
+    n_train = n_val = 0
+    try:
+        train_ds, val_ds, n_train, n_val = dataset_mgr.get_static_expanded_dataset(
+            batch_size=BATCH_SIZE, expand_factor=6)
+        print("  ✓ [STATIC-EXPAND] Tiền-tính augment x6 xong -> epoch chỉ chạy GPU thuần (~15-25s)")
+    except Exception as _e_static:
+        print(f"  ⚠️ [STATIC-EXPAND] lỗi ({_e_static}) -> thử pipeline song song FAST...")
+        try:
+            train_ds, val_ds, n_train, n_val = dataset_mgr.get_fast_tf_dataset(batch_size=BATCH_SIZE)
+            print("  ✓ [FAST] Online Dynamic Augmentation song song (num_parallel_calls=AUTOTUNE)")
+        except Exception as _e_fast:
+            print(f"  ⚠️ [FAST] lỗi ({_e_fast}) -> quay về pipeline chuẩn single-thread")
+            train_ds, val_ds, n_train, n_val = dataset_mgr.get_tf_dataset(batch_size=BATCH_SIZE)
     print(f"  ✓ Mẫu huấn luyện (Augmented): {n_train} | Mẫu kiểm chuẩn: {n_val}")
     print("  ✓ Kích hoạt Bounding Box Translation Jitter: triệt tiêu học vẹt tọa độ cố định.")
+
+    # [FIX 2025] Lấy tập VAL GIỮ-OUT THẬT (ảnh thật, không augment) để đo NME trung thực
+    val_arrays = dataset_mgr.get_val_arrays()
+    if val_arrays is not None:
+        val_imgs_real, val_lms_real, _ = val_arrays
+        # [v2.0.4] Bản val JITTER AFFINE để đo NME LOCALIZATION thật:
+        # NME trên val canonical KHÔNG phát hiện được template collapse (mắt luôn
+        # ở v=0.344 trong canonical crop) — lỗ hổng khiến model cũ pass gate 6.62%
+        # nhưng live sai 17-23px. Best model giờ được chọn theo NME JITTER.
+        from dataset_loader import make_jittered_val_copy
+        val_imgs_eval, val_lms_eval = make_jittered_val_copy(
+            val_imgs_real, val_lms_real, copies=2, seed=123)
+        NME_EVAL_MAX = 600
+        print(f"  ✓ [REAL-VAL] Val giữ-out THẬT: {len(val_imgs_real)} mẫu "
+              f"(NME mỗi epoch trên bản JITTER x2 = {len(val_imgs_eval)} mẫu, tối đa {NME_EVAL_MAX})")
+    else:
+        val_imgs_real, val_lms_real = None, None
+        val_imgs_eval, val_lms_eval = None, None
+        NME_EVAL_MAX = 0
+        print("  ⚠️ [REAL-VAL] Không có val giữ-out! Best model sẽ chọn theo val loss ảo từ generator.")
+        print("     👉 Nên chạy: python tools/build_clean_dataset.py để tạo dữ liệu chuẩn.")
 
     # 4. Xây dựng mô hình PFLD-Edge Multi-Task
     print("\n[Bước 3/5] Xây dựng kiến trúc PFLD-Edge với Auxiliary 3D Pose Head...")
     full_train_model = build_tinydriver_net(include_pose_head=True)
     print(f"  ✓ Kiến trúc PFLD-Edge: {full_train_model.count_params():,} tham số")
     print("  ✓ Tích hợp Inverted Residual Blocks (MBConv) + Nhánh ước lượng góc đầu 3D")
+
+    # Mô hình probe đầu ra landmark để đo NME nhanh trong vòng lặp huấn luyện
+    # [FIX v2.0.2] PHẢI tạo SAU khi full_train_model được xây (trước đây chèn nhầm
+    # lên trên gây UnboundLocalError giữa Colab)
+    deploy_probe = tf.keras.Model(
+        inputs=full_train_model.input,
+        outputs=full_train_model.get_layer("landmarks_output").output
+    )
 
     # 5. Thiết lập Optimizer & Multi-Task Loss
     lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
@@ -191,7 +310,7 @@ def main():
     landmark_loss_fn = AdaptiveBiometricWingLoss(
         w=WING_W, epsilon=WING_EPSILON,
         image_scale=float(IMAGE_WIDTH),
-        ear_weight=15.0, mar_weight=20.0
+        ear_weight=40.0, mar_weight=35.0
     )
 
     multi_task_model = PFLDMultiTaskModel(
@@ -200,13 +319,14 @@ def main():
         pose_weight=1.5
     )
     multi_task_model.compile(optimizer=optimizer)
-    print("  ✓ Hàm mất mát: Adaptive Biometric Wing Loss (EAR x15.0, MAR x20.0, Pose Regularizer x1.5)")
+    print("  ✓ Hàm mất mát: Focal Adaptive Biometric Wing Loss (EAR x40.0 + Focal 3.0x, MAR x35.0 + Focal 2.5x, Pose Regularizer x1.5)")
 
     # 6. Huấn luyện mô hình
     print(f"\n[Bước 4/5] Bắt đầu huấn luyện qua {EPOCHS} epochs...")
     train_loss_history = []
     val_loss_history = []
-    best_val_loss = float('inf')
+    nme_history = []
+    best_score = float('inf')          # NME giữ-out thật nếu có, ngược lại val loss
     best_weights_path = work_dir / "best_weights.weights.h5"
 
     steps_per_epoch = n_train // BATCH_SIZE
@@ -226,7 +346,7 @@ def main():
         mean_train_loss = np.mean(train_losses)
         mean_train_lm = np.mean(train_lm_losses)
 
-        # Validation loop
+        # Validation loop (generator val giữ-out thật)
         val_losses = []
         val_lm_losses = []
         for batch in val_ds.take(val_steps):
@@ -241,22 +361,51 @@ def main():
         val_loss_history.append(mean_val_loss)
         dur = time.time() - epoch_start
 
+        # [FIX 2025] Đo NME trên val giữ-out JITTER (localization thật) -> chọn best model
+        nme_now = None
+        if val_imgs_eval is not None:
+            n = min(len(val_imgs_eval), NME_EVAL_MAX)
+            nme_now = evaluate_real_nme(deploy_probe, val_imgs_eval[:n], val_lms_eval[:n])
+            nme_history.append(nme_now["nme"])
+
         star = " "
-        if mean_val_loss < best_val_loss:
-            best_val_loss = mean_val_loss
+        score = nme_now["nme"] if nme_now is not None else mean_val_loss
+        if score < best_score:
+            best_score = score
             full_train_model.save_weights(str(best_weights_path))
             star = " ⭐ (Best)"
 
         if (epoch + 1) % 2 == 0 or epoch == 0 or star.strip():
-            print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:.1f}s] - Train Loss: {mean_train_loss:7.2f} (LM: {mean_train_lm:7.2f}) | Val Loss: {mean_val_loss:7.2f} (LM: {mean_val_lm:7.2f}){star}")
+            nme_str = f" | Real-Val NME: {nme_now['nme']*100:.2f}% (miệng {nme_now['parts']['mouth']*100:.2f}%)" \
+                if nme_now is not None else " | Real-Val NME: N/A"
+            print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:.1f}s] - Train Loss: {mean_train_loss:7.2f} (LM: {mean_train_lm:7.2f}) | Val Loss: {mean_val_loss:7.2f}{nme_str}{star}")
 
     train_duration = time.time() - t0
-    print(f"\n✅ Huấn luyện hoàn tất sau: {train_duration:.1f} giây! Best Val Loss: {best_val_loss:.2f}")
+    final_nme_str = f", Best Real-Val NME: {best_score*100:.2f}%" if nme_history else ""
+    print(f"\n✅ Huấn luyện hoàn tất sau: {train_duration:.1f} giây!{final_nme_str}")
 
     # Nạp lại trọng số tốt nhất
     if best_weights_path.exists():
         full_train_model.load_weights(str(best_weights_path))
         print("  ✓ Đã nạp lại trọng số tốt nhất (Best Weights).")
+
+    # [FIX 2025] Báo cáo NME CUỐI CÙNG: canonical (đối chiếu template) + JITTER (localization thật)
+    if val_imgs_real is not None:
+        nme_canon = evaluate_real_nme(deploy_probe, val_imgs_real, val_lms_real)
+        nme_jit = evaluate_real_nme(deploy_probe, val_imgs_eval, val_lms_eval)
+        p = nme_jit["parts"]
+        print("\n📊 BÁO CÁO NME CUỐI CÙNG (Val giữ-out thật, không augment):")
+        print(f"   • NME canonical (template-fit) : {nme_canon['nme']*100:.2f}%")
+        print(f"   • NME JITTER (LOCALIZATION)    : {nme_jit['nme']*100:.2f}%  ← CHỈ SỐ QUYẾT ĐỊNH")
+        print(f"        {'✅ ĐẠT (<6%)' if nme_jit['nme'] < 0.06 else ('⚠️ TRUNG BÌNH (<8%)' if nme_jit['nme'] < 0.08 else '❌ YẾU (>=8%) - cần thêm dữ liệu')}")
+        print(f"   • NME nhóm mắt       : {p['eye']*100:.2f}%")
+        print(f"   • NME nhóm miệng     : {p['mouth']*100:.2f}%")
+        print(f"   • NME nhóm mũi/cằm   : {p['nose_chin']*100:.2f}%")
+        print(f"   • Điểm tệ nhất       : P{nme_jit['worst_pt']} ({nme_jit['worst_px']:.1f}px)")
+        gap = nme_jit['nme'] / max(nme_canon['nme'], 1e-6)
+        print(f"   • Tỉ lệ Jitter/Canon : {gap:.2f}x "
+              f"({'✅ <2.0x: mô hình ĐỊNH VỊ thật' if gap < 2.0 else '⚠️ >=2.0x: còn dấu hiệu học template - cần jitter mạnh hơn / thêm dữ liệu'})")
+        print("   👉 Chạy lại pipeline này trên laptop bằng: python evaluation/eval_nme_holdout.py")
 
     # Vẽ biểu đồ Loss
     plot_path = work_dir / "training_loss.png"
@@ -273,19 +422,29 @@ def main():
     plt.close()
     print(f"  ✓ Đã lưu biểu đồ tiến trình: {plot_path.name}")
 
-    # 7. Trích xuất mô hình Landmark-Only và Lượng tử hóa Full INT8
-    print("\n[Bước 5/5] Cắt bỏ Auxiliary Head và Lượng tử hóa Full-Integer INT8...")
+    # 7. Trích xuất mô hình Landmark-Only và Lượng tử hóa Mixed-Precision (Convs INT8 + Regression Head Float32)
+    print("\n[Bước 5/5] Cắt bỏ Auxiliary Head và Lượng tử hóa Mixed-Precision cho ESP32-S3...")
     deploy_input = full_train_model.input
     deploy_output = full_train_model.get_layer("landmarks_output").output
     deploy_model = tf.keras.Model(inputs=deploy_input, outputs=deploy_output, name="TinyDriver_PFLD_Deploy")
     print(f"  ✓ Mô hình xuất xưởng (Landmark-Only): {deploy_model.count_params():,} tham số")
 
-    converter = tf.lite.TFLiteConverter.from_keras_model(deploy_model)
+    # Khóa Concrete Function để tạo Static Graph (triệt tiêu ops động cho TFLite Micro)
+    run_model = tf.function(lambda x: deploy_model(x, training=False))
+    concrete_func = run_model.get_concrete_function(
+        tf.TensorSpec([1, IMAGE_HEIGHT, IMAGE_WIDTH, 1], tf.float32)
+    )
+
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = representative_dataset_gen
-    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+    # Mixed-Precision: Toàn bộ Convs/MBConv chạy INT8 vector SIMD, riêng Head xuất Float32 sub-pixel
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
+        tf.lite.OpsSet.TFLITE_BUILTINS
+    ]
     converter.inference_input_type = tf.int8
-    converter.inference_output_type = tf.int8
+    converter.inference_output_type = tf.float32
 
     tflite_quant_model = converter.convert()
     tflite_path = work_dir / "tinydriver_model.tflite"
@@ -293,24 +452,47 @@ def main():
         f.write(tflite_quant_model)
 
     size_kb = len(tflite_quant_model) / 1024.0
-    print(f"  ✓ Kích thước mô hình INT8: {len(tflite_quant_model):,} bytes ({size_kb:.1f} KB)")
+    print(f"  ✓ Kích thước mô hình Mixed-Precision: {len(tflite_quant_model):,} bytes ({size_kb:.1f} KB)")
 
     # Đọc tham số lượng tử hóa
-    interpreter = tf.lite.Interpreter(model_content=tflite_quant_model)
-    interpreter.allocate_tensors()
-    in_details = interpreter.get_input_details()[0]
-    out_details = interpreter.get_output_details()[0]
-    in_scale, in_zp = in_details["quantization"]
-    out_scale, out_zp = out_details["quantization"]
+    in_scale, in_zp = 0.007843137, 0
+    out_scale, out_zp = 1.0, 0
+    output_is_float = True
+
+    try:
+        from ai_edge_litert.interpreter import Interpreter
+        interpreter = Interpreter(model_path=str(tflite_path))
+        interpreter.allocate_tensors()
+        in_details = interpreter.get_input_details()[0]
+        out_details = interpreter.get_output_details()[0]
+        in_scale, in_zp = in_details["quantization"]
+        if in_scale == 0.0:
+            in_scale = 1.0 / 128.0
+            in_zp = 0
+        output_is_float = (out_details["dtype"] == np.float32)
+    except Exception:
+        try:
+            interpreter = tf.lite.Interpreter(model_path=str(tflite_path))
+            interpreter.allocate_tensors()
+            in_details = interpreter.get_input_details()[0]
+            out_details = interpreter.get_output_details()[0]
+            in_scale, in_zp = in_details["quantization"]
+            if in_scale == 0.0:
+                in_scale = 1.0 / 128.0
+                in_zp = 0
+            output_is_float = (out_details["dtype"] == np.float32)
+        except Exception:
+            pass
 
     # Xuất file C Header (alignas 16 bytes cho esp-nn SIMD)
     header_path = work_dir / "tinydriver_model_data.h"
     convert_model_to_c_array(
         tflite_quant_model,
         str(header_path),
-        in_scale, in_zp, out_scale, out_zp
+        in_scale, in_zp, out_scale, out_zp,
+        output_is_float=output_is_float
     )
-    print(f"  ✓ Đã tạo file C Header: {header_path.name} (16-byte aligned)")
+    print(f"  ✓ Đã tạo file C Header: {header_path.name} (16-byte aligned, Output Float32: {output_is_float})")
 
     # 8. Đóng gói ZIP xuất xưởng
     zip_path = Path("./tinydriver_esp32_package.zip").resolve()
@@ -318,6 +500,13 @@ def main():
         zf.write(header_path, arcname="tinydriver_model_data.h")
         zf.write(tflite_path, arcname="tinydriver_model.tflite")
         zf.write(plot_path, arcname="training_loss.png")
+        # [BỔ SUNG 2025] Kèm theo tập VAL GIỮ-OUT (~1MB) để chạy cổng NME trên máy
+        # cá nhân ngay sau deploy-model, KHÔNG cần rebuild dataset
+        if val_imgs_real is not None:
+            val_holdout_path = work_dir / "val_holdout.npz"
+            np.savez_compressed(val_holdout_path, images=val_imgs_real, landmarks=val_lms_real)
+            zf.write(val_holdout_path, arcname="val_holdout.npz")
+            print(f"  ✓ Đã đóng gói val_holdout.npz ({len(val_imgs_real)} mẫu giữ-out) vào gói")
 
     print("\n" + "=" * 75)
     print(f"🎉 ĐÓNG GÓI THÀNH CÔNG: {zip_path.name} ({zip_path.stat().st_size / 1024:.1f} KB)")
