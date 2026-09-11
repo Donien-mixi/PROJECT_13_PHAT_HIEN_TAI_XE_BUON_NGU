@@ -80,10 +80,11 @@ WEIGHT_DECAY = 1e-4
 # Wing Loss & Biometric Focal Loss Parameters
 WING_W = 10.0
 WING_EPSILON = 2.0
-EAR_LOSS_WEIGHT = 40.0
-MAR_LOSS_WEIGHT = 35.0
-FOCAL_EAR_GAMMA = 3.0
-FOCAL_MAR_GAMMA = 2.5
+EAR_LOSS_WEIGHT = 25.0
+MAR_LOSS_WEIGHT = 20.0
+LIP_GAP_WEIGHT = 8.0
+FOCAL_EAR_GAMMA = 2.0
+FOCAL_MAR_GAMMA = 2.0
 
 # ==============================================================================
 # 5. ADAS Thresholds (Aligned with firmware_esp32)

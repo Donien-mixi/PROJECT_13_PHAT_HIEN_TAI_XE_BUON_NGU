@@ -189,7 +189,7 @@ def parse_pts_file(pts_path):
 
 
 def parse_mat_landmarks(mat_path):
-    """Đọc landmark 68 điểm từ file .mat của AFLW2000 / 300W-LP (pt3d_68)."""
+    """Đọc landmark 68 điểm từ file .mat của AFLW2000 / 300W-LP (pt3d_68 hoặc pt2d)."""
     try:
         from scipy.io import loadmat
     except ImportError:
@@ -197,7 +197,7 @@ def parse_mat_landmarks(mat_path):
     try:
         mat = loadmat(str(mat_path))
         arr = None
-        for key in ('pt3d_68', 'pts_3d', 'landmarks'):
+        for key in ('pt3d_68', 'pts_3d', 'landmarks', 'pt2d'):
             if key in mat:
                 arr = np.array(mat[key], dtype=np.float64)
                 break
@@ -453,11 +453,15 @@ def download_300wlp(target_dir):
     return True
 
 
-def collect_from_aflw2000(folder, collector, max_samples):
-    """AFLW2000: ảnh .jpg + .mat (pt3d_68)."""
+def collect_from_mat68(folder, collector, max_samples, shuffle=False):
+    """AFLW2000-3D / 300W-LP: ảnh .jpg + .mat (pt3d_68 hoặc pt2d)."""
     mats = sorted(folder.rglob("*.mat"))
     if not mats:
         return 0
+    if shuffle:
+        rng = np.random.RandomState(42)
+        perm = rng.permutation(len(mats))
+        mats = [mats[i] for i in perm]
     n = 0
     for mat_idx, mat_path in enumerate(mats):
         if max_samples and n >= max_samples:
@@ -477,8 +481,10 @@ def collect_from_aflw2000(folder, collector, max_samples):
         if collector.add_sample(img, pts22, img_path.name):
             n += 1
             if n % 250 == 0:
-                print(f"  [AFLW2000] {n} mẫu hợp lệ / đã duyệt {mat_idx + 1}...")
+                print(f"  [{folder.name}] {n} mẫu hợp lệ / đã duyệt {mat_idx + 1}...")
     return n
+
+collect_from_aflw2000 = collect_from_mat68
 
 
 def collect_from_300w(folder, collector, max_samples):
@@ -543,6 +549,171 @@ def collect_from_facesynth(folder, collector, max_samples):
             n += 1
             if n % 250 == 0:
                 print(f"  [FaceSynthetics] {n} mẫu hợp lệ / duyệt {i+1}...")
+    return n
+
+
+def collect_from_cew(folder, collector, teacher, max_samples=3500):
+    """CEW: Chuyên sâu nhắm mắt (closed) và mở mắt (open) người thật."""
+    if teacher is None or not getattr(teacher, 'available', False):
+        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher.")
+        return 0
+    closed_paths = sorted(folder.rglob("*closed*.*"))
+    closed_paths = [p for p in closed_paths if p.suffix.lower() in ('.jpg', '.png', '.jpeg')]
+    open_paths = sorted(folder.rglob("*open*.*"))
+    open_paths = [p for p in open_paths if p.suffix.lower() in ('.jpg', '.png', '.jpeg')]
+
+    rng = np.random.RandomState(42)
+    if closed_paths:
+        perm = rng.permutation(len(closed_paths))
+        closed_paths = [closed_paths[i] for i in perm]
+    if open_paths:
+        perm = rng.permutation(len(open_paths))
+        open_paths = [open_paths[i] for i in perm]
+
+    n_closed_target = int(max_samples * 0.70)
+    n_open_target = max_samples - n_closed_target
+
+    n = 0
+    # 1. Thu thập ảnh nhắm mắt
+    for i, img_path in enumerate(closed_paths):
+        if n >= n_closed_target:
+            break
+        img = cv2.imread(str(img_path))
+        if img is None:
+            continue
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pts_norm = teacher.extract_22_landmarks(rgb)
+        if pts_norm is None:
+            collector._reject("teacher_no_face")
+            continue
+        h_img, w_img = img.shape[:2]
+        pts_px = pts_norm.copy()
+        pts_px[:, 0] *= w_img
+        pts_px[:, 1] *= h_img
+        if collector.add_sample(img, pts_px, img_path.name):
+            n += 1
+            if n % 250 == 0:
+                print(f"  [CEW-Closed] {n}/{n_closed_target} mẫu nhắm mắt...")
+
+    # 2. Thu thập ảnh mở mắt
+    n_open = 0
+    for i, img_path in enumerate(open_paths):
+        if n_open >= n_open_target:
+            break
+        img = cv2.imread(str(img_path))
+        if img is None:
+            continue
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pts_norm = teacher.extract_22_landmarks(rgb)
+        if pts_norm is None:
+            collector._reject("teacher_no_face")
+            continue
+        h_img, w_img = img.shape[:2]
+        pts_px = pts_norm.copy()
+        pts_px[:, 0] *= w_img
+        pts_px[:, 1] *= h_img
+        if collector.add_sample(img, pts_px, img_path.name):
+            n += 1
+            n_open += 1
+            if n_open % 250 == 0:
+                print(f"  [CEW-Open] {n_open}/{n_open_target} mẫu mở mắt...")
+    return n
+
+
+def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
+    """YawDD: Trích xuất frame cabin xe chuyên sâu về ngáp há miệng & lái xe thật."""
+    if teacher is None or not getattr(teacher, 'available', False):
+        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher.")
+        return 0
+    vids = sorted(folder.rglob("*.avi"))
+    if not vids:
+        return 0
+
+    # Phân loại video ngáp và video thường
+    yawn_vids = [v for v in vids if "yawn" in v.name.lower() or "dash" in str(v).lower()]
+    other_vids = [v for v in vids if v not in yawn_vids]
+
+    rng = np.random.RandomState(42)
+    if yawn_vids:
+        perm = rng.permutation(len(yawn_vids))
+        yawn_vids = [yawn_vids[i] for i in perm]
+    if other_vids:
+        perm = rng.permutation(len(other_vids))
+        other_vids = [other_vids[i] for i in perm]
+
+    n_yawn_target = int(max_samples * 0.70)
+    n_normal_target = max_samples - n_yawn_target
+
+    n = 0
+    n_yawns = 0
+    # 1. Trích xuất frame từ video ngáp
+    print(f"  [YawDD] Bắt đầu quét {len(yawn_vids)} video có hành vi ngáp...")
+    for vid_idx, v_path in enumerate(yawn_vids):
+        if n_yawns >= n_yawn_target:
+            break
+        cap = cv2.VideoCapture(str(v_path))
+        if not cap.isOpened():
+            continue
+        frame_idx = 0
+        while cap.isOpened() and n_yawns < n_yawn_target:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # Lấy mẫu mỗi 6 frames
+            if frame_idx % 6 == 0:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pts_norm = teacher.extract_22_landmarks(rgb)
+                if pts_norm is not None:
+                    h_img, w_img = frame.shape[:2]
+                    pts_px = pts_norm.copy()
+                    pts_px[:, 0] *= w_img
+                    pts_px[:, 1] *= h_img
+                    # Đo nhanh MAR
+                    w_m = np.linalg.norm(pts_px[12] - pts_px[13]) + 1e-6
+                    h_m = np.linalg.norm(pts_px[14] - pts_px[15]) + np.linalg.norm(pts_px[16] - pts_px[17])
+                    mar = float(h_m / (2.0 * w_m))
+                    # Ưu tiên ngáp và nhắm mắt
+                    if mar >= 0.38 or (frame_idx % 18 == 0):
+                        if collector.add_sample(frame, pts_px, f"{v_path.stem}_f{frame_idx}"):
+                            n += 1
+                            if mar >= 0.40:
+                                n_yawns += 1
+                            if n % 150 == 0:
+                                print(f"  [YawDD-Yawn] {n} frame hợp lệ ({n_yawns} ngáp MAR>=0.40) / video {vid_idx+1}...")
+            frame_idx += 1
+        cap.release()
+
+    # 2. Trích xuất frame lái xe bình thường
+    n_norm = 0
+    print(f"  [YawDD] Bắt đầu quét {len(other_vids)} video lái xe cabin bình thường...")
+    for vid_idx, v_path in enumerate(other_vids):
+        if n_norm >= n_normal_target or n >= max_samples:
+            break
+        cap = cv2.VideoCapture(str(v_path))
+        if not cap.isOpened():
+            continue
+        frame_idx = 0
+        while cap.isOpened() and n_norm < n_normal_target and n < max_samples:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # Lấy mẫu mỗi 15 frames
+            if frame_idx % 15 == 0:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pts_norm = teacher.extract_22_landmarks(rgb)
+                if pts_norm is not None:
+                    h_img, w_img = frame.shape[:2]
+                    pts_px = pts_norm.copy()
+                    pts_px[:, 0] *= w_img
+                    pts_px[:, 1] *= h_img
+                    if collector.add_sample(frame, pts_px, f"{v_path.stem}_f{frame_idx}"):
+                        n += 1
+                        n_norm += 1
+                        if n_norm % 150 == 0:
+                            print(f"  [YawDD-Normal] {n_norm}/{n_normal_target} frame bình thường...")
+            frame_idx += 1
+        cap.release()
+
     return n
 
 
@@ -770,24 +941,40 @@ def main():
         print(f"\n📥 NGUỒN: {name} ({src_dir})")
         collector = SampleCollector(teacher=None, source_name=name,
                                     val_percent=args.val_percent)
-        # Ưu tiên nhãn chuẩn 68-pt nếu có (mat68: AFLW2000/300W-LP, pts68: 300W,
-        # ldmks70: FaceSynthetics) — KHÔNG cần MediaPipe
-        n = collect_from_aflw2000(src_dir, collector, args.max_per_source)
-        fmt = "mat68" if n > 0 else None
-        if n == 0:
-            n = collect_from_300w(src_dir, collector, args.max_per_source)
-            fmt = "pts68" if n > 0 else None
-        if n == 0:
-            n = collect_from_facesynth(src_dir, collector, args.max_per_source)
-            fmt = "ldmks70" if n > 0 else None
-        if n == 0:
-            # Nguồn không nhãn -> lúc này mới cần MediaPipe Teacher
+        low_name = name.lower()
+        if "yawdd" in low_name:
             teacher = _get_teacher()
-            if teacher is None or not teacher.available:
-                print(f"  ⏭️ [SKIP] {name}: không có nhãn sẵn và MediaPipe Teacher không khả dụng.")
-                continue
-            n = collect_from_images(src_dir, collector, teacher, args.max_per_source)
-            fmt = "mediapipe" if n > 0 else None
+            n = collect_from_yawdd_videos(src_dir, collector, teacher, max_samples=3500)
+            fmt = "yawdd_video"
+        elif "cew" in low_name:
+            teacher = _get_teacher()
+            n = collect_from_cew(src_dir, collector, teacher, max_samples=3500)
+            fmt = "cew_images"
+        elif "300w" in low_name:
+            n = collect_from_mat68(src_dir, collector, max_samples=3500, shuffle=True)
+            fmt = "mat68_300w"
+            if n == 0:
+                n = collect_from_300w(src_dir, collector, max_samples=3500)
+                fmt = "pts68" if n > 0 else None
+        elif "aflw" in low_name:
+            n = collect_from_mat68(src_dir, collector, max_samples=2000, shuffle=False)
+            fmt = "mat68_aflw"
+        else:
+            n = collect_from_mat68(src_dir, collector, args.max_per_source)
+            fmt = "mat68" if n > 0 else None
+            if n == 0:
+                n = collect_from_300w(src_dir, collector, args.max_per_source)
+                fmt = "pts68" if n > 0 else None
+            if n == 0:
+                n = collect_from_facesynth(src_dir, collector, args.max_per_source)
+                fmt = "ldmks70" if n > 0 else None
+            if n == 0:
+                teacher = _get_teacher()
+                if teacher is None or not teacher.available:
+                    print(f"  ⏭️ [SKIP] {name}: không có nhãn sẵn và MediaPipe Teacher không khả dụng.")
+                    continue
+                n = collect_from_images(src_dir, collector, teacher, args.max_per_source)
+                fmt = "mediapipe" if n > 0 else None
         print(f"  ✅ {name}: {n} mẫu hợp lệ (format={fmt}) | loại: "
               f"{dict(collector.rejected.most_common()) if collector.rejected else '{}'}")
         if n > 0:

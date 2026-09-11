@@ -122,6 +122,8 @@ def main():
         })
         status_str = "✅ PASS" if passed else "❌ FAILED"
         print(f"   {status_str} ({dur:.2f}s)")
+        if not passed:
+            print(f"\n--- ERROR LOG for {category} ---\n{output}\n--- END ERROR LOG ---\n")
 
     total_time = time.time() - total_start
 

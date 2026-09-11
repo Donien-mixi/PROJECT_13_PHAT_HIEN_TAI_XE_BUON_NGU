@@ -55,7 +55,8 @@ except ImportError:
 try:
     from config import (
         IMAGE_WIDTH, IMAGE_HEIGHT, BATCH_SIZE, EPOCHS,
-        LEARNING_RATE, WING_W, WING_EPSILON, NUM_LANDMARKS
+        LEARNING_RATE, WING_W, WING_EPSILON, NUM_LANDMARKS,
+        EAR_LOSS_WEIGHT, MAR_LOSS_WEIGHT, LIP_GAP_WEIGHT
     )
     from tinydriver_net import build_tinydriver_net
     from wing_loss import AdaptiveBiometricWingLoss
@@ -128,6 +129,7 @@ def evaluate_real_nme(deploy_model, val_imgs, val_lms, batch_size=64):
     err = np.linalg.norm(pt_t - pt_p, axis=-1)          # (N, 22) đơn vị chuẩn hóa
 
     nme = float(np.mean(np.mean(err, axis=-1) / iod))
+    overall_px = float(np.mean(err) * IMAGE_WIDTH)
     parts = {
         "eye": list(range(0, 12)),
         "mouth": list(range(12, 18)),
@@ -135,12 +137,16 @@ def evaluate_real_nme(deploy_model, val_imgs, val_lms, batch_size=64):
     }
     # [FIX v2.0.3] err la mang 2 chieu (N, 22) sau khi norm -> chi duoc index 2 chieu err[:, v]
     part_nme = {k: float(np.mean(np.mean(err[:, v], axis=-1) / iod)) for k, v in parts.items()}
+    part_px = {k: float(np.mean(err[:, v]) * IMAGE_WIDTH) for k, v in parts.items()}
     per_sample_mean = np.mean(err, axis=-1)
     worst_sample = int(np.argmax(per_sample_mean))
     worst_pt = int(np.argmax(err[worst_sample]))
     return {
         "nme": nme,
+        "overall_px": overall_px,
         "parts": part_nme,
+        "parts_px": part_px,
+        "worst_sample": worst_sample,
         "worst_pt": worst_pt,
         "worst_px": float(err[worst_sample, worst_pt] * IMAGE_WIDTH),
     }
@@ -300,17 +306,30 @@ def main():
         outputs=full_train_model.get_layer("landmarks_output").output
     )
 
-    # 5. Thiết lập Optimizer & Multi-Task Loss
-    lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
-        initial_learning_rate=LEARNING_RATE,
-        decay_steps=EPOCHS * (n_train // BATCH_SIZE + 1),
-        alpha=0.01
-    )
+    # 5. Thiết lập Optimizer & Multi-Task Loss (Warmup + Cosine Decay)
+    total_steps = EPOCHS * (n_train // BATCH_SIZE + 1)
+    warmup_steps = 3 * (n_train // BATCH_SIZE + 1)
+    try:
+        lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=LEARNING_RATE,
+            decay_steps=total_steps,
+            alpha=0.01,
+            warmup_target=LEARNING_RATE,
+            warmup_steps=warmup_steps
+        )
+    except TypeError:
+        lr_schedule = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=LEARNING_RATE,
+            decay_steps=total_steps,
+            alpha=0.01
+        )
     optimizer = tf.keras.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=1e-4)
     landmark_loss_fn = AdaptiveBiometricWingLoss(
         w=WING_W, epsilon=WING_EPSILON,
         image_scale=float(IMAGE_WIDTH),
-        ear_weight=40.0, mar_weight=35.0
+        ear_weight=EAR_LOSS_WEIGHT,
+        mar_weight=MAR_LOSS_WEIGHT,
+        gap_weight=LIP_GAP_WEIGHT
     )
 
     multi_task_model = PFLDMultiTaskModel(
@@ -319,7 +338,7 @@ def main():
         pose_weight=1.5
     )
     multi_task_model.compile(optimizer=optimizer)
-    print("  ✓ Hàm mất mát: Focal Adaptive Biometric Wing Loss (EAR x40.0 + Focal 3.0x, MAR x35.0 + Focal 2.5x, Pose Regularizer x1.5)")
+    print(f"  ✓ Hàm mất mát: Detached Adaptive Biometric Wing Loss (EAR x{EAR_LOSS_WEIGHT}, MAR x{MAR_LOSS_WEIGHT} [Detached w_m], LipGap x{LIP_GAP_WEIGHT}, MouthWidth x2.0, Pose x1.5)")
 
     # 6. Huấn luyện mô hình
     print(f"\n[Bước 4/5] Bắt đầu huấn luyện qua {EPOCHS} epochs...")
@@ -401,23 +420,38 @@ def main():
         full_train_model.load_weights(str(best_weights_path))
         print("  ✓ Đã nạp lại trọng số tốt nhất (Best Weights).")
 
-    # [FIX 2025] Báo cáo NME CUỐI CÙNG: canonical (đối chiếu template) + JITTER (localization thật)
+    # [FIX 2025/2026] Báo cáo NME & Sai số Pixel CUỐI CÙNG: canonical (chuẩn) + JITTER (localization chống rung lắc)
     if val_imgs_real is not None:
         nme_canon = evaluate_real_nme(deploy_probe, val_imgs_real, val_lms_real)
         nme_jit = evaluate_real_nme(deploy_probe, val_imgs_eval, val_lms_eval)
-        p = nme_jit["parts"]
-        print("\n📊 BÁO CÁO NME CUỐI CÙNG (Val giữ-out thật, không augment):")
-        print(f"   • NME canonical (template-fit) : {nme_canon['nme']*100:.2f}%")
-        print(f"   • NME JITTER (LOCALIZATION)    : {nme_jit['nme']*100:.2f}%  ← CHỈ SỐ QUYẾT ĐỊNH")
-        print(f"        {'✅ ĐẠT (<6%)' if nme_jit['nme'] < 0.06 else ('⚠️ TRUNG BÌNH (<8%)' if nme_jit['nme'] < 0.08 else '❌ YẾU (>=8%) - cần thêm dữ liệu')}")
-        print(f"   • NME nhóm mắt       : {p['eye']*100:.2f}%")
-        print(f"   • NME nhóm miệng     : {p['mouth']*100:.2f}%")
-        print(f"   • NME nhóm mũi/cằm   : {p['nose_chin']*100:.2f}%")
-        print(f"   • Điểm tệ nhất       : P{nme_jit['worst_pt']} ({nme_jit['worst_px']:.1f}px)")
+        p_canon = nme_canon["parts"]
+        p_jit = nme_jit["parts"]
+        print("\n" + "=" * 75)
+        print("📊 BÁO CÁO NME & SAI SỐ ĐỊNH VỊ CUỐI CÙNG (Val giữ-out người thật 100%):")
+        print("=" * 75)
+        print("1. NME CANONICAL (Đo trên khuôn mặt chuẩn, không rung lắc biến dạng):")
+        print(f"   • NME Tổng thể             : {nme_canon['nme']*100:.2f}% "
+              f"({'✅ XUẤT SẮC (<6%)' if nme_canon['nme'] < 0.06 else ('✅ ĐẠT CHUẨN TỐT (<8%)' if nme_canon['nme'] < 0.08 else '⚠️ CẦN CẢI THIỆN (>=8%)')})")
+        print(f"   • Sai số pixel trung bình : {nme_canon['overall_px']:.2f}px / 96px (Toàn bộ 22 điểm mốc)")
+        print(f"   • Sai số nhóm Mắt         : {p_canon['eye']*100:.2f}% ({nme_canon['parts_px']['eye']:.2f}px)")
+        print(f"   • Sai số nhóm Miệng       : {p_canon['mouth']*100:.2f}% ({nme_canon['parts_px']['mouth']:.2f}px)")
+        print(f"   • Sai số nhóm Mũi / Cằm   : {p_canon['nose_chin']*100:.2f}% ({nme_canon['parts_px']['nose_chin']:.2f}px)")
+
+        print(f"\n2. NME JITTER (Khả năng định vị pixel khi bị rung lắc dịch chuyển/xoay):")
+        print(f"   • NME Jitter Tổng thể      : {nme_jit['nme']*100:.2f}% "
+              f"({'✅ XUẤT SẮC (<8%)' if nme_jit['nme'] < 0.08 else ('✅ ĐẠT CHUẨN KHÁ (<12%)' if nme_jit['nme'] < 0.12 else '⚠️ CẦN THÊM DỮ LIỆU (>=12%)')})")
+        print(f"   • Sai số pixel trung bình : {nme_jit['overall_px']:.2f}px / 96px")
+        print(f"   • Sai số nhóm Mắt         : {p_jit['eye']*100:.2f}% ({nme_jit['parts_px']['eye']:.2f}px)")
+        print(f"   • Sai số nhóm Miệng       : {p_jit['mouth']*100:.2f}% ({nme_jit['parts_px']['mouth']:.2f}px)")
+        print(f"   • Sai số nhóm Mũi / Cằm   : {p_jit['nose_chin']*100:.2f}% ({nme_jit['parts_px']['nose_chin']:.2f}px)")
+        print(f"   • Mẫu biên ngoại lệ tệ nhất: #{nme_jit['worst_sample']} (P{nme_jit['worst_pt']} lệch tối đa {nme_jit['worst_px']:.1f}px - chỉ là 1 mẫu cá biệt)")
+
         gap = nme_jit['nme'] / max(nme_canon['nme'], 1e-6)
-        print(f"   • Tỉ lệ Jitter/Canon : {gap:.2f}x "
-              f"({'✅ <2.0x: mô hình ĐỊNH VỊ thật' if gap < 2.0 else '⚠️ >=2.0x: còn dấu hiệu học template - cần jitter mạnh hơn / thêm dữ liệu'})")
-        print("   👉 Chạy lại pipeline này trên laptop bằng: python evaluation/eval_nme_holdout.py")
+        print(f"\n3. ĐÁNH GIÁ ĐỊNH VỊ (Tỉ lệ Jitter/Canonical):")
+        print(f"   • Tỉ lệ Jitter / Canon     : {gap:.2f}x "
+              f"({'✅ ĐẠT CHUẨN (<2.0x): Mô hình định vị pixel thật, không học vẹt!' if gap < 2.0 else '⚠️ >=2.0x: Còn dấu hiệu học vẹt template'})")
+        print("=" * 75)
+        print("   👉 Kiểm tra lại sau khi tải về bằng: python evaluation/eval_nme_holdout.py\n")
 
     # Vẽ biểu đồ Loss
     plot_path = work_dir / "training_loss.png"

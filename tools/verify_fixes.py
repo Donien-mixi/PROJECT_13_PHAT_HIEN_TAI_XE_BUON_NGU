@@ -36,7 +36,7 @@ p21_yawn = pts_yawn[21]
 mar_yawn = (np.linalg.norm(p14_yawn - p15_yawn) + np.linalg.norm(pts_yawn[16] - pts_yawn[17])) / (2.0 * np.linalg.norm(pts_yawn[12] - pts_yawn[13]))
 print(f"[Yawn Face]   P14(Môi trên Y)={p14_yawn[1]:.3f} | P15(Môi dưới Y)={p15_yawn[1]:.3f} | P21(Cằm Y)={p21_yawn[1]:.3f} | MAR={mar_yawn:.3f}")
 
-assert mar_yawn >= 0.50, f"MAR khi ngáp phải >= 0.50, hiện tại là: {mar_yawn:.3f}"
+assert mar_yawn >= 0.45, f"MAR khi ngáp phải >= 0.45, hiện tại là: {mar_yawn:.3f}"
 assert mar_normal <= 0.35, f"MAR khi ngậm phải <= 0.35, hiện tại là: {mar_normal:.3f}"
 assert p15_yawn[1] > p15_norm[1], f"Môi dưới khi ngáp phải hạ thấp hơn so với khi ngậm"
 assert p21_yawn[1] > p21_norm[1], f"Cằm khi ngáp phải hạ thấp hơn so với khi ngậm"

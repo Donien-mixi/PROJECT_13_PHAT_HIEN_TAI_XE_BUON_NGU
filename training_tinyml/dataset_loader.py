@@ -811,10 +811,17 @@ class DriverLandmarkDataset:
             y_idx = np.array(self.yawn_indices, dtype=np.int64) if self.yawn_indices else np.array(self.normal_indices[:50], dtype=np.int64)
             n_idx = np.array(self.normal_indices, dtype=np.int64)
 
-            # [BIOMETRIC HYBRID INJECTION]
-            # AFLW2000 là tập dữ liệu góc quay đầu (hầu hết mở mắt, chỉ có 105 mẫu nheo mắt EAR ~ 0.16, 0 mẫu EAR < 0.05).
-            # Bổ sung các mẫu giải phẫu nhắm mắt thật (EAR = 0.02 - 0.06) và ngáp sâu (MAR = 0.75 - 1.15)
-            # để mô hình học được toàn bộ dải động sinh học mí mắt và cơ hàm thực tế!
+            # [100% REAL HUMAN DATASET]
+            # Nếu tập dữ liệu đã có dồi dào mẫu người thật (>= 200 mẫu ngáp và nhắm mắt)
+            # thì sử dụng 100% dữ liệu người thật, không cần chèn mẫu vẽ giả lập!
+            if len(c_idx) >= 200 and len(y_idx) >= 200:
+                return (
+                    (self.real_images[c_idx], self.real_landmarks[c_idx], self.real_poses[c_idx]),
+                    (self.real_images[y_idx], self.real_landmarks[y_idx], self.real_poses[y_idx]),
+                    (self.real_images[n_idx], self.real_landmarks[n_idx], self.real_poses[n_idx]),
+                )
+
+            # Fallback nếu dữ liệu thiếu hụt cực đoan:
             n_synth_inject = max(len(c_idx) * 3, 350)
             c_synth_i, c_synth_l, c_synth_p = [], [], []
             y_synth_i, y_synth_l, y_synth_p = [], [], []
@@ -868,13 +875,13 @@ class DriverLandmarkDataset:
         return img, {"landmarks_output": lms_t, "pose_output": pose_t}
 
     def _preexpand_pools(self, expand_factor=6):
-        """Pre-expand pool closed/yawn/normal cân bằng 33/33/34 với augment nguyên bản, song song thread."""
+        """Pre-expand pool closed/yawn/normal cân bằng 30/30/40 với augment cabin đa dạng, song song thread."""
         from concurrent.futures import ThreadPoolExecutor
         (nc_img, nc_lms, nc_pose), (ny_img, ny_lms, ny_pose), (nn_img, nn_lms, nn_pose) = self._build_raw_pools()
         total = max(len(self.real_images) * expand_factor, 4000) if self.real_images is not None \
             else max(self.synthetic_count, 4000)
-        n_closed = total // 3
-        n_yawn = total // 3
+        n_closed = int(total * 0.30)
+        n_yawn = int(total * 0.30)
         n_norm = total - n_closed - n_yawn
 
         def expand_pool(pool, count, tag):
@@ -903,11 +910,44 @@ class DriverLandmarkDataset:
             ci, cl, cp = fc.result()
             yi, yl, yp = fy.result()
             ni, nl, np_ = fn.result()
-        all_i = np.array(ci + yi + ni, dtype=np.uint8)
-        all_l = np.array(cl + yl + nl, dtype=np.float32)
-        all_p = np.array(cp + yp + np_, dtype=np.float32)
+
+        # [ANTI-MEAN-COLLAPSE] Đan xen đều 3 trạng thái theo bộ ba [nhắm_k, ngáp_k, bình_thường_k]
+        # Tránh lỗi dồn 22.000 mẫu cùng loại thành một khối làm tê liệt gradient hoặc trôi về trạng thái trung bình
+        n_min = min(len(ci), len(yi), len(ni))
+        interleaved_i = []
+        interleaved_l = []
+        interleaved_p = []
+        for k in range(n_min):
+            interleaved_i.append(ci[k])
+            interleaved_i.append(yi[k])
+            interleaved_i.append(ni[k])
+            interleaved_l.append(cl[k])
+            interleaved_l.append(yl[k])
+            interleaved_l.append(nl[k])
+            interleaved_p.append(cp[k])
+            interleaved_p.append(yp[k])
+            interleaved_p.append(np_[k])
+
+        # Nối phần dư nếu các nhóm có độ dài chênh lệch nhẹ
+        for k in range(n_min, len(ci)):
+            interleaved_i.append(ci[k]); interleaved_l.append(cl[k]); interleaved_p.append(cp[k])
+        for k in range(n_min, len(yi)):
+            interleaved_i.append(yi[k]); interleaved_l.append(yl[k]); interleaved_p.append(yp[k])
+        for k in range(n_min, len(ni)):
+            interleaved_i.append(ni[k]); interleaved_l.append(nl[k]); interleaved_p.append(np_[k])
+
+        all_i = np.array(interleaved_i, dtype=np.uint8)
+        all_l = np.array(interleaved_l, dtype=np.float32)
+        all_p = np.array(interleaved_p, dtype=np.float32)
+
+        # Xáo trộn ngẫu nhiên toàn cục trước khi đưa vào TF Dataset
+        perm = np.random.RandomState(42).permutation(len(all_i))
+        all_i = all_i[perm]
+        all_l = all_l[perm]
+        all_p = all_p[perm]
+
         print(f"    [STATIC-EXPAND] Xong trong {time.time() - t0:.1f}s "
-              f"({len(all_i)} mẫu: {len(ci)} nhắm mắt / {len(yi)} ngáp / {len(ni)} tỉnh táo, RAM ~{all_i.nbytes/1e6:.0f}MB)")
+              f"({len(all_i)} mẫu: {len(ci)} nhắm mắt / {len(yi)} ngáp / {len(ni)} tỉnh táo, RAM ~{all_i.nbytes/1e6:.0f}MB, ĐÃ TRỘN TOÀN CỤC)")
         return all_i, all_l, all_p
 
     def get_static_expanded_dataset(self, batch_size=64, val_split=0.15, expand_factor=6):

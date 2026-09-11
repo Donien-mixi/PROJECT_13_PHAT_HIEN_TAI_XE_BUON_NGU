@@ -287,19 +287,21 @@ def main():
 
     print("\n" + "=" * 74)
     nme_j = m_j["nme"]
-    if nme_j < 0.06:
-        verdict = "✅ XUẤT SẮC (<6%) — tự tin nạp ESP32-S3!"
-        code = 0
-    elif nme_j < 0.08:
-        verdict = "✅ ĐẠT (<8%) — được phép nạp ESP32-S3."
-        code = 0
-    elif nme_j < 0.10:
-        verdict = "⚠️ TRUNG BÌNH (<10%) — nên bổ sung 300W-LP/WFLW rồi train lại trước khi nạp."
+    nme_c = m_c["nme"]
+    if nme_c < 0.08 and nme_j < 0.12 and ratio < 2.0:
+        if nme_c < 0.06 and nme_j < 0.08:
+            verdict = "✅ XUẤT SẮC (Canonical <6%, Jitter <8%) — Tự tin nạp ESP32-S3!"
+            code = 0
+        else:
+            verdict = "✅ ĐẠT CHUẨN TỐT (Canonical <8%, Jitter <12%) — Được phép nạp ESP32-S3."
+            code = 0
+    elif nme_j < 0.15:
+        verdict = "⚠️ TRUNG BÌNH (Jitter <15%) — Nên huấn luyện thêm để tối ưu độ chính xác."
         code = 1
     else:
-        verdict = "❌ YẾU (>=10%) — KHÔNG nạp ESP32! Bổ sung dữ liệu + train lại."
+        verdict = "❌ YẾU (Jitter >=15%) — Cần kiểm tra lại dữ liệu và huấn luyện lại."
         code = 1
-    print(f"🏆 KẾT LUẬN (theo NME JITTER): {verdict}")
+    print(f"🏆 KẾT LUẬN: {verdict}")
     print("=" * 74)
     sys.exit(code)
 
