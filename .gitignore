@@ -12,3 +12,11 @@ Thumbs.db
 *.tflite
 !host_laptop/models/tinydriver_model.tflite
 !training_tinyml/tinydriver_model.tflite
+
+# Large datasets folder (local only, do not push to GitHub)
+datasets/
+datasets/**
+
+# Temporary scratch and test artifacts
+scratch/
+
