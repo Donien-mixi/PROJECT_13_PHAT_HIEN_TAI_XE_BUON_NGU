@@ -63,51 +63,26 @@ Nếu hệ thống báo tất cả các module đều tồn tại và bài test 
 
 ---
 
-## 🧠 BƯỚC 1.5: XÂY DỰNG DỮ LIỆU SẠCH (BUILD CLEAN DATASET - BẢN 2025)
+## 🧠 BƯỚC 1.5: DỮ LIỆU HUẤN LUYỆN NGƯỜI THẬT 100% (REAL-FACE BENCHMARK DATASET - BẢN 2026)
 
-> [!CAUTION]
-> Bộ dữ liệu cũ (yawn_faces.zip + drowsiness Roboflow) chỉ có ~400 mẫu thật, nhiều ảnh
-> crop cận cảnh thiếu cằm, KHÔNG có nhãn landmark chuẩn, cộng thêm Mixup landmark bị lỗi
-> → là nguyên nhân gốc khiến mô hình cũ học vẹt, landmark lệch vị trí và không tracking.
-> Pipeline cũ đã bị XÓA SẠCH. Bắt buộc dùng pipeline mới dưới đây.
+> [!IMPORTANT]
+> **Đột phá về dữ liệu:** Dự án đã loại bỏ hoàn toàn các nguồn ảnh AI / nhân tạo (FaceSynthetics).
+> Thay vào đó, hệ thống tích hợp **4 bộ dữ liệu người thật chuẩn mực quốc tế**:
+> 1. **300W_LP** (3.500 mẫu): Khuôn mặt người thật với góc quay đầu lớn 3D (Yaw $\pm 90^\circ$).
+> 2. **AFLW2000_3D** (1.645 mẫu): Khuôn mặt người thật có ground-truth 3D pose và 68 điểm mốc.
+> 3. **CEW (Closed Eyes in the Wild)** (2.450 mẫu): Người thật nhắm mắt chớp mắt / ngủ gật trong điều kiện tự nhiên.
+> 4. **YawDD (Yawning Driver Dataset)** (3.579 mẫu): Video quay thực tế tài xế ngáp và lái xe trong cabin ô tô.
 
-Để mô hình AI có khả năng **tổng quát hóa cao nhất, nhận diện chính xác bất kỳ khuôn mặt tài xế nào** (kể cả góc quay đầu lớn, đeo kính, ban đêm):
+Toàn bộ **11.174 mẫu sạch** (10.305 mẫu train, 869 mẫu val holdout thật) đã được xử lý qua 6 cổng kiểm duyệt (QA Gates) và đóng gói sẵn trong:
+`training_tinyml/preprocessed_driver_dataset.npz` (83.8 MB).
 
-Chạy lệnh xây dựng dữ liệu sạch tự động:
+Thư mục thô `datasets/` (chứa hơn 340.000 file/video) đã được lưu trữ cục bộ trên máy và đưa vào `.gitignore` để repo GitHub luôn gọn nhẹ và tối ưu.
+
+Nếu bạn muốn build lại dữ liệu sạch từ các folder thô:
 ```powershell
-python tools/project_manager.py --preprocess
-# hoặc trực tiếp (khuyến nghị: thêm FaceSynthetics của Microsoft — link trực tiếp, không auth):
-python tools/build_clean_dataset.py --download-aflw2000 --download-facesynth
+python tools/build_clean_dataset.py
 ```
-
-> [!WARNING]
-> **[v2.0.5 — Mỏ neo cằm + chống template collapse]**
-> 1. **Template collapse**: model v2.0.3 đạt NME canonical 6.62% nhưng LIVE sai 17-23px vì
->    canonical crop ép mắt luôn ở v≈0.344 → model học THUỘC template vị trí. Đã sửa bằng
->    **Macro-Jitter affine** (dịch ±7%, scale 0.85-1.18, xoay ±10° mọi mẫu train) + gate
->    **NME JITTER** (chỉ số quyết định, kèm tỉ lệ Jitter/Canon < 2.0x).
-> 2. **Mỏ neo cằm**: công thức box cũ không chứa nổi cằm khi ngáp → 33-39% mẫu bị clip
->    P21 thành label bẩn. Đã thêm term `d_eye_chin/1.20` (đồng bộ 1 nơi:
->    `compute_canonical_anchor` — train/label/tracking/live demo dùng cùng công thức).
->    Kết quả: landmark_clipped 1044 → **8**; ngáp 200 → **515**; |Yaw|≥40°: 173 → **555**.
-> 3. **300W-LP hiện không có link tải tự động** (cbsr 404, Drive ID cũ chết) — chỉ tải
->    thủ công. Phương án tự động đáng tin: **FaceSynthetics** (Microsoft, 1000 mặt 512×512
->    nhãn 68-pt iBUG chính xác pixel).
-
-👉 Lệnh này sẽ:
-1. **Tự tải AFLW2000-3D** (~83 MB, 2000 ảnh có nhãn 68-pt 3D chuẩn, phủ góc quay đầu yaw ±90° — giải quyết triệt để lỗi không tracking khi đầu quay). *Lưu ý: nếu mạng nhà bạn chặn server CBSR (kiểm tra bằng lệnh này báo "Tải thất bại"), đừng lo — Bước 2 trên Colab sẽ tự động build dữ liệu này vì mạng Colab tải được.*
-2. Tự dán nhãn 22 điểm bằng **MediaPipe Teacher** cho mọi thư mục ảnh bạn bỏ vào `datasets/raw_faces/<ten>/` (WFLW, YawDD, ảnh tự chụp webcam...).
-3. Lọc qua **6 cổng chất lượng (QA Gates)**: landmark không cắt mép, mặt đủ lớn (2 mắt ≥ 10px), không nhòe (Laplacian), góc quay trong giới hạn, chống trùng lặp (aHash).
-4. **Chia Train/Val giữ-out NGHIÊM NGẶT theo hash tên file** — tập val không hề xuất hiện lúc train (trước đây val lấy từ generator là ảo).
-5. Xuất ảnh kiểm tra trực quan có vẽ 22 điểm vào `output/preprocessed_preview/` và báo cáo `output/dataset_report.md` (kiểm tra phân bố góc Yaw — cột ±40..90° phải có mẫu, nếu trống phải bổ sung 300W-LP).
-
-**Nguồn dữ liệu nên bổ sung thủ công** (tải về bỏ vào `datasets/raw_faces/`):
-- [300W](https://ibug.doc.ic.ac.uk/resources/facial-points/) — 3.748 ảnh + nhãn .pts 68 điểm.
-- [300W-LP](https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/) — 61.225 ảnh tổng hợp góc quay ±90° (khuyến nghị mạnh).
-- [WFLW](https://wywu.github.io/projects/LAB/WFLW.html) — 9.8k ảnh đa điều kiện (chỉ cần thư mục ảnh).
-- [YawDD](https://sites.google.com/site/yawddf/) — video tài xế ngáp thật, trích frame.
-
-**Chuẩn chất lượng phải đạt trước khi train:** tổng mẫu ≥ 5.000 (lý tưởng ≥ 20.000), mẫu |Yaw| ≥ 40° ≥ 200. Sau train xong, bắt buộc chạy `python evaluation/eval_nme_holdout.py` — NME < 6% mới được nạp ESP32.
+Lệnh này sẽ quét 4 thư mục trong `datasets/raw_faces/` (`300W_LP`, `AFLW2000_3D`, `CEW`, `YawDD`), áp dụng QA Gates và tạo mới `preprocessed_driver_dataset.npz`. Báo cáo thống kê được lưu tại `output/dataset_report.md`.
 
 ---
 

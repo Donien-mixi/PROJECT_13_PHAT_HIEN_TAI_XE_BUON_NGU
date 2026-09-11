@@ -328,35 +328,53 @@ Input: Ảnh xám 96x96x1 [-1.0, 1.0]
 
 ---
 
-### 6.2. Hàm mất mát độc quyền: Focal Adaptive Biometric Wing Loss & Cân bằng 3 trạng thái
+### 6.2. Hàm mất mát độc quyền: Detached Adaptive Biometric Wing Loss & Cân bằng 3 trạng thái
 Được cài đặt trong [`training_tinyml/wing_loss.py`](file:///d:/PROJECT_13_PHAT_HIEN_BUON_NGU/training_tinyml/wing_loss.py) và điều phối trong [`training_tinyml/run_colab_train.py`](file:///d:/PROJECT_13_PHAT_HIEN_BUON_NGU/training_tinyml/run_colab_train.py):
 
-#### 1. Chuẩn hóa thang đo mất mát (Normalized Coordinate Loss)
-Trong các phiên bản cũ, tổng lỗi tọa độ không được chia trung bình cho 44 điểm khiến `coord_loss` lên tới $\approx 1118$, áp đảo hoàn toàn các thành phần sinh học EAR/MAR ($\approx 3.75$, chỉ chiếm $0.34\%$ tổng loss), dẫn đến việc mạng nơ-ron học tối ưu hóa toàn bộ khuôn mặt nhưng "bỏ quên" khe hở mí mắt và độ há miệng (gây ra **Mean-State Collapse**: EAR luôn kẹt ở $0.32 - 0.35$ và MAR kẹt ở $0.31 - 0.37$).
-Phiên bản mới chuẩn hóa triệt để:
-$$\mathcal{L}_{\text{coord}} = \frac{1}{44} \sum_{i=1}^{44} w_i \cdot \text{Wing}(y_i - \hat{y}_i)$$
+#### 1. Cơ chế triệt tiêu nổ đạo hàm mẫu số (Detached Denominator Gradient Fix)
+Trong các phiên bản trước, tỉ lệ há miệng $MAR$ được tính bằng:
+$$\text{MAR} = \frac{h_{\text{outer}} + h_{\text{inner}}}{2 \cdot w_m}, \quad \text{với } w_m = \|P_{12} - P_{13}\|$$
+Khi tính đạo hàm lan truyền ngược (Backpropagation) qua mẫu số $w_m$:
+$$\frac{\partial \text{MAR}}{\partial P_{13}} = -\frac{h_{\text{outer}} + h_{\text{inner}}}{2 \cdot w_m^2} \cdot \frac{\partial w_m}{\partial P_{13}}$$
+Trong không gian chuẩn hóa $96 \times 96$, $w_m \approx 0.23 \Rightarrow w_m^2 \approx 0.053$. Việc chia cho $0.053$ đã **nhân khuếch đại gradient lên gấp ~20 lần**. Với trọng số cũ kết hợp hệ số phạt Focal, gradient kéo dồn vào khóe miệng $P_{12}, P_{13}$ lên tới $\approx 5.400$ (gấp $30.000$ lần gradient tọa độ Wing Loss thông thường).
+Hậu quả: Mạng nơ-ron phát hiện "đường tắt tiêu cực" — để tăng MAR khi ngáp mà không cần dịch chuyển môi, nó chỉ cần **bóp nghẹt hai khóe miệng $P_{12}, P_{13}$ co cụm lại với nhau** (từ 25.5px xuống còn 9.3px), khiến sai số tại khóe miệng bùng nổ lên tới $54.68\%$ NME!
 
-#### 2. Trọng số giải phẫu sinh học nâng cấp (Biometric Weighting)
-- **Mí mắt trên/dưới tạo khe hở (P1, P2, P4, P5, P7, P8, P10, P11):** Gán trọng số **$\times 5.0$** (tăng độ nhạy tuyệt đối với cử động khép mí).
-- **Khóe mắt (P0, P3, P6, P9):** Gán trọng số **$\times 3.0$**.
-- **Viền môi trên/dưới tạo khe hở há miệng (P14, P15, P16, P17):** Gán trọng số **$\times 5.0$**.
-- **Sống mũi, chóp mũi, cằm (P18 - P21):** Gán trọng số **$\times 1.0 - 1.5$**.
+**Giải pháp đột phá:** Áp dụng cắt nhánh đạo hàm mẫu số bằng `tf.stop_gradient`:
+- Trong hàm `compute_tensor_mar`: `w_m = tf.stop_gradient(w_m)`
+- Trong hàm `compute_tensor_ear`: `w_l = tf.stop_gradient(w_l)`, `w_r = tf.stop_gradient(w_r)`
+Kết quả:
+$$\frac{\partial \text{MAR}}{\partial P_{12}} = \mathbf{0}, \quad \frac{\partial \text{MAR}}{\partial P_{13}} = \mathbf{0}$$
+Hai khóe miệng $P_{12}, P_{13}$ và các khóe mắt $P_0, P_3, P_6, P_9$ được bảo vệ tuyệt đối, chỉ chịu sự giám sát từ Wing Loss tọa độ và hàm neo cự ly.
 
-#### 3. Hàm phạt bất đối xứng tiêu điểm (Asymmetric Focal Biometric Loss)
-Ép mạng nơ-ron phạt cực nặng các dự đoán sai lệch vùng nguy hiểm (nhắm mắt nhưng đoán mở, hoặc ngáp nhưng đoán ngậm):
-- **Phạt mắt nhắm:** Khi $EAR_{\text{true}} < 0.20$, hệ số phạt nhân lên **$\times 3.0$**:
-  $$\text{weight}_{\text{ear}} = 40.0 \times \left(1.0 + 2.0 \cdot \mathbb{I}(EAR_{\text{true}} < 0.20)\right)$$
-- **Phạt ngáp há miệng:** Khi $MAR_{\text{true}} > 0.45$, hệ số phạt nhân lên **$\times 2.5$**:
-  $$\text{weight}_{\text{mar}} = 35.0 \times \left(1.0 + 1.5 \cdot \mathbb{I}(MAR_{\text{true}} > 0.45)\right)$$
+#### 2. Hàm mất mát khe hở môi trực tiếp (Direct Linear Lip Gap Loss)
+Để giám sát ổn định hành vi há to miệng khi ngáp mà không dựa vào phân thức chia nhạy cảm:
+$$\mathcal{L}_{\text{lip\_gap}} = \frac{1}{96} \left(|h_{\text{outer\_true}} - h_{\text{outer\_pred}}| + |h_{\text{inner\_true}} - h_{\text{inner\_pred}}|\right)$$
+Hàm này có đạo hàm hằng số chặn $\pm 1.0$, trực tiếp kéo môi dưới $P_{15}, P_{17}$ mở rộng xuống dưới một cách mượt mà và tuyến tính.
 
-#### 4. Kỹ thuật lấy mẫu cân bằng 3 trạng thái (3-Way Balanced Sampling)
-Được cài đặt trong [`training_tinyml/dataset_loader.py`](file:///d:/PROJECT_13_PHAT_HIEN_BUON_NGU/training_tinyml/dataset_loader.py):
-Trong tập dữ liệu chuẩn (AFLW2000, 300W), số mẫu tài xế nhắm mắt thật chỉ chiếm $4.97\%$ (105 / 2111 mẫu). Nếu không cân bằng, mạng sẽ bị thiên kiến trạng thái mở mắt.
-Hệ thống thiết lập cơ chế nạp mẫu 3 nhóm đồng đều:
-- **Nhóm 1 ($\approx 33.3\%$):** Nhắm mắt / Ngủ gật microsleep ($EAR < 0.20$).
-- **Nhóm 2 ($\approx 33.3\%$):** Há to miệng ngáp ($MAR \ge 0.40$).
-- **Nhóm 3 ($\approx 33.4\%$):** Tỉnh táo, mắt mở, ngậm miệng bình thường.
-Nhờ đó, trong từng mẻ huấn luyện (batch), mạng luôn tiếp xúc đều đặn với mẫu nhắm mắt và mẫu ngáp, triệt tiêu 100% hiện tượng kẹt giá trị trung bình.
+#### 3. Hàm neo cự ly khóe môi (Mouth Width Anchor Loss)
+Để chống lại bất kỳ hiện tượng co cụm khóe miệng nào, hệ thống bổ sung hàm neo khoảng cách khóe miệng:
+$$\mathcal{L}_{\text{width}} = \frac{1}{96} \left| \|P_{12}^{\text{true}} - P_{13}^{\text{true}}\| - \|P_{12}^{\text{pred}} - P_{13}^{\text{pred}}\| \right| \times 2.0$$
+
+#### 4. Trọng số giải phẫu sinh học chuẩn hóa (Harmonious Biometric Weighting)
+- **Mí mắt di động (P1, P2, P4, P5, P7, P8, P10, P11):** Gán trọng số **$\times 4.5$** (tối ưu cử động khép mí mắt).
+- **Khóe mắt (P0, P3, P6, P9):** Gán trọng số **$\times 3.0$** (neo giữ hốc mắt).
+- **Khóe miệng (P12, P13):** Gán trọng số **$\times 3.5$** (neo giữ khóe mép).
+- **Môi trên (P14, P16):** Gán trọng số **$\times 4.0$** (bám sát vòm môi trên).
+- **Môi dưới (P15, P17):** Gán trọng số **$\times 5.0$** (ép bám sát viền môi dưới khi hạ miệng).
+- **Trục sống mũi & nhân trung (P18, P19, P20):** Gán trọng số **$\times 2.0$**.
+- **Đáy cằm (P21):** Gán trọng số **$\times 4.5$** (bám theo chuyển động của xương hàm dưới).
+
+#### 5. Tổng hợp hàm mất mát và tham số huấn luyện đồng bộ
+$$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{coord}} + 25.0 \cdot \mathcal{L}_{\text{ear}} + 20.0 \cdot \mathcal{L}_{\text{mar}} + 8.0 \cdot \mathcal{L}_{\text{lip\_gap}} + 2.0 \cdot \mathcal{L}_{\text{width}} + 1.5 \cdot \mathcal{L}_{\text{pose}}$$
+Hệ số phạt bất đối xứng Focal Gamma được điều hòa về mức an toàn $\mathbf{2.0\times}$ (thay vì $4.5\times$ cũ) để triệt tiêu các xung nhịp gradient đột biến.
+
+#### 6. Kỹ thuật lấy mẫu cân bằng 3 trạng thái (3-Way Balanced Sampling)
+Cài đặt trong [`training_tinyml/dataset_loader.py`](file:///d:/PROJECT_13_PHAT_HIEN_BUON_NGU/training_tinyml/dataset_loader.py):
+Trong quá trình huấn luyện, tập dữ liệu thực tế (11.174 mẫu từ 300W_LP, AFLW2000_3D, CEW, YawDD) được tự động phân bổ cân đối:
+- **Nhóm 1 ($\mathbf{30\%}$):** Nhắm mắt / Ngủ gật microsleep ($EAR < 0.20$).
+- **Nhóm 2 ($\mathbf{30\%}$):** Há to miệng ngáp ($MAR \ge 0.40$).
+- **Nhóm 3 ($\mathbf{40\%}$):** Tỉnh táo, mắt mở, ngậm miệng bình thường.
+Các mẫu được đan xen đều đặn theo bộ ba $[C_k, Y_k, N_k]$ và xáo trộn ngẫu nhiên trước khi nạp vào GPU, đảm bảo mạng học đều cả 3 trạng thái sinh trắc học.
 
 ---
 
