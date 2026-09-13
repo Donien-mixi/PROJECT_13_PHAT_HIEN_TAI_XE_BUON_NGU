@@ -1,6 +1,7 @@
 #include "telemetry_sender.h"
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -29,6 +30,9 @@ static const char* TAG = "TELEMETRY";
 static int s_udp_sock = -1;
 static struct sockaddr_in s_dest_addr;
 static bool s_is_initialized = false;
+
+static uint32_t s_tx_ok = 0;
+static uint32_t s_tx_err = 0;
 
 // JSON Serialization Buffer
 static char s_json_buffer[2048];
@@ -114,6 +118,19 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
     // Send UDP Datagram to Laptop Host
     int sent = sendto(s_udp_sock, s_json_buffer, offset, 0,
                       (struct sockaddr*)&s_dest_addr, sizeof(s_dest_addr));
+
+    if (sent > 0) {
+        s_tx_ok++;
+        if (s_tx_ok == 1 || (s_tx_ok % 100) == 0) {
+            ESP_LOGI(TAG, "Đã gửi %u gói telemetry tới %s:%d",
+                     (unsigned)s_tx_ok, CONFIG_LAPTOP_HOST_IP, CONFIG_UDP_TELEMETRY_PORT);
+        }
+    } else {
+        s_tx_err++;
+        if (s_tx_err <= 5) {
+            ESP_LOGW(TAG, "sendto lỗi (sent=%d, errno=%d)", sent, errno);
+        }
+    }
 
     return (sent > 0);
 }

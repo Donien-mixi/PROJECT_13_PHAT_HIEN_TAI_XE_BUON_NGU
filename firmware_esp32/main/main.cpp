@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -92,9 +93,23 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
         }
 
         // 4. Solve 3D Head Pose (Yaw, Pitch, Roll) via Pure C++ POSIT / PnP
-        int64_t t_pnp_start = esp_timer_get_time();
-        pnp_solve_head_pose(landmarks, &head_pose);
-        int64_t t_pnp = esp_timer_get_time() - t_pnp_start;
+        // [v2.6.3] Khi đang ngáp (MAR>=0.5): GIỮ pose frame trước (tránh nhảy trục Y/Z do hàm/miệng biến dạng).
+        static head_pose_t s_held_pose = {};
+        static bool s_has_held_pose = false;
+        float _wm = hypotf(landmarks[12].x - landmarks[13].x, landmarks[12].y - landmarks[13].y);
+        if (_wm < 1e-4f) _wm = 1e-4f;
+        float _mar_now = (hypotf(landmarks[14].x - landmarks[15].x, landmarks[14].y - landmarks[15].y) +
+                          hypotf(landmarks[16].x - landmarks[17].x, landmarks[16].y - landmarks[17].y)) / (2.0f * _wm);
+        int64_t t_pnp = 0;
+        if (_mar_now >= 0.50f && s_has_held_pose) {
+            head_pose = s_held_pose;
+        } else {
+            int64_t t_pnp_start = esp_timer_get_time();
+            pnp_solve_head_pose(landmarks, &head_pose);
+            t_pnp = esp_timer_get_time() - t_pnp_start;
+            s_held_pose = head_pose;
+            s_has_held_pose = true;
+        }
 
         // 5. Update ADAS Finite State Machine (EAR, MAR, Microsleep, Fatigue, Distraction)
         adas_controller_update(landmarks, &head_pose, current_fps, &adas_metrics);
