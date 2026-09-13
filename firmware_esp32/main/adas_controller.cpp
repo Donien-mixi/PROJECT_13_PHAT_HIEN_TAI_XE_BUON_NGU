@@ -32,10 +32,25 @@ static const char* TAG = "ADAS_CONTROLLER";
 static int64_t s_start_time_us = 0;
 static bool s_is_calibrated = false;
 
-// Calibration Accumulators
-static float s_calib_ear_sum = 0.0f;
-static float s_calib_mar_sum = 0.0f;
-static uint32_t s_calib_samples = 0;
+// Calibration Accumulators — [v2.3.0] dùng MEDIAN để khớp 100% với laptop
+// (mean bị lệch baseline nếu có 1 cú chớp mắt trong 5s hiệu chuẩn).
+#define MAX_CALIB_SAMPLES 256
+static float s_calib_ear_buf[MAX_CALIB_SAMPLES];
+static float s_calib_mar_buf[MAX_CALIB_SAMPLES];
+static uint32_t s_calib_count = 0;
+
+// Median (sắp xếp nổi bọt/chèn tại chỗ, n <= 256)
+static float compute_median(float* buf, uint32_t n) {
+    if (n == 0) return 0.0f;
+    for (uint32_t i = 1; i < n; i++) {
+        float key = buf[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && buf[j] > key) { buf[j + 1] = buf[j]; j--; }
+        buf[j + 1] = key;
+    }
+    if (n & 1u) return buf[n / 2];
+    return 0.5f * (buf[n / 2 - 1] + buf[n / 2]);
+}
 
 // Adaptive Dynamic Thresholds
 static float s_ear_threshold = 0.21f;
@@ -67,9 +82,7 @@ static inline float euclidean_dist(point2d_t a, point2d_t b) {
 void adas_controller_init(void) {
     s_start_time_us = esp_timer_get_time();
     s_is_calibrated = false;
-    s_calib_ear_sum = 0.0f;
-    s_calib_mar_sum = 0.0f;
-    s_calib_samples = 0;
+    s_calib_count = 0;
 
     s_eye_closed_start_us = 0;
     s_mouth_open_start_us = 0;
@@ -119,9 +132,11 @@ void adas_controller_update(const point2d_t landmarks[22],
     // 3. Calibration Phase (First 5 Seconds)
     if (!s_is_calibrated) {
         if (now - s_start_time_us < CALIBRATION_DURATION_US) {
-            s_calib_ear_sum += ear;
-            s_calib_mar_sum += mar;
-            s_calib_samples++;
+            if (s_calib_count < MAX_CALIB_SAMPLES) {
+                s_calib_ear_buf[s_calib_count] = ear;
+                s_calib_mar_buf[s_calib_count] = mar;
+                s_calib_count++;
+            }
 
             out_metrics->ear_left = ear_l;
             out_metrics->ear_right = ear_r;
@@ -138,12 +153,12 @@ void adas_controller_update(const point2d_t landmarks[22],
             return;
         } else {
             // Calibration Complete
-            if (s_calib_samples > 10) {
-                float avg_ear = s_calib_ear_sum / s_calib_samples;
-                float avg_mar = s_calib_mar_sum / s_calib_samples;
-                s_ear_threshold = avg_ear * 0.75f;
+            if (s_calib_count > 10) {
+                float avg_ear = compute_median(s_calib_ear_buf, s_calib_count);
+                float avg_mar = compute_median(s_calib_mar_buf, s_calib_count);
+                s_ear_threshold = avg_ear * 0.70f;
                 s_mar_threshold = avg_mar * 1.60f;
-                if (s_ear_threshold < 0.18f) s_ear_threshold = 0.18f;
+                if (s_ear_threshold < 0.15f) s_ear_threshold = 0.15f;
                 if (s_ear_threshold > 0.25f) s_ear_threshold = 0.25f;
                 if (s_mar_threshold < 0.40f) s_mar_threshold = 0.40f;
                 ESP_LOGI(TAG, "✅ Hiệu chuẩn thành công! Baseline: EAR=%.2f, MAR=%.2f | Ngưỡng báo: EAR<%.2f, MAR>%.2f",

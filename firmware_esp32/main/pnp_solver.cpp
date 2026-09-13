@@ -20,13 +20,16 @@ static const char* TAG = "PNP_SOLVER";
 // 6 Anthropometric 3D Keypoint Coordinates (in mm, Nose Tip as Origin)
 // Standard Camera Coordinate Frame: X right (+X), Y down (+Y), Z forward (-Z)
 // Points: [0] Nose Tip, [1] Chin (+Y down), [2] Left Eye Outer (-X, -Y up), [3] Right Eye Outer (+X, -Y up), [4] Mouth Left (-X, +Y down), [5] Mouth Right (+X, +Y down)
+// [v2.4.1 - RESTORE] 6 Anthropometric 3D Keypoint Coordinates (mm, Nose Tip as Origin).
+// Đồng bộ với host_laptop/local_model_tester.py (bản gốc).
+// Camera frame: X right (+X), Y down (+Y), Z forward (-Z)
 static const float MODEL_3D[NUM_PNP_POINTS][3] = {
     {   0.0f,    0.0f,    0.0f}, // P19: Nose Tip
-    {   0.0f,   65.0f,  -35.0f}, // P21: Chin (+Y points down matching image plane v)
-    { -43.0f,  -32.0f,  -30.0f}, // P0:  Left Eye Outer Corner (-Y points up matching image plane v)
-    {  43.0f,  -32.0f,  -30.0f}, // P9:  Right Eye Outer Corner (-Y points up matching image plane v)
-    { -30.0f,   30.0f,  -20.0f}, // P12: Mouth Left Corner (+Y points down)
-    {  30.0f,   30.0f,  -20.0f}  // P13: Mouth Right Corner (+Y points down)
+    {   0.0f,   65.0f,  -35.0f}, // P21: Chin
+    { -43.0f,  -32.0f,  -30.0f}, // P0:  Left Eye Outer
+    {  43.0f,  -32.0f,  -30.0f}, // P9:  Right Eye Outer
+    { -30.0f,   30.0f,  -20.0f}, // P12: Mouth Left
+    {  30.0f,   30.0f,  -20.0f}  // P13: Mouth Right
 };
 
 // Keypoint indices in the 22-landmark output
@@ -34,7 +37,7 @@ static const int LANDMARK_MAP[NUM_PNP_POINTS] = {
     19, // Nose Tip
     21, // Chin
     0,  // Left Eye Outer (P0)
-    9,  // Right Eye Outer (P9 - symmetric with P0 across nose axis)
+    9,  // Right Eye Outer (P9)
     12, // Mouth Left
     13  // Mouth Right
 };

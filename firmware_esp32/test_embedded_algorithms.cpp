@@ -65,14 +65,14 @@ static void test_pnp_posit_solver() {
 
     pnp_solver_init();
 
-    // 3D model points (đồng bộ 100% với MODEL_3D trong main/pnp_solver.cpp)
+    // 3D model points (đồng bộ 100% với MODEL_3D trong main/pnp_solver.cpp — bản gốc)
     const float MODEL[6][3] = {
         {   0.0f,    0.0f,    0.0f}, // P19: Nose Tip
-        {   0.0f,   65.0f,  -35.0f}, // P21: Chin (+Y points down)
-        { -43.0f,  -32.0f,  -30.0f}, // P0:  Left Eye Outer (-Y points up)
-        {  43.0f,  -32.0f,  -30.0f}, // P9:  Right Eye Outer (-Y points up)
-        { -30.0f,   30.0f,  -20.0f}, // P12: Mouth Left (+Y points down)
-        {  30.0f,   30.0f,  -20.0f}  // P13: Mouth Right (+Y points down)
+        {   0.0f,   65.0f,  -35.0f}, // P21: Chin
+        { -43.0f,  -32.0f,  -30.0f}, // P0:  Left Eye Outer
+        {  43.0f,  -32.0f,  -30.0f}, // P9:  Right Eye Outer
+        { -30.0f,   30.0f,  -20.0f}, // P12: Mouth Left
+        {  30.0f,   30.0f,  -20.0f}  // P13: Mouth Right
     };
     const int MAP[6] = {19, 21, 0, 9, 12, 13};
 

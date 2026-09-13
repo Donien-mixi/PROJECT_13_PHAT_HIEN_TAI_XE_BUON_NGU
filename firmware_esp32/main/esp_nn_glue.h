@@ -13,8 +13,8 @@
 // (Xtensa dual-core LX7 vector instructions).
 // Tối ưu hóa tính toán Inverted Residual MBConv cho TinyDriverNet.
 // =====================================================================
-#define AI_ESP_NN_CONV_ENABLED 1
-#define RUN_ESPNN_SELFTEST     1
+#define AI_ESP_NN_CONV_ENABLED 0
+#define RUN_ESPNN_SELFTEST     0
 
 #if HAS_TFLM_HEADERS && AI_ESP_NN_CONV_ENABLED
 namespace ai_esp_nn {
