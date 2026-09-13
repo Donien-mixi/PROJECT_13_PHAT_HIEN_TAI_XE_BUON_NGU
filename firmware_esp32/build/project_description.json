@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "tinydriver_esp32s3_edge_ai",
-    "project_version":    "11e6830-dirty",
+    "project_version":    "1e8c825-dirty",
     "project_path":       "D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.3.5",
     "build_dir":          "D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build",

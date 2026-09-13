@@ -338,6 +338,7 @@ def cmd_pack_colab(args):
         "export_tflite.py",
         "run_colab_train.py",
         "preprocessed_driver_dataset.npz",
+        "live_landmarks.npz",
     ]
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -346,7 +347,7 @@ def cmd_pack_colab(args):
             if fpath.exists():
                 # [v2.0.4] npz dataset có thể ~200MB -> chỉ ghi 1 lần (bản ghi 2 lần
                 # arcname trùng làm gói phình đôi). run_colab_train tìm được ở cả 2 vị trí.
-                if fname == "preprocessed_driver_dataset.npz":
+                if fname in ("preprocessed_driver_dataset.npz", "live_landmarks.npz"):
                     zf.write(fpath, arcname=f"training_tinyml/{fname}")
                     print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024 / 1024:.1f} MB)")
                 else:
@@ -354,7 +355,7 @@ def cmd_pack_colab(args):
                     zf.write(fpath, arcname=fname)
                     print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024:.1f} KB)")
             else:
-                if fname != "preprocessed_driver_dataset.npz":
+                if fname not in ("preprocessed_driver_dataset.npz", "live_landmarks.npz"):
                     print(f"  ⚠️ Cảnh báo thiếu file: {fname}")
 
         # Thêm script build dữ liệu sạch (Colab tự build nếu npz chưa có)

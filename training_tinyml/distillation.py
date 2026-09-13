@@ -50,11 +50,10 @@ MEDIAPIPE_TO_22_INDICES = [
     152   # Chin bottom (Chóp cằm)
 ]
 
-# [v2.4.1 - RESTORE] Standard Anthropometric 3D Human Face Model in millimeters for PnP.
-# Bản gốc — đồng bộ với host_laptop/local_model_tester.py + firmware pnp_solver.cpp.
+# [v2.6.3] Bộ FULL - YAW chính xác; chống lệch ngáp bằng GIỮ pose (MAR>=0.5).
 FACE_3D_MODEL = np.array([
     [  0.0,   0.0,   0.0],    # 0: Nose Tip (Index 19)
-    [  0.0,  65.0, -35.0],    # 1: Chin (Index 21: +Y down)
+    [  0.0,  65.0, -35.0],    # 1: Chin (Index 21)
     [-43.0, -32.0, -30.0],    # 2: Left eye outer (Index 0)
     [ 43.0, -32.0, -30.0],    # 3: Right eye outer (Index 9)
     [-30.0,  30.0, -20.0],    # 4: Mouth left (Index 12)
@@ -67,7 +66,7 @@ def estimate_pose_from_landmarks(pts_22_norm):
     Estimates 3D Head Pose (Yaw, Pitch, Roll in radians) from 22 normalized landmarks.
     """
     pts_px = pts_22_norm.copy() * 96.0
-    # [v2.4.1 RESTORE] 6 điểm gốc: chóp mũi, cằm, 2 khóe mắt ngoài, 2 khóe miệng
+    # [v2.6.3] Bộ FULL: chóp mũi, cằm, 2 khóe mắt ngoài, 2 khóe miệng
     pts_2d = np.array([
         pts_px[19],
         pts_px[21],
@@ -87,7 +86,7 @@ def estimate_pose_from_landmarks(pts_22_norm):
     dist_coeffs = np.zeros((4, 1))
 
     success, rvec, _ = cv2.solvePnP(
-        FACE_3D_MODEL, pts_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE
+        FACE_3D_MODEL, pts_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_SQPNP
     )
     if not success:
         return np.zeros(3, dtype=np.float32)

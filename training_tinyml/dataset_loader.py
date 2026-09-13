@@ -623,6 +623,39 @@ class DriverLandmarkDataset:
                         else:
                             self.train_indices = list(range(len(self.real_images)))
                             self.val_indices = []
+
+                        # [v2.5.0 LIVE-DOMAIN] Nạp thêm dữ liệu CAMERA THẬT (webcam/OV5640)
+                        # đã gán nhãn MediaPipe, cùng crop canonical => chống lệch miền.
+                        live_path = None
+                        for _lp in [os.path.join(os.path.dirname(__file__), "live_landmarks.npz"),
+                                    "live_landmarks.npz",
+                                    os.path.join("training_tinyml", "live_landmarks.npz")]:
+                            if os.path.exists(_lp):
+                                live_path = _lp
+                                break
+                        if live_path is not None:
+                            try:
+                                lv = np.load(live_path)
+                                lv_imgs = lv['images'].astype(np.uint8)
+                                lv_lms = lv['landmarks'].astype(np.float32)
+                                live_repeat = 1
+                                if 'poses' in lv:
+                                    lv_poses = lv['poses'].astype(np.float32)
+                                else:
+                                    from distillation import estimate_pose_from_landmarks
+                                    lv_poses = np.array(
+                                        [estimate_pose_from_landmarks(lm.reshape(-1, 2)) for lm in lv_lms],
+                                        dtype=np.float32)
+                                n_old = len(self.real_images)
+                                self.real_images = np.concatenate([self.real_images] + [lv_imgs] * live_repeat, axis=0)
+                                self.real_landmarks = np.concatenate([self.real_landmarks] + [lv_lms] * live_repeat, axis=0)
+                                self.real_poses = np.concatenate([self.real_poses] + [lv_poses] * live_repeat, axis=0)
+                                self.train_indices += list(range(n_old, len(self.real_images)))
+                                print(f"[DatasetLoader] [LIVE-DOMAIN] +{len(lv_imgs)} mẫu camera thật x{live_repeat} "
+                                      f"= {len(lv_imgs)*live_repeat} mẫu vào TRAIN (chống lệch miền webcam).")
+                            except Exception as e:
+                                print(f"[WARNING] [DatasetLoader] Không nạp được live_landmarks.npz: {e}")
+
                         print(f"[DatasetLoader] [SUCCESS] Đã nạp {len(self.real_images)} mẫu thật từ: {p_path}")
                         print(f"  • Train: {len(self.train_indices)} | Val giữ-out: {len(self.val_indices)}")
                         break

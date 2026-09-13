@@ -1,0 +1,56 @@
+(projet_13) D:\PROJECT_13_PHAT_HIEN_BUON_NGU>python evaluation/eval_nme_holdout.py
+==========================================================================
+📏 ĐO NME GIỮ-OUT: CANONICAL (template-fit) + JITTER (localization thật)
+==========================================================================
+• Model : D:\PROJECT_13_PHAT_HIEN_BUON_NGU\host_laptop\models\tinydriver_model.tflite
+• Val   : 757 mẫu giữ-out thật | NME JITTER đo trên bản x2 jitter affine
+
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+• Input : [ 1 96 96  1] int8 | Output: Float32 (mixed-precision)
+
+--- NME CANONICAL (template-fit — điểm cao chưa chắc tốt) ---
+Nhóm điểm mốc  |      NME |   Sai px
+------------------------------------------
+Mắt            |    5.51% |    2.20px
+Miệng          |    7.42% |    2.99px
+Mũi/Cằm        |    7.09% |    2.85px
+------------------------------------------
+TỔNG THỂ       |    6.32% |    2.54px
+• Mẫu tệ nhất : #254 | P21 lệch 23.2px
+• 5 điểm tệ nhất: P21(4.0px, biasX-0.0) | P13(3.3px, biasX-0.2) | P12(3.2px, biasX-0.3) | P15(3.1px, biasX-0.2) | P19(3.0px, biasX-0.5)
+
+--- ĐÁNH GIÁ ĐỘ NHẠY SINH TRẮC HỌC (EAR & MAR BIOMETRIC METRICS) ---
+• Sai số tuyệt đối (MAE)        : EAR MAE = 0.0517 | MAR MAE = 0.0994
+• Mẫu Nhắm mắt (EAR_true < 0.20): 291 mẫu | GT=0.079 -> Pred=0.127 | Bắt ngủ gật (EAR<0.22): 84.5%
+• Mẫu Ngáp to (MAR_true >= 0.40): 204 mẫu | GT=0.640 -> Pred=0.529 | Bắt ngáp (MAR>=0.40): 68.6%
+• Mẫu Tỉnh táo bình thường      : 334 mẫu | EAR: GT=0.304 -> 0.290 | MAR: GT=0.229 -> 0.283
+  ✅ Mô hình phản hồi sắc nét, không bị kẹt giá trị trung bình!
+--------------------------------------------------------------------------
+
+--- NME JITTER (LOCALIZATION — chỉ số quyết định) ---
+Nhóm điểm mốc  |      NME |   Sai px
+------------------------------------------
+Mắt            |    8.79% |    3.53px
+Miệng          |   11.10% |    4.52px
+Mũi/Cằm        |   11.47% |    4.65px
+------------------------------------------
+TỔNG THỂ       |    9.91% |    4.01px
+• Mẫu tệ nhất : #254 | P21 lệch 30.8px
+• 5 điểm tệ nhất: P21(5.8px, biasX-0.0) | P19(5.2px, biasX-0.6) | P15(4.8px, biasX-0.2) | P17(4.5px, biasX-0.4) | P14(4.5px, biasX-0.5)
+
+--- ĐÁNH GIÁ ĐỘ NHẠY SINH TRẮC HỌC (EAR & MAR BIOMETRIC METRICS) ---
+• Sai số tuyệt đối (MAE)        : EAR MAE = 0.0599 | MAR MAE = 0.1146
+• Mẫu Nhắm mắt (EAR_true < 0.20): 582 mẫu | GT=0.079 -> Pred=0.139 | Bắt ngủ gật (EAR<0.22): 81.8%
+• Mẫu Ngáp to (MAR_true >= 0.40): 408 mẫu | GT=0.640 -> Pred=0.493 | Bắt ngáp (MAR>=0.40): 63.5%
+• Mẫu Tỉnh táo bình thường      : 668 mẫu | EAR: GT=0.304 -> 0.280 | MAR: GT=0.229 -> 0.294
+  ✅ Mô hình phản hồi sắc nét, không bị kẹt giá trị trung bình!
+--------------------------------------------------------------------------
+
+==========================================================================
+• TỈ LỆ Jitter/Canonical : 1.57x (✅ <2.0x — mô hình ĐỊNH VỊ pixel thật)
+
+==========================================================================
+• CỔNG NHÓM MIỆNG (P12-P17): NME Jitter = 11.10% (✅ ĐẠT (<12%))
+• CỔNG PHẢN HỒI MẮT (EAR) : EAR_MAE = 5.99% | EAR khi nhắm = 0.139 (✅ ĐẠT (<6% / <0.16))
+🏆 KẾT LUẬN: ✅ ĐẠT CHUẨN TỐT (Canonical <8%, Jitter <12%, Miệng <12%, EAR đạt) — Được phép nạp ESP32-S3.
+==========================================================================

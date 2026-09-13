@@ -12,7 +12,7 @@ static const char* TAG = "AI_INFERENCE";
 
 // Preferred INTERNAL-SRAM arena sizes (KB), tried largest-first.
 // TFLM only needs ~292 KB; internal SRAM avoids the ~6x PSRAM stall penalty.
-static const size_t kArenaInternalCandidatesKB[] = { 384, 352, 320, 288, 256, 224 };
+static const size_t kArenaInternalCandidatesKB[] = { 384, 336, 288, 256, 224, 192, 160, 128 };
 #define ARENA_NUM_CANDIDATES (sizeof(kArenaInternalCandidatesKB) / sizeof(kArenaInternalCandidatesKB[0]))
 
 static uint8_t* s_tensor_arena = NULL;

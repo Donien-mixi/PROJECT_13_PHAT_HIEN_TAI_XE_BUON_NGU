@@ -1,0 +1,2 @@
+ninja: error: remove(esp-idf\main\CMakeFiles\__idf_main.dir\ai_inference.cpp.obj.d): The process cannot access the file because it is being used by another process.
+

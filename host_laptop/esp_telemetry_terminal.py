@@ -23,6 +23,13 @@ import time
 if os.name == "nt":
     os.system("")
 
+# Ép UTF-8 để hiển thị được tiếng Việt + emoji trên mọi console
+for stream in (sys.stdout, sys.stderr):
+    try:
+        stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 RESET = "\033[0m"
 BOLD = "\033[1m"
 RED = "\033[91m"
@@ -90,11 +97,14 @@ def main():
     args = ap.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         sock.bind((args.bind, args.port))
     except OSError as e:
         print(f"❌ Không bind được UDP {args.bind}:{args.port} -> {e}")
+        print("   Cổng có thể đang bị một tiến trình khác chiếm (lần trước chạy chưa tắt).")
+        print("   Kiểm tra:  Get-NetUDPEndpoint -LocalPort %d | Select-Object LocalPort,OwningProcess" % args.port)
+        print("   Rồi tắt:   Stop-Process -Id <PID> -Force")
+        print("   (Mẹo: chỉ chạy MỘT cửa sổ telemetry tại một thời điểm.)")
         sys.exit(1)
 
     sock.settimeout(0.25)

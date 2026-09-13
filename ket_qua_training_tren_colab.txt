@@ -1,0 +1,195 @@
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 37.9/37.9 MB 58.4 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 137.4/137.4 kB 14.8 MB/s eta 0:00:00
+training_package.zip
+training_package.zip(application/x-zip-compressed) - 63410156 bytes, last modified: 13/9/2026 - 100% done
+Saving training_package.zip to training_package.zip
+2026-09-13 09:39:38.775154: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+===========================================================================
+🚀 BẮT ĐẦU HUẤN LUYỆN TINYDRIVER PFLD-EDGE (PHIÊN BẢN CẢI TIẾN)
+   Kiến trúc: MobileNetV2 MBConv + Multi-Scale Fusion + Auxiliary 3D Pose Head
+   Hàm mất mát: Adaptive Biometric Wing Loss + Geometric EAR/MAR Constraint Loss
+   Tăng cường: Bounding Box Translation & Scale Jitter (Triệt tiêu Mean Face)
+   Mục tiêu:   Mixed-Precision INT8 (Convs INT8 + Head Float32) cho ESP32-S3 N16R8
+===========================================================================
+✅ Đã kích hoạt phần cứng GPU: /physical_device:GPU:0 (Khuyên dùng Tesla T4)
+
+[Bước 1/5] Khởi tạo Mô hình Thầy MediaPipe Face Mesh...
+[Teacher] Dang dong bo mo hinh MediaPipe Tasks Face Landmarker (~3.7MB)...
+WARNING: Logging before InitGoogle() is written to STDERR
+W0000 00:00:1789292383.863653    2883 face_landmarker_graph.cc:180] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1789292383.877766    2888 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1789292383.894768    2888 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[Teacher] MediaPipe Tasks FaceLandmarker Teacher da san sang (478 -> 22 Landmarks)!
+  ✓ Mô hình Thầy MediaPipe Face Mesh đã sẵn sàng dán nhãn sinh học!
+
+[Bước 2/5] Chuẩn bị dữ liệu Full Mặt (Preprocessed Real Dataset) + In-Cabin Augmentation...
+  ✓ Đã phát hiện tập dữ liệu tiền xử lý chuẩn: preprocessed_driver_dataset.npz
+[DatasetLoader] [LIVE-DOMAIN] +600 mẫu camera thật x1 = 600 mẫu vào TRAIN (chống lệch miền webcam).
+[DatasetLoader] [SUCCESS] Đã nạp 8251 mẫu thật từ: /content/training_tinyml/preprocessed_driver_dataset.npz
+  • Train: 7494 | Val giữ-out: 757
+[DatasetLoader] [REAL-DATA] Kích hoạt luồng huấn luyện Thực Tế (3-Way Balanced Sampling): 7494 mẫu train!
+  • Mẫu nhắm mắt/microsleep thật (EAR < 0.20): 3157 mẫu
+  • Mẫu ngáp/há miệng thật      (MAR >= 0.40): 1208 mẫu
+  • Mẫu tỉnh táo/bình thường    (Attentive)   : 3129 mẫu
+    [STATIC-EXPAND] Đang tiền-tính 49506 bản augment cân bằng 3 trạng thái (14851 nhắm mắt + 14851 ngáp + 19804 tỉnh táo, expand_factor=6)...
+    [STATIC-EXPAND] Xong trong 67.8s (49506 mẫu: 14851 nhắm mắt / 14851 ngáp / 19804 tỉnh táo, RAM ~456MB, ĐÃ TRỘN TOÀN CỤC)
+2026-09-13 09:40:52.880066: W tensorflow/core/common_runtime/gpu/gpu_bfc_allocator.cc:47] Overriding orig_value setting because the TF_FORCE_GPU_ALLOW_GROWTH environment variable is set. Original config value was 0.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789292452.881528    2834 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 13757 MB memory:  -> device: 0, name: Tesla T4, pci bus id: 0000:00:04.0, compute capability: 7.5
+  ✓ [STATIC-EXPAND] Tiền-tính augment x6 xong -> epoch chỉ chạy GPU thuần (~15-25s)
+  ✓ Mẫu huấn luyện (Augmented): 42081 | Mẫu kiểm chuẩn: 7425
+  ✓ Kích hoạt Bounding Box Translation Jitter: triệt tiêu học vẹt tọa độ cố định.
+  ✓ [REAL-VAL] Val giữ-out THẬT: 757 mẫu (NME mỗi epoch trên bản JITTER x2 = 1514 mẫu, tối đa 600)
+
+[Bước 3/5] Xây dựng kiến trúc PFLD-Edge với Auxiliary 3D Pose Head...
+  ✓ Kiến trúc PFLD-Edge: 204,095 tham số
+  ✓ Tích hợp Inverted Residual Blocks (MBConv) + Nhánh ước lượng góc đầu 3D
+  ✓ Hàm mất mát v2.3.0 [EAR-MẠNH / MAR-YẾU]: Wing(toạ độ) + EAR x28.0 + MAR x1.5 + LipGap x4.0 + MouthWidth x5.0 (mẫu số clamp, bỏ focal/detach)
+
+[Bước 4/5] Bắt đầu huấn luyện qua 60 epochs...
+2026-09-13 09:41:12.697131: I external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:473] Loaded cuDNN version 91900
+  [Epoch 01/60] Step 657/657 (100%) | Loss:  53.56 (LM:  53.51)2026-09-13 09:41:53.718087: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+2026-09-13 09:41:58.552928: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch  1/60 [62.6s] - Train:  66.45 (LM:  66.39) | Val:  36.49 | NME: overall 16.25% (mắt 15.08% / miệng 17.38% / mũi-cằm 18.03%) | EAR_MAE 9.52% (nhắm->0.161) ⭐ (Best)
+  [Epoch 02/60] Step 657/657 (100%) | Loss:  47.43 (LM:  47.38)2026-09-13 09:42:41.047383: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch  2/60 [41.6s] - Train:  49.76 (LM:  49.71) | Val:  30.18 | NME: overall 13.64% (mắt 12.99% / miệng 14.66% / mũi-cằm 14.08%) | EAR_MAE 8.78% (nhắm->0.123) ⭐ (Best)
+Epoch  3/60 [44.9s] - Train:  46.15 (LM:  46.11) | Val:  28.29 | NME: overall 12.93% (mắt 12.63% / miệng 13.47% / mũi-cằm 13.00%) | EAR_MAE 8.01% (nhắm->0.155) ⭐ (Best)
+  [Epoch 04/60] Step 657/657 (100%) | Loss:  43.68 (LM:  43.64)2026-09-13 09:44:12.252854: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch  4/60 [44.5s] - Train:  43.85 (LM:  43.81) | Val:  26.39 | NME: overall 12.29% (mắt 11.74% / miệng 13.07% / mũi-cằm 12.77%) | EAR_MAE 7.34% (nhắm->0.131) ⭐ (Best)
+Epoch  5/60 [43.8s] - Train:  42.44 (LM:  42.40) | Val:  25.54 | NME: overall 11.87% (mắt 11.12% / miệng 12.87% / mũi-cằm 12.63%) | EAR_MAE 7.86% (nhắm->0.115) 
+Epoch  6/60 [44.5s] - Train:  41.59 (LM:  41.55) | Val:  23.53 | NME: overall 11.04% (mắt 10.10% / miệng 12.21% / mũi-cằm 12.11%) | EAR_MAE 6.78% (nhắm->0.125) ⭐ (Best)
+Epoch  7/60 [43.5s] - Train:  40.86 (LM:  40.83) | Val:  23.52 | NME: overall 11.25% (mắt 10.46% / miệng 12.17% / mũi-cằm 12.24%) | EAR_MAE 7.78% (nhắm->0.106) 
+  [Epoch 08/60] Step 657/657 (100%) | Loss:  41.14 (LM:  41.12)2026-09-13 09:47:11.817652: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch  8/60 [44.2s] - Train:  40.48 (LM:  40.44) | Val:  23.18 | NME: overall 11.29% (mắt 10.41% / miệng 12.39% / mũi-cằm 12.27%) | EAR_MAE 6.96% (nhắm->0.121) 
+Epoch  9/60 [43.2s] - Train:  40.26 (LM:  40.22) | Val:  21.84 | NME: overall 10.83% (mắt 9.99% / miệng 11.76% / mũi-cằm 11.96%) | EAR_MAE 6.16% (nhắm->0.113) ⭐ (Best)
+Epoch 10/60 [43.9s] - Train:  39.96 (LM:  39.93) | Val:  21.77 | NME: overall 10.77% (mắt 9.86% / miệng 11.81% / mũi-cằm 11.95%) | EAR_MAE 6.55% (nhắm->0.113) 
+Epoch 11/60 [43.1s] - Train:  39.82 (LM:  39.79) | Val:  22.03 | NME: overall 10.71% (mắt 9.87% / miệng 11.59% / mũi-cằm 11.90%) | EAR_MAE 6.64% (nhắm->0.119) 
+Epoch 12/60 [44.5s] - Train:  39.72 (LM:  39.69) | Val:  22.22 | NME: overall 11.03% (mắt 9.99% / miệng 12.26% / mũi-cằm 12.33%) | EAR_MAE 6.12% (nhắm->0.122) 
+Epoch 13/60 [43.3s] - Train:  39.54 (LM:  39.51) | Val:  20.99 | NME: overall 10.40% (mắt 9.37% / miệng 11.57% / mũi-cằm 11.74%) | EAR_MAE 5.77% (nhắm->0.111) ⭐ (Best)
+Epoch 14/60 [43.6s] - Train:  39.43 (LM:  39.40) | Val:  21.71 | NME: overall 10.62% (mắt 9.60% / miệng 11.79% / mũi-cằm 11.91%) | EAR_MAE 5.92% (nhắm->0.125) 
+Epoch 15/60 [43.3s] - Train:  39.31 (LM:  39.29) | Val:  21.57 | NME: overall 10.77% (mắt 9.91% / miệng 11.68% / mũi-cằm 12.00%) | EAR_MAE 6.00% (nhắm->0.106) 
+  [Epoch 16/60] Step 657/657 (100%) | Loss:  40.43 (LM:  40.41)2026-09-13 09:53:06.096733: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch 16/60 [43.7s] - Train:  39.25 (LM:  39.23) | Val:  21.57 | NME: overall 10.28% (mắt 9.31% / miệng 11.29% / mũi-cằm 11.71%) | EAR_MAE 6.03% (nhắm->0.112) ⭐ (Best)
+Epoch 17/60 [43.0s] - Train:  39.14 (LM:  39.12) | Val:  22.70 | NME: overall 10.94% (mắt 10.19% / miệng 11.67% / mũi-cằm 12.10%) | EAR_MAE 5.57% (nhắm->0.119) ⭐ (Best)
+Epoch 18/60 [44.0s] - Train:  39.04 (LM:  39.02) | Val:  21.48 | NME: overall 10.28% (mắt 9.25% / miệng 11.36% / mũi-cằm 11.75%) | EAR_MAE 5.70% (nhắm->0.129) ⭐ (Best)
+Epoch 19/60 [43.2s] - Train:  38.97 (LM:  38.94) | Val:  22.02 | NME: overall 10.51% (mắt 9.74% / miệng 11.22% / mũi-cằm 11.75%) | EAR_MAE 6.03% (nhắm->0.139) 
+Epoch 20/60 [43.6s] - Train:  38.87 (LM:  38.85) | Val:  21.66 | NME: overall 10.34% (mắt 9.56% / miệng 11.12% / mũi-cằm 11.52%) | EAR_MAE 5.63% (nhắm->0.118) ⭐ (Best)
+Epoch 21/60 [44.4s] - Train:  38.76 (LM:  38.74) | Val:  21.06 | NME: overall 10.13% (mắt 9.22% / miệng 11.08% / mũi-cằm 11.43%) | EAR_MAE 5.63% (nhắm->0.119) ⭐ (Best)
+Epoch 22/60 [44.8s] - Train:  38.73 (LM:  38.71) | Val:  22.92 | NME: overall 10.30% (mắt 9.44% / miệng 11.09% / mũi-cằm 11.66%) | EAR_MAE 6.48% (nhắm->0.149) 
+Epoch 23/60 [44.4s] - Train:  38.66 (LM:  38.63) | Val:  22.45 | NME: overall 10.33% (mắt 9.44% / miệng 11.15% / mũi-cằm 11.74%) | EAR_MAE 5.86% (nhắm->0.121) 
+Epoch 24/60 [43.7s] - Train:  38.54 (LM:  38.51) | Val:  21.61 | NME: overall 10.34% (mắt 9.52% / miệng 11.18% / mũi-cằm 11.53%) | EAR_MAE 6.20% (nhắm->0.126) 
+Epoch 25/60 [45.3s] - Train:  38.44 (LM:  38.41) | Val:  21.94 | NME: overall 10.15% (mắt 9.21% / miệng 11.04% / mũi-cằm 11.60%) | EAR_MAE 6.00% (nhắm->0.125) 
+Epoch 26/60 [45.5s] - Train:  38.39 (LM:  38.36) | Val:  23.11 | NME: overall 10.26% (mắt 9.44% / miệng 10.97% / mũi-cằm 11.67%) | EAR_MAE 5.95% (nhắm->0.128) 
+Epoch 27/60 [45.3s] - Train:  38.33 (LM:  38.31) | Val:  22.22 | NME: overall 10.30% (mắt 9.61% / miệng 10.91% / mũi-cằm 11.45%) | EAR_MAE 6.01% (nhắm->0.131) 
+Epoch 28/60 [47.0s] - Train:  38.29 (LM:  38.27) | Val:  22.37 | NME: overall 10.30% (mắt 9.56% / miệng 11.02% / mũi-cằm 11.43%) | EAR_MAE 5.99% (nhắm->0.134) 
+Epoch 29/60 [46.0s] - Train:  38.17 (LM:  38.15) | Val:  21.91 | NME: overall 9.96% (mắt 9.01% / miệng 10.92% / mũi-cằm 11.41%) | EAR_MAE 5.85% (nhắm->0.117) 
+Epoch 30/60 [45.0s] - Train:  38.12 (LM:  38.10) | Val:  21.99 | NME: overall 9.94% (mắt 9.07% / miệng 10.76% / mũi-cằm 11.31%) | EAR_MAE 5.92% (nhắm->0.127) ⭐ (Best)
+Epoch 31/60 [43.8s] - Train:  38.09 (LM:  38.07) | Val:  22.24 | NME: overall 10.13% (mắt 9.33% / miệng 10.95% / mũi-cằm 11.33%) | EAR_MAE 5.95% (nhắm->0.130) 
+  [Epoch 32/60] Step 657/657 (100%) | Loss:  36.68 (LM:  36.67)2026-09-13 10:05:10.317235: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+Epoch 32/60 [42.7s] - Train:  37.99 (LM:  37.96) | Val:  22.88 | NME: overall 10.32% (mắt 9.62% / miệng 10.90% / mũi-cằm 11.56%) | EAR_MAE 5.95% (nhắm->0.128) 
+Epoch 33/60 [44.0s] - Train:  37.86 (LM:  37.84) | Val:  22.13 | NME: overall 10.17% (mắt 9.35% / miệng 10.99% / mũi-cằm 11.38%) | EAR_MAE 6.03% (nhắm->0.135) 
+Epoch 34/60 [44.8s] - Train:  37.78 (LM:  37.76) | Val:  23.50 | NME: overall 10.49% (mắt 9.75% / miệng 11.12% / mũi-cằm 11.76%) | EAR_MAE 6.06% (nhắm->0.131) 
+Epoch 35/60 [43.8s] - Train:  37.72 (LM:  37.70) | Val:  22.02 | NME: overall 10.24% (mắt 9.41% / miệng 11.07% / mũi-cằm 11.46%) | EAR_MAE 5.82% (nhắm->0.123) 
+Epoch 36/60 [44.8s] - Train:  37.68 (LM:  37.66) | Val:  22.81 | NME: overall 10.26% (mắt 9.51% / miệng 10.95% / mũi-cằm 11.44%) | EAR_MAE 6.08% (nhắm->0.132) 
+Epoch 37/60 [45.3s] - Train:  37.58 (LM:  37.56) | Val:  22.57 | NME: overall 10.28% (mắt 9.53% / miệng 11.01% / mũi-cằm 11.44%) | EAR_MAE 5.81% (nhắm->0.117) 
+Epoch 38/60 [45.4s] - Train:  37.56 (LM:  37.53) | Val:  23.08 | NME: overall 10.37% (mắt 9.73% / miệng 10.92% / mũi-cằm 11.51%) | EAR_MAE 5.98% (nhắm->0.132) 
+Epoch 39/60 [85.4s] - Train:  37.47 (LM:  37.44) | Val:  23.15 | NME: overall 10.32% (mắt 9.57% / miệng 10.99% / mũi-cằm 11.53%) | EAR_MAE 5.88% (nhắm->0.120) 
+Epoch 40/60 [85.5s] - Train:  37.41 (LM:  37.39) | Val:  23.54 | NME: overall 10.38% (mắt 9.72% / miệng 10.88% / mũi-cằm 11.58%) | EAR_MAE 5.90% (nhắm->0.114) 
+Epoch 41/60 [45.1s] - Train:  37.32 (LM:  37.30) | Val:  22.83 | NME: overall 10.27% (mắt 9.50% / miệng 10.99% / mũi-cằm 11.48%) | EAR_MAE 5.88% (nhắm->0.116) 
+Epoch 42/60 [46.1s] - Train:  37.29 (LM:  37.26) | Val:  23.78 | NME: overall 10.43% (mắt 9.77% / miệng 10.99% / mũi-cằm 11.56%) | EAR_MAE 5.97% (nhắm->0.120) 
+Epoch 43/60 [43.7s] - Train:  37.18 (LM:  37.15) | Val:  23.39 | NME: overall 10.28% (mắt 9.60% / miệng 10.84% / mũi-cằm 11.47%) | EAR_MAE 5.98% (nhắm->0.128) 
+Epoch 44/60 [44.3s] - Train:  37.09 (LM:  37.07) | Val:  23.37 | NME: overall 10.20% (mắt 9.51% / miệng 10.80% / mũi-cằm 11.40%) | EAR_MAE 5.96% (nhắm->0.121) 
+Epoch 45/60 [42.4s] - Train:  37.06 (LM:  37.04) | Val:  23.89 | NME: overall 10.44% (mắt 9.75% / miệng 11.01% / mũi-cằm 11.64%) | EAR_MAE 5.89% (nhắm->0.122) 
+Epoch 46/60 [43.1s] - Train:  36.99 (LM:  36.97) | Val:  23.47 | NME: overall 10.31% (mắt 9.63% / miệng 10.89% / mũi-cằm 11.48%) | EAR_MAE 5.89% (nhắm->0.121) 
+Epoch 47/60 [42.5s] - Train:  36.93 (LM:  36.90) | Val:  23.52 | NME: overall 10.33% (mắt 9.66% / miệng 10.95% / mũi-cằm 11.44%) | EAR_MAE 5.95% (nhắm->0.124) 
+Epoch 48/60 [43.2s] - Train:  36.89 (LM:  36.87) | Val:  24.00 | NME: overall 10.48% (mắt 9.83% / miệng 11.03% / mũi-cằm 11.59%) | EAR_MAE 5.87% (nhắm->0.121) 
+Epoch 49/60 [42.6s] - Train:  36.83 (LM:  36.80) | Val:  24.10 | NME: overall 10.48% (mắt 9.83% / miệng 11.04% / mũi-cằm 11.60%) | EAR_MAE 5.89% (nhắm->0.125) 
+Epoch 50/60 [43.3s] - Train:  36.77 (LM:  36.75) | Val:  24.21 | NME: overall 10.49% (mắt 9.83% / miệng 11.03% / mũi-cằm 11.66%) | EAR_MAE 5.99% (nhắm->0.126) 
+Epoch 51/60 [43.1s] - Train:  36.73 (LM:  36.71) | Val:  24.20 | NME: overall 10.52% (mắt 9.90% / miệng 11.02% / mũi-cằm 11.63%) | EAR_MAE 5.92% (nhắm->0.124) 
+Epoch 52/60 [43.2s] - Train:  36.68 (LM:  36.66) | Val:  24.17 | NME: overall 10.55% (mắt 9.93% / miệng 11.04% / mũi-cằm 11.64%) | EAR_MAE 5.94% (nhắm->0.127) 
+Epoch 53/60 [42.9s] - Train:  36.64 (LM:  36.62) | Val:  24.15 | NME: overall 10.46% (mắt 9.86% / miệng 10.95% / mũi-cằm 11.54%) | EAR_MAE 5.90% (nhắm->0.123) 
+Epoch 54/60 [43.2s] - Train:  36.57 (LM:  36.54) | Val:  24.34 | NME: overall 10.51% (mắt 9.90% / miệng 11.00% / mũi-cằm 11.61%) | EAR_MAE 5.95% (nhắm->0.126) 
+Epoch 55/60 [43.1s] - Train:  36.59 (LM:  36.57) | Val:  24.20 | NME: overall 10.45% (mắt 9.83% / miệng 10.95% / mũi-cằm 11.54%) | EAR_MAE 5.91% (nhắm->0.125) 
+Epoch 56/60 [43.6s] - Train:  36.54 (LM:  36.51) | Val:  24.43 | NME: overall 10.50% (mắt 9.90% / miệng 10.97% / mũi-cằm 11.60%) | EAR_MAE 6.00% (nhắm->0.128) 
+Epoch 57/60 [43.6s] - Train:  36.54 (LM:  36.52) | Val:  24.33 | NME: overall 10.46% (mắt 9.82% / miệng 10.98% / mũi-cằm 11.58%) | EAR_MAE 5.91% (nhắm->0.125) 
+Epoch 58/60 [44.0s] - Train:  36.54 (LM:  36.51) | Val:  24.47 | NME: overall 10.48% (mắt 9.87% / miệng 10.97% / mũi-cằm 11.58%) | EAR_MAE 5.92% (nhắm->0.127) 
+Epoch 59/60 [42.9s] - Train:  36.53 (LM:  36.51) | Val:  24.47 | NME: overall 10.47% (mắt 9.86% / miệng 10.97% / mũi-cằm 11.58%) | EAR_MAE 5.95% (nhắm->0.127) 
+Epoch 60/60 [44.5s] - Train:  36.47 (LM:  36.45) | Val:  24.47 | NME: overall 10.46% (mắt 9.84% / miệng 10.95% / mũi-cằm 11.56%) | EAR_MAE 5.94% (nhắm->0.126) 
+
+✅ Huấn luyện hoàn tất sau: 2783.7 giây!, Best Composite Score (max(NME, Miệng)+EAR_MAE): 16.68%
+  ✓ Đã nạp lại trọng số tốt nhất (Best Weights).
+
+===========================================================================
+📊 BÁO CÁO NME & SAI SỐ ĐỊNH VỊ CUỐI CÙNG (Val giữ-out người thật 100%):
+===========================================================================
+1. NME CANONICAL (Đo trên khuôn mặt chuẩn, không rung lắc biến dạng):
+   • NME Tổng thể             : 6.28% (✅ ĐẠT CHUẨN TỐT (<8%))
+   • Sai số pixel trung bình : 2.52px / 96px (Toàn bộ 22 điểm mốc)
+   • Sai số nhóm Mắt         : 5.47% (2.19px)
+   • Sai số nhóm Miệng       : 7.41% (2.99px)
+   • Sai số nhóm Mũi / Cằm   : 7.03% (2.82px)
+
+2. NME JITTER (Khả năng định vị pixel khi bị rung lắc dịch chuyển/xoay):
+   • NME Jitter Tổng thể      : 9.88% (✅ ĐẠT CHUẨN KHÁ (<12%))
+   • Sai số pixel trung bình : 3.99px / 96px
+   • Sai số nhóm Mắt         : 8.76% (3.52px)
+   • Sai số nhóm Miệng       : 11.07% (4.50px)
+   • Sai số nhóm Mũi / Cằm   : 11.43% (4.64px)
+   • Mẫu biên ngoại lệ tệ nhất: #254 (P21 lệch tối đa 30.7px - chỉ là 1 mẫu cá biệt)
+
+3. ĐÁNH GIÁ ĐỊNH VỊ (Tỉ lệ Jitter/Canonical):
+   • Tỉ lệ Jitter / Canon     : 1.57x (✅ ĐẠT CHUẨN (<2.0x): Mô hình định vị pixel thật, không học vẹt!)
+
+4. CỔNG NHÓM MIỆNG (chống sập khóe miệng P12/P13):
+   • NME Miệng Jitter         : 11.07% (✅ ĐẠT (<12%))
+
+5. CỔNG PHẢN HỒI MẮT (chống nén dải EAR):
+   • EAR MAE (jitter)          : 5.94% (ngưỡng <6%)
+   • EAR đoán khi mắt NHẮM thật: 0.124 (ngưỡng <0.16, càng thấp càng nhạy)
+   • Đánh giá                  : ✅ ĐẠT — mắt phản hồi nhắm/mở tốt
+===========================================================================
+   👉 Kiểm tra lại sau khi tải về bằng: python evaluation/eval_nme_holdout.py
+
+  ✓ Đã lưu biểu đồ tiến trình: training_loss.png
+
+[Bước 5/5] Cắt bỏ Auxiliary Head và Lượng tử hóa Mixed-Precision cho ESP32-S3...
+  ✓ Mô hình xuất xưởng (Landmark-Only): 200,764 tham số
+WARNING:absl:Please consider providing the trackable_obj argument in the from_concrete_functions. Providing without the trackable_obj argument is deprecated and it will use the deprecated conversion path.
+I0000 00:00:1789295243.311643    2834 devices.cc:67] Number of eligible GPUs (core count >= 8, compute capability >= 0.0): 1
+I0000 00:00:1789295243.311817    2834 single_machine.cc:376] Starting new session
+I0000 00:00:1789295243.319800    2834 gpu_device.cc:2020] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 13757 MB memory:  -> device: 0, name: Tesla T4, pci bus id: 0000:00:04.0, compute capability: 7.5
+/usr/local/lib/python3.13/dist-packages/tensorflow/lite/python/convert.py:863: UserWarning: Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+W0000 00:00:1789295243.714635    2834 tf_tfl_flatbuffer_helpers.cc:364] Ignored output_format.
+W0000 00:00:1789295243.714689    2834 tf_tfl_flatbuffer_helpers.cc:367] Ignored drop_control_dependency.
+2026-09-13 10:27:23.877240: I tensorflow/compiler/mlir/lite/flatbuffer_export.cc:4150] Estimated count of arithmetic ops: 16.493 M  ops, equivalently 8.246 M  MACs
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: FLOAT32
+2026-09-13 10:27:26.552828: I tensorflow/compiler/mlir/lite/flatbuffer_export.cc:4150] Estimated count of arithmetic ops: 16.493 M  ops, equivalently 8.246 M  MACs
+2026-09-13 10:27:26.552882: W tensorflow/compiler/mlir/lite/flatbuffer_export.cc:3705] Skipping runtime version metadata in the model. This will be generated by the exporter.
+  ✓ Kích thước mô hình Mixed-Precision: 249,368 bytes (243.5 KB)
+/usr/local/lib/python3.13/dist-packages/tensorflow/lite/python/interpreter.py:457: UserWarning:     Warning: tf.lite.Interpreter is deprecated and is scheduled for deletion in
+    TF 2.20. Please use the LiteRT interpreter from the ai_edge_litert package.
+    See the [migration guide](https://ai.google.dev/edge/litert/migration)
+    for details.
+    
+  warnings.warn(_INTERPRETER_DELETION_WARNING)
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[Export] Đã xuất file C Header thành công tại: /content/colab_output/tinydriver_model_data.h
+  ✓ Đã tạo file C Header: tinydriver_model_data.h (16-byte aligned, Output Float32: True)
+  ✓ Đã đóng gói val_holdout.npz (757 mẫu giữ-out) vào gói
+
+===========================================================================
+🎉 ĐÓNG GÓI THÀNH CÔNG: tinydriver_esp32_package.zip (6242.7 KB)
+===========================================================================
+📥 Đang gửi lệnh tự động tải file tinydriver_esp32_package.zip về máy tính của bạn...
+ℹ️ File kết quả đã sẵn sàng tại: /content/tinydriver_esp32_package.zip
+
+👉 BƯỚC TIẾP THEO TRÊN MÁY TÍNH CỦA BẠN:
+  1. Chạy lệnh nạp model tự động:
+     python tools/project_manager.py --deploy-model tinydriver_esp32_package.zip
+  2. Chạy thử AI với Webcam trên Laptop:
+     python host_laptop/local_model_tester.py --cam 0
+===========================================================================
+I0000 00:00:1789295250.983411    2885 migration_state_tracking.cc:24] Migration not enabled - not starting notification watcher.

@@ -91,16 +91,29 @@ NOSE_TIP_PT = 19
 NOSE_WING_PT = 20
 CHIN_PT = 21
 
-# [v2.4.1 - RESTORE] Model 3D gốc, dùng CHUNG cho cả TinyDriver lẫn MediaPipe.
-# Trả về NGUYÊN BẢN để KHÔNG can thiệp vào phần hiển thị pose/trục của MediaPipe.
-FACE_3D_MODEL = np.array([
+# [v2.6.2] HAI bộ điểm PnP:
+#  - FULL (có cằm P21 + khóe miệng P12/P13): giầu cấu trúc 3D -> YAW CHÍNH XÁC khi quay đầu.
+#  - RIGID (mắt + mũi): không biến dạng -> pose KHÔNG lệch khi ngáp.
+# Chọn theo MAR: miệng ngậm -> FULL; đang ngáp -> RIGID.
+FACE_3D_MODEL_FULL = np.array([
     [  0.0,   0.0,   0.0],    # 0: Chóp mũi (Nose Tip P19)
     [  0.0,  65.0, -35.0],    # 1: Chóp cằm (Chin P21: +Y hướng xuống)
-    [-43.0, -32.0, -30.0],    # 2: Khóe mắt ngoài bên trái (Index 0: -X, -Y hướng lên)
-    [ 43.0, -32.0, -30.0],    # 3: Khóe mắt ngoài bên phải (Index 9: +X, -Y hướng lên)
-    [-30.0,  30.0, -20.0],    # 4: Khóe miệng bên trái (Index 12: -X, +Y hướng xuống)
-    [ 30.0,  30.0, -20.0]     # 5: Khóe miệng bên phải (Index 13: +X, +Y hướng xuống)
+    [-43.0, -32.0, -30.0],    # 2: Khóe mắt ngoài trái (P0)
+    [ 43.0, -32.0, -30.0],    # 3: Khóe mắt ngoài phải (P9)
+    [-30.0,  30.0, -20.0],    # 4: Khóe miệng trái (P12)
+    [ 30.0,  30.0, -20.0]     # 5: Khóe miệng phải (P13)
 ], dtype=np.float64)
+
+FACE_3D_MODEL_RIGID = np.array([
+    [  0.0, -33.0, -38.0],    # 0: Sống mũi (Nasion P18)
+    [  0.0,   0.0,   0.0],    # 1: Chóp mũi (Nose Tip P19, gốc)
+    [-43.0, -32.0, -30.0],    # 2: Khóe mắt trái ngoài (P0)
+    [-15.0, -33.0, -33.0],    # 3: Khóe mắt trái trong (P3)
+    [ 15.0, -33.0, -33.0],    # 4: Khóe mắt phải trong (P6)
+    [ 43.0, -32.0, -30.0]     # 5: Khóe mắt phải ngoài (P9)
+], dtype=np.float64)
+
+FACE_3D_MODEL = FACE_3D_MODEL_FULL  # mặc định (tương thích)
 
 
 def enhance_low_light(frame_bgr, target_luma=115.0):
@@ -802,9 +815,12 @@ def compute_mar(landmarks_px, mouth_indices):
 def solve_head_pose_pnp(landmarks_px, img_w, img_h):
     """Ước lượng góc xoay đầu 3D (Yaw, Pitch, Roll) bằng PnP đối chiếu với mô hình nhân trắc học kết hợp Robust Gating."""
     p_nose = landmarks_px[NOSE_TIP_PT]
+    p_nasion = landmarks_px[NASION_PT]
+    p_eye_l = landmarks_px[LEFT_EYE_PTS[0]]      # khóe mắt trái NGOÀI (P0)
+    p_eye_li = landmarks_px[LEFT_EYE_PTS[3]]     # khóe mắt trái TRONG (P3)
+    p_eye_ri = landmarks_px[RIGHT_EYE_PTS[0]]    # khóe mắt phải TRONG (P6)
+    p_eye_r = landmarks_px[RIGHT_EYE_PTS[3]]     # khóe mắt phải NGOÀI (P9)
     p_chin = landmarks_px[CHIN_PT]
-    p_eye_l = landmarks_px[LEFT_EYE_PTS[0]]
-    p_eye_r = landmarks_px[RIGHT_EYE_PTS[3]]
     p_mouth_l = landmarks_px[MOUTH_PTS[0]]
     p_mouth_r = landmarks_px[MOUTH_PTS[1]]
 
@@ -818,19 +834,11 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
         ratio = np.clip(dx_nose / (0.35 * d_eyes), -1.0, 1.0)
         geom_yaw = float(math.degrees(math.asin(ratio)))
 
-    # 2. Kiểm tra tính toàn vẹn của khóe miệng (Mouth Width Degeneracy Gating)
-    mouth_w = float(np.linalg.norm(p_mouth_r - p_mouth_l))
-    mouth_valid = (d_eyes > 10.0) and ((mouth_w / d_eyes) >= 0.35)
-
-    # 6 điểm đối xứng chuẩn
-    pts_2d = np.array([
-        p_nose,
-        p_chin,
-        p_eye_l,
-        p_eye_r,
-        p_mouth_l,
-        p_mouth_r
-    ], dtype=np.float64)
+    # 2. [v2.6.3] DÙNG CỐ ĐỊNH bộ FULL (có cằm P21 + khóe miệng) -> YAW luôn chính xác.
+    #    KHÔNG đổi bộ điểm khi ngáp (đổi bộ gây bước nhảy pose -> hoán đổi trục Y/Z).
+    #    Việc chống lệch khi ngáp được xử lý bằng "giữ pose" ở vòng lặp chính.
+    model_3d = FACE_3D_MODEL_FULL
+    pts_2d = np.array([p_nose, p_chin, p_eye_l, p_eye_r, p_mouth_l, p_mouth_r], dtype=np.float64)
 
     focal_length = img_w * 1.1
     center = (img_w / 2.0, img_h / 2.0)
@@ -842,7 +850,7 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
     dist_coeffs = np.zeros((4, 1))
 
     success, rvec, tvec = cv2.solvePnP(
-        FACE_3D_MODEL, pts_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE
+        model_3d, pts_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_SQPNP
     )
     if not success:
         return geom_yaw, 0.0, 0.0, None, camera_matrix, dist_coeffs
@@ -1490,6 +1498,7 @@ def main():
     t_prev = time.time()
     last_tracked_landmarks = None
     last_mp_landmarks_px = None
+    last_valid_pose = None   # [v2.6.3] pose giữ lại khi đang ngáp (tránh nhảy trục Y/Z)
 
     # Tách bộ lọc One-Euro thích ứng theo từng vùng giải phẫu sinh học:
     #   • Mắt: Cực nhạy (min_cutoff=1.8, beta=0.06) bắt chớp mắt 100-300ms, không làm trễ hay méo EAR
@@ -1630,7 +1639,13 @@ def main():
             ear_r = compute_ear(landmarks_px, RIGHT_EYE_PTS)
             ear = (ear_l + ear_r) / 2.0
             mar = compute_mar(landmarks_px, MOUTH_PTS)
-            raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = solve_head_pose_pnp(landmarks_px, w, h)
+            # [v2.6.3] Khi đang ngáp (MAR>=0.5): GIỮ pose frame trước (không cập nhật),
+            # vì hàm/miệng biến dạng làm PnP lệch -> tránh hoán đổi trục Y/Z.
+            if mar >= 0.50 and last_valid_pose is not None:
+                raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = last_valid_pose
+            else:
+                raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = solve_head_pose_pnp(landmarks_px, w, h)
+                last_valid_pose = (raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c)
             now_ts = time.time()
             yaw = float(filter_yaw.filter(raw_yaw, now_ts))
             pitch = float(filter_pitch.filter(raw_pitch, now_ts))
