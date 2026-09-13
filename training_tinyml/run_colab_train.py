@@ -56,7 +56,7 @@ try:
     from config import (
         IMAGE_WIDTH, IMAGE_HEIGHT, BATCH_SIZE, EPOCHS,
         LEARNING_RATE, WING_W, WING_EPSILON, NUM_LANDMARKS,
-        EAR_LOSS_WEIGHT, MAR_LOSS_WEIGHT, LIP_GAP_WEIGHT
+        EAR_LOSS_WEIGHT, MAR_LOSS_WEIGHT, LIP_GAP_WEIGHT, MOUTH_WIDTH_WEIGHT
     )
     from tinydriver_net import build_tinydriver_net
     from wing_loss import AdaptiveBiometricWingLoss
@@ -141,11 +141,26 @@ def evaluate_real_nme(deploy_model, val_imgs, val_lms, batch_size=64):
     per_sample_mean = np.mean(err, axis=-1)
     worst_sample = int(np.argmax(per_sample_mean))
     worst_pt = int(np.argmax(err[worst_sample]))
+
+    # [v2.3.0] EAR FIDELITY: phát hiện model bị "nén dải" (mắt nhắm vẫn đoán EAR cao).
+    def _ear(pts):
+        el = pts[:, :6]; er = pts[:, 6:12]
+        def _e(q):
+            return (np.linalg.norm(q[:, 1] - q[:, 5], axis=-1) + np.linalg.norm(q[:, 2] - q[:, 4], axis=-1)) \
+                   / (2.0 * np.maximum(np.linalg.norm(q[:, 0] - q[:, 3], axis=-1), 1e-5))
+        return (_e(el) + _e(er)) / 2.0
+    ear_t = _ear(pt_t); ear_p = _ear(pt_p)
+    ear_mae = float(np.mean(np.abs(ear_t - ear_p)))
+    closed_m = ear_t < 0.15
+    ear_closed_pred = float(np.mean(ear_p[closed_m])) if np.any(closed_m) else 0.0
+
     return {
         "nme": nme,
         "overall_px": overall_px,
         "parts": part_nme,
         "parts_px": part_px,
+        "ear_mae": ear_mae,
+        "ear_closed_pred": ear_closed_pred,
         "worst_sample": worst_sample,
         "worst_pt": worst_pt,
         "worst_px": float(err[worst_sample, worst_pt] * IMAGE_WIDTH),
@@ -221,7 +236,6 @@ def main():
         _r = _sp.run(
             [sys.executable, str(build_script),
              "--download-aflw2000",
-             "--download-facesynth",
              "--output-npz", str(_explicit_npz)],
             cwd=str(CURRENT_DIR)
         )
@@ -329,7 +343,8 @@ def main():
         image_scale=float(IMAGE_WIDTH),
         ear_weight=EAR_LOSS_WEIGHT,
         mar_weight=MAR_LOSS_WEIGHT,
-        gap_weight=LIP_GAP_WEIGHT
+        gap_weight=LIP_GAP_WEIGHT,
+        width_weight=MOUTH_WIDTH_WEIGHT
     )
 
     multi_task_model = PFLDMultiTaskModel(
@@ -338,7 +353,8 @@ def main():
         pose_weight=1.5
     )
     multi_task_model.compile(optimizer=optimizer)
-    print(f"  ✓ Hàm mất mát: Detached Adaptive Biometric Wing Loss (EAR x{EAR_LOSS_WEIGHT}, MAR x{MAR_LOSS_WEIGHT} [Detached w_m], LipGap x{LIP_GAP_WEIGHT}, MouthWidth x2.0, Pose x1.5)")
+    print(f"  ✓ Hàm mất mát v2.3.0 [EAR-MẠNH / MAR-YẾU]: Wing(toạ độ) + EAR x{EAR_LOSS_WEIGHT} + MAR x{MAR_LOSS_WEIGHT} "
+          f"+ LipGap x{LIP_GAP_WEIGHT} + MouthWidth x{MOUTH_WIDTH_WEIGHT} (mẫu số clamp, bỏ focal/detach)")
 
     # 6. Huấn luyện mô hình
     print(f"\n[Bước 4/5] Bắt đầu huấn luyện qua {EPOCHS} epochs...")
@@ -396,7 +412,14 @@ def main():
             nme_history.append(nme_now["nme"])
 
         star = " "
-        score = nme_now["nme"] if nme_now is not None else mean_val_loss
+        # [v2.4.2] Chọn best: ƯU TIÊN model QUA CỔNG MIỆNG (<12%) trước, rồi mới tối ưu tổng hợp.
+        # (Trước đây chỉ tối ưu composite nên có thể chọn nhầm model miệng >=12% -> trượt cổng.)
+        if nme_now is not None:
+            mouth_now = nme_now["parts"]["mouth"]
+            gate_penalty = 0.0 if mouth_now < 0.12 else 1.0
+            score = gate_penalty + max(nme_now["nme"], mouth_now) + nme_now["ear_mae"]
+        else:
+            score = mean_val_loss
         if score < best_score:
             best_score = score
             full_train_model.save_weights(str(best_weights_path))
@@ -407,12 +430,12 @@ def main():
         sys.stdout.flush()
 
         # In kết quả cho MỌI epoch (không bỏ sót epoch lẻ) để giữ kết nối Colab luôn thông suốt
-        nme_str = f" | Real-Val NME: {nme_now['nme']*100:.2f}% (miệng {nme_now['parts']['mouth']*100:.2f}%)" \
+        nme_str = f" | NME: overall {nme_now['nme']*100:.2f}% (mắt {nme_now['parts']['eye']*100:.2f}% / miệng {nme_now['parts']['mouth']*100:.2f}% / mũi-cằm {nme_now['parts']['nose_chin']*100:.2f}%) | EAR_MAE {nme_now['ear_mae']*100:.2f}% (nhắm->{nme_now['ear_closed_pred']:.3f})" \
             if nme_now is not None else " | Real-Val NME: N/A"
         print(f"Epoch {epoch+1:2d}/{EPOCHS} [{dur:4.1f}s] - Train: {mean_train_loss:6.2f} (LM: {mean_train_lm:6.2f}) | Val: {mean_val_loss:6.2f}{nme_str}{star}", flush=True)
 
     train_duration = time.time() - t0
-    final_nme_str = f", Best Real-Val NME: {best_score*100:.2f}%" if nme_history else ""
+    final_nme_str = f", Best Composite Score (max(NME, Miệng)+EAR_MAE): {best_score*100:.2f}%" if nme_history else ""
     print(f"\n✅ Huấn luyện hoàn tất sau: {train_duration:.1f} giây!{final_nme_str}")
 
     # Nạp lại trọng số tốt nhất
@@ -432,7 +455,7 @@ def main():
         print("1. NME CANONICAL (Đo trên khuôn mặt chuẩn, không rung lắc biến dạng):")
         print(f"   • NME Tổng thể             : {nme_canon['nme']*100:.2f}% "
               f"({'✅ XUẤT SẮC (<6%)' if nme_canon['nme'] < 0.06 else ('✅ ĐẠT CHUẨN TỐT (<8%)' if nme_canon['nme'] < 0.08 else '⚠️ CẦN CẢI THIỆN (>=8%)')})")
-        print(f"   • Sai số pixel trung bình : {nme_canon['overall_px']:.2f}px / 96px (Toàn bộ 22 điểm mốc)")
+        print(f"   • Sai số pixel trung bình : {nme_canon['overall_px']:.2f}px / {IMAGE_WIDTH}px (Toàn bộ 22 điểm mốc)")
         print(f"   • Sai số nhóm Mắt         : {p_canon['eye']*100:.2f}% ({nme_canon['parts_px']['eye']:.2f}px)")
         print(f"   • Sai số nhóm Miệng       : {p_canon['mouth']*100:.2f}% ({nme_canon['parts_px']['mouth']:.2f}px)")
         print(f"   • Sai số nhóm Mũi / Cằm   : {p_canon['nose_chin']*100:.2f}% ({nme_canon['parts_px']['nose_chin']:.2f}px)")
@@ -440,7 +463,7 @@ def main():
         print(f"\n2. NME JITTER (Khả năng định vị pixel khi bị rung lắc dịch chuyển/xoay):")
         print(f"   • NME Jitter Tổng thể      : {nme_jit['nme']*100:.2f}% "
               f"({'✅ XUẤT SẮC (<8%)' if nme_jit['nme'] < 0.08 else ('✅ ĐẠT CHUẨN KHÁ (<12%)' if nme_jit['nme'] < 0.12 else '⚠️ CẦN THÊM DỮ LIỆU (>=12%)')})")
-        print(f"   • Sai số pixel trung bình : {nme_jit['overall_px']:.2f}px / 96px")
+        print(f"   • Sai số pixel trung bình : {nme_jit['overall_px']:.2f}px / {IMAGE_WIDTH}px")
         print(f"   • Sai số nhóm Mắt         : {p_jit['eye']*100:.2f}% ({nme_jit['parts_px']['eye']:.2f}px)")
         print(f"   • Sai số nhóm Miệng       : {p_jit['mouth']*100:.2f}% ({nme_jit['parts_px']['mouth']:.2f}px)")
         print(f"   • Sai số nhóm Mũi / Cằm   : {p_jit['nose_chin']*100:.2f}% ({nme_jit['parts_px']['nose_chin']:.2f}px)")
@@ -450,6 +473,27 @@ def main():
         print(f"\n3. ĐÁNH GIÁ ĐỊNH VỊ (Tỉ lệ Jitter/Canonical):")
         print(f"   • Tỉ lệ Jitter / Canon     : {gap:.2f}x "
               f"({'✅ ĐẠT CHUẨN (<2.0x): Mô hình định vị pixel thật, không học vẹt!' if gap < 2.0 else '⚠️ >=2.0x: Còn dấu hiệu học vẹt template'})")
+
+        # [v2.2.0] CỔNG RIÊNG NHÓM MIỆNG: chặn tuyệt đối lỗi sập khóe miệng P12/P13
+        mouth_jit = float(nme_jit['parts']['mouth'])
+        mouth_ok = mouth_jit < 0.12
+        print(f"\n4. CỔNG NHÓM MIỆNG (chống sập khóe miệng P12/P13):")
+        print(f"   • NME Miệng Jitter         : {mouth_jit*100:.2f}% "
+              f"({'✅ ĐẠT (<12%)' if mouth_ok else '❌ KHÔNG ĐẠT (>=12%) — khóe miệng còn bị kéo lệch/sập!'})")
+        if not mouth_ok:
+            print("   ⚠️ CẢNH BÁO: KHÔNG nạp ESP32. Kiểm tra cổng miệng ở evaluation/eval_nme_holdout.py")
+            print("      và tăng MOUTH_WIDTH_WEIGHT / giảm MAR_LOSS_WEIGHT trong config.py rồi train lại.")
+
+        # [v2.3.0] CỔNG PHẢN HỒI MẮT (EAR): mắt NHẮM phải đoán được EAR thấp, không bị nén dải.
+        ear_mae_j = float(nme_jit['ear_mae'])
+        closed_pred = float(nme_jit['ear_closed_pred'])
+        eye_ok = (ear_mae_j < 0.06) and (closed_pred < 0.16)
+        print(f"\n5. CỔNG PHẢN HỒI MẮT (chống nén dải EAR):")
+        print(f"   • EAR MAE (jitter)          : {ear_mae_j*100:.2f}% (ngưỡng <6%)")
+        print(f"   • EAR đoán khi mắt NHẮM thật: {closed_pred:.3f} (ngưỡng <0.16, càng thấp càng nhạy)")
+        print(f"   • Đánh giá                  : {'✅ ĐẠT — mắt phản hồi nhắm/mở tốt' if eye_ok else '❌ KHÔNG ĐẠT — mắt bị nén dải, khó bắt microsleep!'}")
+        if not eye_ok:
+            print("   ⚠️ CẢNH BÁO: tăng EAR_LOSS_WEIGHT trong config.py rồi train lại (đừng hạ quá thấp).")
         print("=" * 75)
         print("   👉 Kiểm tra lại sau khi tải về bằng: python evaluation/eval_nme_holdout.py\n")
 

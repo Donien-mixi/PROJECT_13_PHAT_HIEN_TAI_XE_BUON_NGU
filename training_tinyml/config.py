@@ -60,13 +60,14 @@ NOSE_CHIN_22 = list(range(18, 22))
 # Right mouth corner: Index 13
 PNP_LANDMARK_INDICES = [19, 21, 0, 9, 12, 13]
 
+# [v2.4.1 - RESTORE] 6 điểm PnP gốc (chóp mũi, cằm, 2 khóe mắt, 2 khóe miệng).
 FACE_3D_MODEL_POINTS = [
-    [0.0,    0.0,   0.0],     # Nose tip
-    [0.0,  -65.0, -35.0],     # Chin
-    [-43.0, 32.0, -30.0],     # Left eye outer corner
-    [43.0,  32.0, -30.0],     # Right eye outer corner
-    [-30.0,-30.0, -20.0],     # Left mouth corner
-    [30.0, -30.0, -20.0]      # Right mouth corner
+    [0.0,    0.0,   0.0],     # P19 Chóp mũi
+    [0.0,   65.0, -35.0],     # P21 Cằm
+    [-43.0, -32.0, -30.0],    # P0  Khóe mắt trái ngoài
+    [43.0,  -32.0, -30.0],    # P9  Khóe mắt phải ngoài
+    [-30.0,  30.0, -20.0],    # P12 Khóe miệng trái
+    [30.0,   30.0, -20.0]     # P13 Khóe miệng phải
 ]
 
 # ==============================================================================
@@ -80,11 +81,17 @@ WEIGHT_DECAY = 1e-4
 # Wing Loss & Biometric Focal Loss Parameters
 WING_W = 10.0
 WING_EPSILON = 2.0
-EAR_LOSS_WEIGHT = 25.0
-MAR_LOSS_WEIGHT = 20.0
-LIP_GAP_WEIGHT = 8.0
-FOCAL_EAR_GAMMA = 2.0
-FOCAL_MAR_GAMMA = 2.0
+
+# [v2.3.0 - CÂN BẰNG LẠI] Toạ độ Wing Loss là nền tảng, nhưng MẮT cần loss tỉ lệ EAR
+# MẠNH để phản hồi nhắm/mở (bản v2.2.0 để EAR=1.5 làm mắt bị nén dải, không nhắm được).
+#   - EAR: mạnh + detach width (bảo vệ khóe mắt bằng coordinate loss).
+#   - MAR: yếu + clamp + neo cứng bề rộng (chống sập khóe miệng như bản cũ).
+EAR_LOSS_WEIGHT = 20.0
+MAR_LOSS_WEIGHT = 1.5
+LIP_GAP_WEIGHT = 4.0
+MOUTH_WIDTH_WEIGHT = 5.0    # Neo cứng P12-P13, chống sập khóe miệng
+FOCAL_EAR_GAMMA = 1.0       # Giữ lại để tương thích cấu hình cũ (không còn dùng)
+FOCAL_MAR_GAMMA = 1.0
 
 # ==============================================================================
 # 5. ADAS Thresholds (Aligned with firmware_esp32)

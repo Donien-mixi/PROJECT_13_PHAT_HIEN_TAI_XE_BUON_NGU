@@ -19,6 +19,7 @@ from host_laptop.local_model_tester import (
     NOSE_TIP_PT
 )
 from training_tinyml.dataset_loader import apply_cabin_data_augmentation
+from training_tinyml.config import IMAGE_WIDTH, IMAGE_HEIGHT
 
 def test_pnp_and_axes():
     print("--- 1. Kiểm thử solve_head_pose_pnp & draw_head_pose_axes ---")
@@ -92,7 +93,7 @@ def test_face_tracker_hysteresis():
 
 def test_eyeglasses_augmentation():
     print("\n--- 3. Kiểm thử Eyeglasses & Specular Glare Augmentation ---")
-    img = np.full((96, 96), 120, dtype=np.uint8)
+    img = np.full((IMAGE_HEIGHT, IMAGE_WIDTH), 120, dtype=np.uint8)
     # 22 điểm chuẩn hóa
     lm = np.zeros((NUM_LANDMARKS, 2), dtype=np.float32)
     # Mắt trái
@@ -106,10 +107,10 @@ def test_eyeglasses_augmentation():
     aug_success = 0
     for i in range(15):
         aug_img, aug_lm = apply_cabin_data_augmentation(img, lm)
-        assert aug_img.shape == (96, 96, 1), f"Shape không đúng: {aug_img.shape}"
+        assert aug_img.shape == (IMAGE_HEIGHT, IMAGE_WIDTH, 1), f"Shape không đúng: {aug_img.shape}"
         assert not np.isnan(aug_lm).any(), "Landmarks bị NaN"
         aug_success += 1
-    print(f"✅ Augment sample 15/15 lần thành công, shape chuẩn (96, 96, 1)!")
+    print(f"✅ Augment sample 15/15 lần thành công, shape chuẩn ({IMAGE_HEIGHT}, {IMAGE_WIDTH}, 1)!")
 
 if __name__ == '__main__':
     test_pnp_and_axes()

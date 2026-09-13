@@ -2,51 +2,55 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
-🧬 BUILD CLEAN DATASET - Pipeline dữ liệu SẠCH cho TinyDriverNet (Đồ án 13)
+ðŸ§¬ BUILD CLEAN DATASET - Pipeline dá»¯ liá»‡u Sáº CH cho TinyDriverNet (Äá»“ Ã¡n 13)
 =============================================================================
-Thay thế hoàn toàn pipeline cũ (yawn_faces.zip + drowsiness Roboflow-YOLO)
-vốn chỉ có ~400 mẫu thật, nhiều ảnh crop cận cảnh thiếu cằm/mắt và KHÔNG
-có nhãn landmark chuẩn → nguyên nhân gốc khiến mô hình học vẹt.
+Thay tháº¿ hoÃ n toÃ n pipeline cÅ© (yawn_faces.zip + drowsiness Roboflow-YOLO)
+vá»‘n chá»‰ cÃ³ ~400 máº«u tháº­t, nhiá»u áº£nh crop cáº­n cáº£nh thiáº¿u cáº±m/máº¯t vÃ  KHÃ”NG
+cÃ³ nhÃ£n landmark chuáº©n â†’ nguyÃªn nhÃ¢n gá»‘c khiáº¿n mÃ´ hÃ¬nh há»c váº¹t.
 
-NGUỒN DỮ LIỆU ĐƯỢC HỖ TRỢ (theo thứ tự ưu tiên):
-  1. AFLW2000-3D  (tự tải bằng --download-aflw2000, 2000 ảnh, nhãn 68-pt 3D,
-                   phủ góc quay đầu yaw ±90° — dataset chuẩn cho Head Pose).
-  2. 300W / 300W-LP (thư mục ảnh + file .pts 68-pt iBUG — tải thủ công từ
-                     https://ibug.doc.ic.ac.uk/resources/facial-points/).
-  3. Mọi thư mục ảnh khác (WFLW, YawDD, ảnh tự chụp webcam...) → tự động
-     dán nhãn 22 điểm bằng MediaPipe Teacher (Knowledge Distillation).
+NGUá»’N Dá»® LIá»†U ÄÆ¯á»¢C Há»– TRá»¢:
+  1. AFLW2000-3D  (tá»± táº£i báº±ng --download-aflw2000, 2000 áº£nh, nhÃ£n 68-pt 3D,
+                    phá»§ gÃ³c quay Ä‘áº§u yaw Â±90Â° â€” dataset chuáº©n cho Head Pose).
+  2. YawDD        (video cabin tÃ i xáº¿ tháº­t, dÃ¡n nhÃ£n báº±ng MediaPipe Teacher).
+  3. CEW          (Closed Eyes in the Wild, dÃ¡n nhÃ£n báº±ng MediaPipe Teacher).
+  4. áº¢nh 68-pt (.pts) / áº£nh thÃ´ báº¥t ká»³ â†’ dÃ¡n nhÃ£n báº±ng MediaPipe Teacher.
 
-BỘ GATE CHẤT LƯỢNG (QA GATES) - mẫu nào FAIL sẽ bị loại và ghi lý do:
-  G1. Dò được đầy đủ 22 điểm mốc.
-  G2. Sau crop canonical 96x96: mọi landmark nằm trong [0.02, 0.98]
-      (không bị cắt mất cằm/mắt ở mép ảnh → chống label bẩn P21).
-  G3. Khoảng cách 2 mắt trong crop >= 10 px (mặt đủ lớn, không mờ chấm).
-  G4. Độ nét Laplacian variance >= 12 (loại ảnh nhòe/motion blur nặng).
-  G5. Góc quay: |yaw| <= 80°, |pitch| <= 70°, |roll| <= 55°.
-  G6. Anti-duplicate: aHash 8x8, khoảng cách Hamming <= 3 của 2 ảnh bất kỳ
-      trong cùng nguồn → chỉ giữ 1 (chống trùng lặp làm overfit).
+âš ï¸ [v2.3.0] 300W-LP ÄÃƒ Bá»Š VÃ” HIá»†U HÃ“A (skip tá»± Ä‘á»™ng): file .mat cá»§a 300W-LP chá»‰ cÃ³
+   `pt2d` á»Ÿ há»‡ toáº¡ Ä‘á»™ áº¢NH Gá»C frontal, KHÃ”NG khá»›p áº£nh render pose (cÃ¹ng 1 máº·t á»Ÿ 18 pose
+   cÃ³ pt2d y há»‡t; sai tá»›i 45px á»Ÿ yaw 50Â°). DÃ¹ng nÃ³ sáº½ há»ng ~31% dá»¯ liá»‡u. Thay báº±ng
+   AFLW2000_3D + YawDD cho gÃ³c quay lá»›n.
 
-TRAIN/VAL SPLIT NGHIÊM NGẶT (chống leak):
-  - Chia theo hash tên file: md5(filename) % 100 < val_percent → VAL.
-  - Xác định NGAY LÚC BUILD, lưu cột `split` vào npz. Generator huấn luyện
-    CHỈ dùng mẫu split=0; validation/NME dùng mẫu split=1 (giữ-out thật).
+Bá»˜ GATE CHáº¤T LÆ¯á»¢NG (QA GATES) - máº«u nÃ o FAIL sáº½ bá»‹ loáº¡i vÃ  ghi lÃ½ do:
+  G1. DÃ² Ä‘Æ°á»£c Ä‘áº§y Ä‘á»§ 22 Ä‘iá»ƒm má»‘c.
+  G2. Sau crop canonical 96x96: má»i landmark náº±m trong [0.02, 0.98]
+      (khÃ´ng bá»‹ cáº¯t máº¥t cáº±m/máº¯t á»Ÿ mÃ©p áº£nh â†’ chá»‘ng label báº©n P21).
+  G3. Khoáº£ng cÃ¡ch 2 máº¯t trong crop >= 10 px (máº·t Ä‘á»§ lá»›n, khÃ´ng má» cháº¥m).
+  G4. Äá»™ nÃ©t Laplacian variance >= 12 (loáº¡i áº£nh nhÃ²e/motion blur náº·ng).
+  G5. GÃ³c quay: |yaw| <= 80Â°, |pitch| <= 70Â°, |roll| <= 55Â°.
+  G6. Anti-duplicate: aHash 8x8, khoáº£ng cÃ¡ch Hamming <= 3 cá»§a 2 áº£nh báº¥t ká»³
+      trong cÃ¹ng nguá»“n â†’ chá»‰ giá»¯ 1 (chá»‘ng trÃ¹ng láº·p lÃ m overfit).
+
+TRAIN/VAL SPLIT NGHIÃŠM NGáº¶T (chá»‘ng leak):
+  - Chia theo hash tÃªn file: md5(filename) % 100 < val_percent â†’ VAL.
+  - XÃ¡c Ä‘á»‹nh NGAY LÃšC BUILD, lÆ°u cá»™t `split` vÃ o npz. Generator huáº¥n luyá»‡n
+    CHá»ˆ dÃ¹ng máº«u split=0; validation/NME dÃ¹ng máº«u split=1 (giá»¯-out tháº­t).
 
 OUTPUT:
   - training_tinyml/preprocessed_driver_dataset.npz
       images(N,96,96,1) landmarks(N,44) poses(N,3) ears(N,) mars(N,)
       split(N,) sources(N,)
-  - output/preprocessed_preview/  (ảnh kiểm tra trực quan có vẽ 22 điểm)
-  - output/dataset_report.md      (báo cáo thống kê + lý do loại mẫu)
+  - output/preprocessed_preview/  (áº£nh kiá»ƒm tra trá»±c quan cÃ³ váº½ 22 Ä‘iá»ƒm)
+  - output/dataset_report.md      (bÃ¡o cÃ¡o thá»‘ng kÃª + lÃ½ do loáº¡i máº«u)
 
-HƯỚNG DẪN TẢI DỮ LIỆU THỦ CÔNG (nếu auto-download lỗi):
+HÆ¯á»šNG DáºªN Táº¢I Dá»® LIá»†U THá»¦ CÃ”NG (náº¿u auto-download lá»—i):
   - AFLW2000-3D : https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/AFLW2000-3D.zip
-                  → giải nén vào datasets/raw_faces/AFLW2000/
+                  â†’ giáº£i nÃ©n vÃ o datasets/raw_faces/AFLW2000/
   - 300W        : https://ibug.doc.ic.ac.uk/resources/facial-points/
-                  → bỏ thư mục ảnh + .pts vào datasets/raw_faces/300W/
+                  â†’ bá» thÆ° má»¥c áº£nh + .pts vÃ o datasets/raw_faces/300W/
   - WFLW        : https://wywu.github.io/projects/LAB/WFLW.html
-                  → chỉ cần thư mục ảnh (bỏ qua txt), MediaPipe sẽ dán nhãn.
-  - YawDD       : https://sites.google.com/site/yawddf/ (video trích frame)
-                  → bỏ frame vào datasets/raw_faces/yawdd/
+                  â†’ chá»‰ cáº§n thÆ° má»¥c áº£nh (bá» qua txt), MediaPipe sáº½ dÃ¡n nhÃ£n.
+  - YawDD       : https://sites.google.com/site/yawddf/ (video trÃ­ch frame)
+                  â†’ bá» frame vÃ o datasets/raw_faces/yawdd/
 =============================================================================
 """
 
@@ -76,8 +80,8 @@ CURRENT_DIR = Path(__file__).resolve().parent
 
 
 def _find_project_root():
-    """Tự phát hiện thư mục gốc dự án (chống bug v2.0.1: script nằm ở ROOT gói Colab
-    thì ROOT=CURRENT_DIR, nằm trong tools/ của repo thì ROOT=parent)."""
+    """Tá»± phÃ¡t hiá»‡n thÆ° má»¥c gá»‘c dá»± Ã¡n (chá»‘ng bug v2.0.1: script náº±m á»Ÿ ROOT gÃ³i Colab
+    thÃ¬ ROOT=CURRENT_DIR, náº±m trong tools/ cá»§a repo thÃ¬ ROOT=parent)."""
     for cand in (CURRENT_DIR, CURRENT_DIR.parent):
         if (cand / "training_tinyml").is_dir():
             return cand
@@ -100,21 +104,21 @@ from isomorphic_transform import canonical_face_crop
 from distillation import MediaPipeTeacher, estimate_pose_from_landmarks
 
 # ============================================================================
-# THAM SỐ CHẤT LƯỢNG (QA GATES) - đồng bộ 1 nơi duy nhất
+# THAM Sá» CHáº¤T LÆ¯á»¢NG (QA GATES) - Ä‘á»“ng bá»™ 1 nÆ¡i duy nháº¥t
 # ============================================================================
-LM_MARGIN = 0.01        # G2: landmark phải nằm trong [margin, 1-margin]
-                        # [v2.0.1] Nới từ 0.02: AFLW2000 nhiều ảnh cận cảnh,
-                        # label vẫn chính xác tuyệt đối nhờ padding công thức canonical.
-MIN_D_EYES_PX = 10.0    # G3: khoảng cách 2 mắt tối thiểu (px trong ô 96x96)
-MIN_LAPLACIAN_VAR = 12.0  # G4: ngưỡng nét ảnh
+LM_MARGIN = 0.01        # G2: landmark pháº£i náº±m trong [margin, 1-margin]
+                        # [v2.0.1] Ná»›i tá»« 0.02: AFLW2000 nhiá»u áº£nh cáº­n cáº£nh,
+                        # label váº«n chÃ­nh xÃ¡c tuyá»‡t Ä‘á»‘i nhá» padding cÃ´ng thá»©c canonical.
+MIN_D_EYES_PX = 10.0    # G3: khoáº£ng cÃ¡ch 2 máº¯t tá»‘i thiá»ƒu (px trong Ã´ 96x96)
+MIN_LAPLACIAN_VAR = 12.0  # G4: ngÆ°á»¡ng nÃ©t áº£nh
 MAX_YAW_DEG = 80.0      # G5
 MAX_PITCH_DEG = 70.0
 MAX_ROLL_DEG = 55.0
-DUP_HAMMING = 3         # G6: ngưỡng Hamming của aHash 8x8
+DUP_HAMMING = 3         # G6: ngÆ°á»¡ng Hamming cá»§a aHash 8x8
 
 
 # ============================================================================
-# TIỆN ÍCH CHUNG
+# TIá»†N ÃCH CHUNG
 # ============================================================================
 def compute_crop_ear(pts_22_norm):
     pts = pts_22_norm.reshape((22, 2))
@@ -127,7 +131,7 @@ def compute_crop_ear(pts_22_norm):
 
 
 def compute_crop_mar(pts_22_norm):
-    """MAR = (h_outer + h_inner) / (2*w) - đồng bộ 100% wing_loss.py & firmware."""
+    """MAR = (h_outer + h_inner) / (2*w) - Ä‘á»“ng bá»™ 100% wing_loss.py & firmware."""
     pts = pts_22_norm.reshape((22, 2))
     w_m = np.linalg.norm(pts[12] - pts[13])
     h_outer = np.linalg.norm(pts[14] - pts[15])
@@ -136,7 +140,7 @@ def compute_crop_mar(pts_22_norm):
 
 
 def ahash_64(gray_96):
-    """aHash 8x8 của ảnh crop 96x96 để chống trùng lặp."""
+    """aHash 8x8 cá»§a áº£nh crop 96x96 Ä‘á»ƒ chá»‘ng trÃ¹ng láº·p."""
     small = cv2.resize(gray_96, (8, 8), interpolation=cv2.INTER_AREA)
     small = small.astype(np.float32)
     bits = (small > small.mean()).flatten()
@@ -151,16 +155,16 @@ def hamming64(a, b):
 
 
 def split_of_filename(filename, val_percent):
-    """Split quyết định bởi hash tên file -> ổn định qua các lần chạy lại."""
+    """Split quyáº¿t Ä‘á»‹nh bá»Ÿi hash tÃªn file -> á»•n Ä‘á»‹nh qua cÃ¡c láº§n cháº¡y láº¡i."""
     h = hashlib.md5(filename.encode('utf-8')).hexdigest()
     return 1 if (int(h[:8], 16) % 100 < val_percent) else 0
 
 
 # ============================================================================
-# BỘ ĐỌC NHÃN 68 ĐIỂM CHUẨN iBUG (300W / AFLW2000)
+# Bá»˜ Äá»ŒC NHÃƒN 68 ÄIá»‚M CHUáº¨N iBUG (300W / AFLW2000)
 # ============================================================================
 def parse_pts_file(pts_path):
-    """Đọc file .pts chuẩn 68 điểm (300W)."""
+    """Äá»c file .pts chuáº©n 68 Ä‘iá»ƒm (300W)."""
     try:
         with open(pts_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = [ln.strip() for ln in f.readlines()]
@@ -189,7 +193,7 @@ def parse_pts_file(pts_path):
 
 
 def parse_mat_landmarks(mat_path):
-    """Đọc landmark 68 điểm từ file .mat của AFLW2000 / 300W-LP (pt3d_68 hoặc pt2d)."""
+    """Äá»c landmark 68 Ä‘iá»ƒm tá»« file .mat cá»§a AFLW2000 / 300W-LP (pt3d_68 hoáº·c pt2d)."""
     try:
         from scipy.io import loadmat
     except ImportError:
@@ -217,7 +221,7 @@ def parse_mat_landmarks(mat_path):
 
 
 def pts68_to_22(pts_68):
-    """Ánh xạ 68 điểm iBUG -> 22 điểm đề tài (theo config.IBUG_68_TO_22_INDICES)."""
+    """Ãnh xáº¡ 68 Ä‘iá»ƒm iBUG -> 22 Ä‘iá»ƒm Ä‘á» tÃ i (theo config.IBUG_68_TO_22_INDICES)."""
     from config import IBUG_68_TO_22_INDICES
     if len(pts_68) != 68:
         return None
@@ -225,7 +229,7 @@ def pts68_to_22(pts_68):
 
 
 # ============================================================================
-# QA + THU THẬP 1 MẪU
+# QA + THU THáº¬P 1 MáºªU
 # ============================================================================
 class SampleCollector:
     def __init__(self, teacher=None, source_name="", val_percent=8):
@@ -239,14 +243,14 @@ class SampleCollector:
         self.mars = []
         self.splits = []
         self.hashes = []
-        self.rejected = Counter()      # lý do loại
-        self.preview_pool = []         # (image, lms, ear, mar) để xuất preview
+        self.rejected = Counter()      # lÃ½ do loáº¡i
+        self.preview_pool = []         # (image, lms, ear, mar) Ä‘á»ƒ xuáº¥t preview
 
     def _reject(self, reason):
         self.rejected[reason] += 1
 
     def add_sample(self, img_bgr, pts_22_px, src_filename):
-        """pts_22_px: (22,2) tọa độ pixel trong ảnh gốc. Trả về True nếu nhận."""
+        """pts_22_px: (22,2) tá»a Ä‘á»™ pixel trong áº£nh gá»‘c. Tráº£ vá» True náº¿u nháº­n."""
         if img_bgr is None or pts_22_px is None or len(pts_22_px) != 22:
             self._reject("missing_landmarks")
             return False
@@ -259,12 +263,12 @@ class SampleCollector:
         crop_gray = crop[:, :, 0]
         pts = norm_lms.reshape((22, 2))
 
-        # G2: không landmark nào bị cắt mép
+        # G2: khÃ´ng landmark nÃ o bá»‹ cáº¯t mÃ©p
         if pts.min() < LM_MARGIN or pts.max() > (1.0 - LM_MARGIN):
             self._reject("landmark_clipped")
             return False
 
-        # G3: mặt đủ lớn
+        # G3: máº·t Ä‘á»§ lá»›n
         eye_l = pts[LEFT_EYE_22].mean(axis=0)
         eye_r = pts[RIGHT_EYE_22].mean(axis=0)
         d_eyes_px = float(np.linalg.norm(eye_r - eye_l) * IMAGE_WIDTH)
@@ -272,13 +276,13 @@ class SampleCollector:
             self._reject("face_too_small")
             return False
 
-        # G4: ảnh nhòe
+        # G4: áº£nh nhÃ²e
         lap_var = float(cv2.Laplacian(crop_gray, cv2.CV_64F).var())
         if lap_var < MIN_LAPLACIAN_VAR:
             self._reject("blurry")
             return False
 
-        # G5: góc quay cực trị
+        # G5: gÃ³c quay cá»±c trá»‹
         pose = estimate_pose_from_landmarks(pts)
         yaw_deg, pitch_deg, roll_deg = pose[0] * 90.0, pose[1] * 90.0, pose[2] * 90.0
         if (abs(yaw_deg) > MAX_YAW_DEG or abs(pitch_deg) > MAX_PITCH_DEG
@@ -286,9 +290,9 @@ class SampleCollector:
             self._reject("extreme_pose")
             return False
 
-        # G6: trùng lặp (chỉ so trong cùng nguồn)
+        # G6: trÃ¹ng láº·p (chá»‰ so trong cÃ¹ng nguá»“n)
         h = ahash_64(crop_gray)
-        # so sánh nhanh với vài phần tử gần cuối (giảm O(n^2) với nguồn lớn)
+        # so sÃ¡nh nhanh vá»›i vÃ i pháº§n tá»­ gáº§n cuá»‘i (giáº£m O(n^2) vá»›i nguá»“n lá»›n)
         recent = self.hashes[-512:]
         for prev_h in recent:
             if hamming64(h, prev_h) <= DUP_HAMMING:
@@ -316,17 +320,17 @@ class SampleCollector:
 
 
 # ============================================================================
-# CÁC NGUỒN DỮ LIỆU
+# CÃC NGUá»’N Dá»® LIá»†U
 # ============================================================================
 AFLW2000_URLS = [
     "https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/AFLW2000-3D.zip",
     "http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/AFLW2000-3D.zip",
 ]
-AFLW2000_SIZE_MB = 83  # dung lượng thực tế theo TFDS catalog (Download size 83.36 MiB)
+AFLW2000_SIZE_MB = 83  # dung lÆ°á»£ng thá»±c táº¿ theo TFDS catalog (Download size 83.36 MiB)
 
-# 300W-LP: 61.225 ảnh tổng hợp góc quay yaw ±90° — KHÔNG có link tải trực tiếp ổn định
-# (cbsr trả 404, Google Drive ID cũ đã chết) -> chỉ hỗ trợ tải thủ công.
-# Phương án tự động đáng tin: Microsoft FaceSynthetics (Azure blob, không cần auth).
+# 300W-LP: 61.225 áº£nh tá»•ng há»£p gÃ³c quay yaw Â±90Â° â€” KHÃ”NG cÃ³ link táº£i trá»±c tiáº¿p á»•n Ä‘á»‹nh
+# (cbsr tráº£ 404, Google Drive ID cÅ© Ä‘Ã£ cháº¿t) -> chá»‰ há»— trá»£ táº£i thá»§ cÃ´ng.
+# PhÆ°Æ¡ng Ã¡n tá»± Ä‘á»™ng Ä‘Ã¡ng tin: Microsoft FaceSynthetics (Azure blob, khÃ´ng cáº§n auth).
 
 LARGE_FILE_CHUNK = 1024 * 512
 FACESYNTH_URLS = [
@@ -337,7 +341,7 @@ FACESYNTH_SIZE_MB = 322
 
 def _download_cbsr_zip(urls, zip_path, size_hint_mb):
     for url in urls:
-        print(f"[CBSR] Đang tải {url} (~{size_hint_mb} MB)...")
+        print(f"[CBSR] Äang táº£i {url} (~{size_hint_mb} MB)...")
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=120) as resp, open(zip_path, 'wb') as out_f:
@@ -354,49 +358,49 @@ def _download_cbsr_zip(urls, zip_path, size_hint_mb):
             print()
             return True
         except Exception as e:
-            print(f"\n[CBSR] Tải thất bại từ URL này ({e}). Thử nguồn kế tiếp...")
+            print(f"\n[CBSR] Táº£i tháº¥t báº¡i tá»« URL nÃ y ({e}). Thá»­ nguá»“n káº¿ tiáº¿p...")
             if zip_path.exists():
                 zip_path.unlink()
     return False
 
 
 def download_aflw2000(target_dir):
-    """Tải AFLW2000-3D (2000 ảnh, nhãn 68-pt 3D, phủ yaw ±90°, ~83 MB)."""
+    """Táº£i AFLW2000-3D (2000 áº£nh, nhÃ£n 68-pt 3D, phá»§ yaw Â±90Â°, ~83 MB)."""
     zip_path = target_dir / "AFLW2000-3D.zip"
     if not target_dir.exists():
         target_dir.mkdir(parents=True, exist_ok=True)
     done_marker = target_dir / "_extracted_ok"
     if done_marker.exists():
-        print("[AFLW2000] Đã tải và giải nén từ trước, bỏ qua.")
+        print("[AFLW2000] ÄÃ£ táº£i vÃ  giáº£i nÃ©n tá»« trÆ°á»›c, bá» qua.")
         return True
     if not _download_cbsr_zip(AFLW2000_URLS, zip_path, AFLW2000_SIZE_MB):
-        print("[AFLW2000] TOÀN BỘ NGUỒN TẢI THẤT BẠI!")
-        print("  👉 Phương án thủ công:")
-        print("     1. Trình duyệt tải: https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/AFLW2000-3D.zip")
-        print("        (hoặc Kaggle: kaggle.com/datasets/mohamedadlyi/aflw2000-3d)")
-        print(f"     2. Giải nén vào: {target_dir} rồi chạy lại lệnh này.")
+        print("[AFLW2000] TOÃ€N Bá»˜ NGUá»’N Táº¢I THáº¤T Báº I!")
+        print("  ðŸ‘‰ PhÆ°Æ¡ng Ã¡n thá»§ cÃ´ng:")
+        print("     1. TrÃ¬nh duyá»‡t táº£i: https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/AFLW2000-3D.zip")
+        print("        (hoáº·c Kaggle: kaggle.com/datasets/mohamedadlyi/aflw2000-3d)")
+        print(f"     2. Giáº£i nÃ©n vÃ o: {target_dir} rá»“i cháº¡y láº¡i lá»‡nh nÃ y.")
         return False
-    print("[AFLW2000] Đang giải nén...")
+    print("[AFLW2000] Äang giáº£i nÃ©n...")
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(str(target_dir))
     zip_path.unlink()
     done_marker.write_text("ok", encoding="utf-8")
-    print("[AFLW2000] HOÀN TẤT!")
+    print("[AFLW2000] HOÃ€N Táº¤T!")
     return True
 
 
 def download_facesynth(target_dir):
-    """Tải Microsoft FaceSynthetics dataset_1000 (1000 mặt 512x512, nhãn 70 điểm:
-    68 đầu theo scheme iBUG + 2 điểm đồng tử). Link Azure blob trực tiếp, không auth.
-    License: non-commercial research (phù hợp đồ án)."""
+    """Táº£i Microsoft FaceSynthetics dataset_1000 (1000 máº·t 512x512, nhÃ£n 70 Ä‘iá»ƒm:
+    68 Ä‘áº§u theo scheme iBUG + 2 Ä‘iá»ƒm Ä‘á»“ng tá»­). Link Azure blob trá»±c tiáº¿p, khÃ´ng auth.
+    License: non-commercial research (phÃ¹ há»£p Ä‘á»“ Ã¡n)."""
     zip_path = target_dir / "dataset_1000.zip"
     target_dir.mkdir(parents=True, exist_ok=True)
     done_marker = target_dir / "_extracted_ok"
     if done_marker.exists():
-        print("[FaceSynthetics] Đã tải và giải nén từ trước, bỏ qua.")
+        print("[FaceSynthetics] ÄÃ£ táº£i vÃ  giáº£i nÃ©n tá»« trÆ°á»›c, bá» qua.")
         return True
     for url in FACESYNTH_URLS:
-        print(f"[FaceSynthetics] Đang tải {url} (~{FACESYNTH_SIZE_MB} MB)...")
+        print(f"[FaceSynthetics] Äang táº£i {url} (~{FACESYNTH_SIZE_MB} MB)...")
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=180) as resp, open(zip_path, 'wb') as out_f:
@@ -410,51 +414,51 @@ def download_facesynth(target_dir):
                     downloaded += len(chunk)
                     if total > 0:
                         print(f"  {downloaded / 1e6:9.1f} / {total / 1e6:.1f} MB", end='\r')
-            print("\n[FaceSynthetics] Đang giải nén (1000 ảnh PNG 512x512)...")
+            print("\n[FaceSynthetics] Äang giáº£i nÃ©n (1000 áº£nh PNG 512x512)...")
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 zf.extractall(str(target_dir))
             zip_path.unlink()
             done_marker.write_text("ok", encoding="utf-8")
-            print("[FaceSynthetics] HOÀN TẤT!")
+            print("[FaceSynthetics] HOÃ€N Táº¤T!")
             return True
         except Exception as e:
-            print(f"\n[FaceSynthetics] Tải thất bại ({e}).")
+            print(f"\n[FaceSynthetics] Táº£i tháº¥t báº¡i ({e}).")
             if zip_path.exists():
                 zip_path.unlink()
-    print("[FaceSynthetics] TẢI THẤT BẠI! Tải thủ công từ README microsoft/FaceSynthetics")
-    print(f"  và giải nén vào: {target_dir}")
+    print("[FaceSynthetics] Táº¢I THáº¤T Báº I! Táº£i thá»§ cÃ´ng tá»« README microsoft/FaceSynthetics")
+    print(f"  vÃ  giáº£i nÃ©n vÃ o: {target_dir}")
     return False
 
 
 def download_300wlp(target_dir):
-    """Thử tải 300W-LP. LƯU Ý: link cbsr hiện 404 (Google Drive ID cũ cũng đã chết)
-    -> đa số sẽ thất bại và hướng dẫn tải thủ công. Phương án tự động: --download-facesynth."""
+    """Thá»­ táº£i 300W-LP. LÆ¯U Ã: link cbsr hiá»‡n 404 (Google Drive ID cÅ© cÅ©ng Ä‘Ã£ cháº¿t)
+    -> Ä‘a sá»‘ sáº½ tháº¥t báº¡i vÃ  hÆ°á»›ng dáº«n táº£i thá»§ cÃ´ng. PhÆ°Æ¡ng Ã¡n tá»± Ä‘á»™ng: --download-facesynth."""
     zip_path = target_dir / "300W-LP.zip"
     done_marker = target_dir / "_extracted_ok"
     if done_marker.exists():
-        print("[300W-LP] Đã tải và giải nén từ trước, bỏ qua.")
+        print("[300W-LP] ÄÃ£ táº£i vÃ  giáº£i nÃ©n tá»« trÆ°á»›c, bá» qua.")
         return True
     urls = [
         "https://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/300W-LP.zip",
         "http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/Database/300W-LP.zip",
     ]
     if not _download_cbsr_zip(urls, zip_path, 1700):
-        print("[300W-LP] Link chính thức hiện 404! Tải thủ công:")
-        print("  👉 Trang chủ 3DDFA: http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm")
-        print(f"     Giải nén vào: {target_dir} rồi chạy lại lệnh này.")
+        print("[300W-LP] Link chÃ­nh thá»©c hiá»‡n 404! Táº£i thá»§ cÃ´ng:")
+        print("  ðŸ‘‰ Trang chá»§ 3DDFA: http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm")
+        print(f"     Giáº£i nÃ©n vÃ o: {target_dir} rá»“i cháº¡y láº¡i lá»‡nh nÃ y.")
         return False
-    print("[300W-LP] Đang giải nén (61k ảnh, có thể mất vài phút)...")
+    print("[300W-LP] Äang giáº£i nÃ©n (61k áº£nh, cÃ³ thá»ƒ máº¥t vÃ i phÃºt)...")
     target_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(str(target_dir))
     zip_path.unlink()
     done_marker.write_text("ok", encoding="utf-8")
-    print("[300W-LP] HOÀN TẤT!")
+    print("[300W-LP] HOÃ€N Táº¤T!")
     return True
 
 
 def collect_from_mat68(folder, collector, max_samples, shuffle=False):
-    """AFLW2000-3D / 300W-LP: ảnh .jpg + .mat (pt3d_68 hoặc pt2d)."""
+    """AFLW2000-3D / 300W-LP: áº£nh .jpg + .mat (pt3d_68 hoáº·c pt2d)."""
     mats = sorted(folder.rglob("*.mat"))
     if not mats:
         return 0
@@ -481,14 +485,69 @@ def collect_from_mat68(folder, collector, max_samples, shuffle=False):
         if collector.add_sample(img, pts22, img_path.name):
             n += 1
             if n % 250 == 0:
-                print(f"  [{folder.name}] {n} mẫu hợp lệ / đã duyệt {mat_idx + 1}...")
+                print(f"  [{folder.name}] {n} máº«u há»£p lá»‡ / Ä‘Ã£ duyá»‡t {mat_idx + 1}...")
     return n
 
 collect_from_aflw2000 = collect_from_mat68
 
 
+def collect_from_aflw_teacher(folder, collector, teacher, max_samples=2000,
+                              sanity_max_diff_px=15.0):
+    """[v2.4.2 - FIX QUY ƯỚC NHÃN] AFLW2000: DÁN NHÃN LẠI bằng MediaPipe Teacher.
+
+    Vì sao: nhãn native iBUG-68 của AFLW lệch MediaPipe trung bình ~6.2px (cả mắt/miệng/mũi).
+    Trộn 2 quy ước -> model học giá trị trung bình -> output lệch MediaPipe, nặng nhất ở MIỆNG.
+    Dán lại bằng MediaPipe để MỌI nguồn (AFLW/CEW/YawDD) cùng 1 quy ước 22 điểm.
+
+    Nhãn native chỉ dùng SANITY CHECK: nếu MediaPipe lệch quá `sanity_max_diff_px` px so với
+    nhãn native (dấu hiệu mis-detect, ảnh xoay/lạ) thì LOẠI.
+    """
+    if teacher is None or not getattr(teacher, 'available', False):
+        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher.")
+        return 0
+    mats = sorted(folder.rglob("*.mat"))
+    if not mats:
+        return 0
+    n = 0
+    for mat_path in mats:
+        if max_samples and n >= max_samples:
+            break
+        img_path = mat_path.with_suffix('.jpg')
+        if not img_path.exists():
+            img_path = mat_path.with_suffix('.png')
+        if not img_path.exists():
+            collector._reject("image_missing")
+            continue
+        img = cv2.imread(str(img_path))
+        if img is None:
+            collector._reject("unreadable")
+            continue
+        h_img, w_img = img.shape[:2]
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pts_norm = teacher.extract_22_landmarks(rgb)
+        if pts_norm is None:
+            collector._reject("teacher_no_face")
+            continue
+        pts_px = pts_norm.copy()
+        pts_px[:, 0] *= w_img
+        pts_px[:, 1] *= h_img
+        # Sanity check chống mis-detect (so với nhãn native nếu đọc được)
+        pts68 = parse_mat_landmarks(mat_path)
+        if pts68 is not None:
+            native22 = pts68_to_22(pts68)
+            d = float(np.linalg.norm(native22 - pts_px, axis=1).mean())
+            if d > sanity_max_diff_px:
+                collector._reject("teacher_native_mismatch")
+                continue
+        if collector.add_sample(img, pts_px, img_path.name):
+            n += 1
+            if n % 250 == 0:
+                print(f"  [AFLW-MP] {n} mẫu hợp lệ...")
+    return n
+
+
 def collect_from_300w(folder, collector, max_samples):
-    """300W / 300W-LP: ảnh + file .pts 68 điểm."""
+    """300W / 300W-LP: áº£nh + file .pts 68 Ä‘iá»ƒm."""
     pts_files = sorted(folder.rglob("*.pts"))
     if not pts_files:
         return 0
@@ -514,13 +573,13 @@ def collect_from_300w(folder, collector, max_samples):
         if collector.add_sample(img, pts22, img_path.name):
             n += 1
             if n % 250 == 0:
-                print(f"  [300W] {n} mẫu hợp lệ...")
+                print(f"  [300W] {n} máº«u há»£p lá»‡...")
     return n
 
 
 def collect_from_facesynth(folder, collector, max_samples):
-    """FaceSynthetics: {id}.png + {id}_ldmks.txt (70 hàng 'x y' pixel;
-    68 hàng đầu = scheme iBUG, 2 hàng cuối = đồng tử -> bỏ)."""
+    """FaceSynthetics: {id}.png + {id}_ldmks.txt (70 hÃ ng 'x y' pixel;
+    68 hÃ ng Ä‘áº§u = scheme iBUG, 2 hÃ ng cuá»‘i = Ä‘á»“ng tá»­ -> bá»)."""
     txts = sorted(folder.rglob("*_ldmks.txt"))
     if not txts:
         return 0
@@ -548,14 +607,14 @@ def collect_from_facesynth(folder, collector, max_samples):
         if collector.add_sample(img, pts22, img_path.name):
             n += 1
             if n % 250 == 0:
-                print(f"  [FaceSynthetics] {n} mẫu hợp lệ / duyệt {i+1}...")
+                print(f"  [FaceSynthetics] {n} máº«u há»£p lá»‡ / duyá»‡t {i+1}...")
     return n
 
 
 def collect_from_cew(folder, collector, teacher, max_samples=3500):
-    """CEW: Chuyên sâu nhắm mắt (closed) và mở mắt (open) người thật."""
+    """CEW: ChuyÃªn sÃ¢u nháº¯m máº¯t (closed) vÃ  má»Ÿ máº¯t (open) ngÆ°á»i tháº­t."""
     if teacher is None or not getattr(teacher, 'available', False):
-        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher.")
+        print(f"  [SKIP] {folder.name}: khÃ´ng cÃ³ MediaPipe Teacher.")
         return 0
     closed_paths = sorted(folder.rglob("*closed*.*"))
     closed_paths = [p for p in closed_paths if p.suffix.lower() in ('.jpg', '.png', '.jpeg')]
@@ -574,7 +633,7 @@ def collect_from_cew(folder, collector, teacher, max_samples=3500):
     n_open_target = max_samples - n_closed_target
 
     n = 0
-    # 1. Thu thập ảnh nhắm mắt
+    # 1. Thu tháº­p áº£nh nháº¯m máº¯t
     for i, img_path in enumerate(closed_paths):
         if n >= n_closed_target:
             break
@@ -593,9 +652,9 @@ def collect_from_cew(folder, collector, teacher, max_samples=3500):
         if collector.add_sample(img, pts_px, img_path.name):
             n += 1
             if n % 250 == 0:
-                print(f"  [CEW-Closed] {n}/{n_closed_target} mẫu nhắm mắt...")
+                print(f"  [CEW-Closed] {n}/{n_closed_target} máº«u nháº¯m máº¯t...")
 
-    # 2. Thu thập ảnh mở mắt
+    # 2. Thu tháº­p áº£nh má»Ÿ máº¯t
     n_open = 0
     for i, img_path in enumerate(open_paths):
         if n_open >= n_open_target:
@@ -616,20 +675,20 @@ def collect_from_cew(folder, collector, teacher, max_samples=3500):
             n += 1
             n_open += 1
             if n_open % 250 == 0:
-                print(f"  [CEW-Open] {n_open}/{n_open_target} mẫu mở mắt...")
+                print(f"  [CEW-Open] {n_open}/{n_open_target} máº«u má»Ÿ máº¯t...")
     return n
 
 
 def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
-    """YawDD: Trích xuất frame cabin xe chuyên sâu về ngáp há miệng & lái xe thật."""
+    """YawDD: TrÃ­ch xuáº¥t frame cabin xe chuyÃªn sÃ¢u vá» ngÃ¡p hÃ¡ miá»‡ng & lÃ¡i xe tháº­t."""
     if teacher is None or not getattr(teacher, 'available', False):
-        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher.")
+        print(f"  [SKIP] {folder.name}: khÃ´ng cÃ³ MediaPipe Teacher.")
         return 0
     vids = sorted(folder.rglob("*.avi"))
     if not vids:
         return 0
 
-    # Phân loại video ngáp và video thường
+    # PhÃ¢n loáº¡i video ngÃ¡p vÃ  video thÆ°á»ng
     yawn_vids = [v for v in vids if "yawn" in v.name.lower() or "dash" in str(v).lower()]
     other_vids = [v for v in vids if v not in yawn_vids]
 
@@ -646,8 +705,8 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
 
     n = 0
     n_yawns = 0
-    # 1. Trích xuất frame từ video ngáp
-    print(f"  [YawDD] Bắt đầu quét {len(yawn_vids)} video có hành vi ngáp...")
+    # 1. TrÃ­ch xuáº¥t frame tá»« video ngÃ¡p
+    print(f"  [YawDD] Báº¯t Ä‘áº§u quÃ©t {len(yawn_vids)} video cÃ³ hÃ nh vi ngÃ¡p...")
     for vid_idx, v_path in enumerate(yawn_vids):
         if n_yawns >= n_yawn_target:
             break
@@ -659,7 +718,7 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
             ret, frame = cap.read()
             if not ret:
                 break
-            # Lấy mẫu mỗi 6 frames
+            # Láº¥y máº«u má»—i 6 frames
             if frame_idx % 6 == 0:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pts_norm = teacher.extract_22_landmarks(rgb)
@@ -668,24 +727,24 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
                     pts_px = pts_norm.copy()
                     pts_px[:, 0] *= w_img
                     pts_px[:, 1] *= h_img
-                    # Đo nhanh MAR
+                    # Äo nhanh MAR
                     w_m = np.linalg.norm(pts_px[12] - pts_px[13]) + 1e-6
                     h_m = np.linalg.norm(pts_px[14] - pts_px[15]) + np.linalg.norm(pts_px[16] - pts_px[17])
                     mar = float(h_m / (2.0 * w_m))
-                    # Ưu tiên ngáp và nhắm mắt
+                    # Æ¯u tiÃªn ngÃ¡p vÃ  nháº¯m máº¯t
                     if mar >= 0.38 or (frame_idx % 18 == 0):
-                        if collector.add_sample(frame, pts_px, f"{v_path.stem}_f{frame_idx}"):
+                        if collector.add_sample(frame, pts_px, v_path.stem):
                             n += 1
                             if mar >= 0.40:
                                 n_yawns += 1
                             if n % 150 == 0:
-                                print(f"  [YawDD-Yawn] {n} frame hợp lệ ({n_yawns} ngáp MAR>=0.40) / video {vid_idx+1}...")
+                                print(f"  [YawDD-Yawn] {n} frame há»£p lá»‡ ({n_yawns} ngÃ¡p MAR>=0.40) / video {vid_idx+1}...")
             frame_idx += 1
         cap.release()
 
-    # 2. Trích xuất frame lái xe bình thường
+    # 2. TrÃ­ch xuáº¥t frame lÃ¡i xe bÃ¬nh thÆ°á»ng
     n_norm = 0
-    print(f"  [YawDD] Bắt đầu quét {len(other_vids)} video lái xe cabin bình thường...")
+    print(f"  [YawDD] Báº¯t Ä‘áº§u quÃ©t {len(other_vids)} video lÃ¡i xe cabin bÃ¬nh thÆ°á»ng...")
     for vid_idx, v_path in enumerate(other_vids):
         if n_norm >= n_normal_target or n >= max_samples:
             break
@@ -697,7 +756,7 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
             ret, frame = cap.read()
             if not ret:
                 break
-            # Lấy mẫu mỗi 15 frames
+            # Láº¥y máº«u má»—i 15 frames
             if frame_idx % 15 == 0:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pts_norm = teacher.extract_22_landmarks(rgb)
@@ -706,11 +765,11 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
                     pts_px = pts_norm.copy()
                     pts_px[:, 0] *= w_img
                     pts_px[:, 1] *= h_img
-                    if collector.add_sample(frame, pts_px, f"{v_path.stem}_f{frame_idx}"):
+                    if collector.add_sample(frame, pts_px, v_path.stem):
                         n += 1
                         n_norm += 1
                         if n_norm % 150 == 0:
-                            print(f"  [YawDD-Normal] {n_norm}/{n_normal_target} frame bình thường...")
+                            print(f"  [YawDD-Normal] {n_norm}/{n_normal_target} frame bÃ¬nh thÆ°á»ng...")
             frame_idx += 1
         cap.release()
 
@@ -718,9 +777,9 @@ def collect_from_yawdd_videos(folder, collector, teacher, max_samples=3500):
 
 
 def collect_from_images(folder, collector, teacher, max_samples):
-    """Mọi ảnh không có nhãn landmark -> MediaPipe Teacher tự dán nhãn."""
+    """Má»i áº£nh khÃ´ng cÃ³ nhÃ£n landmark -> MediaPipe Teacher tá»± dÃ¡n nhÃ£n."""
     if teacher is None or not getattr(teacher, 'available', False):
-        print(f"  [SKIP] {folder.name}: không có MediaPipe Teacher để dán nhãn.")
+        print(f"  [SKIP] {folder.name}: khÃ´ng cÃ³ MediaPipe Teacher Ä‘á»ƒ dÃ¡n nhÃ£n.")
         return 0
     img_paths = []
     for ext in ('*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG'):
@@ -748,7 +807,7 @@ def collect_from_images(folder, collector, teacher, max_samples):
         if collector.add_sample(img, pts_px, img_path.name):
             n += 1
             if n % 200 == 0:
-                print(f"  [{folder.name}] {n} mẫu hợp lệ / duyệt {i+1}...")
+                print(f"  [{folder.name}] {n} máº«u há»£p lá»‡ / duyá»‡t {i+1}...")
     return n
 
 
@@ -806,20 +865,20 @@ def export_report(collectors, output_npz, preview_dir, total_time):
     poses = np.concatenate([np.array(c.poses) for c in collectors]) if n_total else np.zeros((0, 3))
 
     lines = [
-        "# 🧬 Báo cáo Build Clean Dataset (Đồ án 13)\n",
-        f"- **Thời gian build:** {total_time:.1f}s",
+        "# ðŸ§¬ BÃ¡o cÃ¡o Build Clean Dataset (Äá»“ Ã¡n 13)\n",
+        f"- **Thá»i gian build:** {total_time:.1f}s",
         f"- **File npz:** `{output_npz.name}`",
-        f"- **Tổng mẫu hợp lệ:** {n_total} (train {n_train} / val giữ-out {n_val})",
-        f"- **Preview kiểm tra:** {preview_dir}\n",
-        "## 📥 Số mẫu theo nguồn\n",
-        "| Nguồn | Hợp lệ | Train | Val |",
+        f"- **Tá»•ng máº«u há»£p lá»‡:** {n_total} (train {n_train} / val giá»¯-out {n_val})",
+        f"- **Preview kiá»ƒm tra:** {preview_dir}\n",
+        "## ðŸ“¥ Sá»‘ máº«u theo nguá»“n\n",
+        "| Nguá»“n | Há»£p lá»‡ | Train | Val |",
         "|---|---|---|---|",
     ]
     for c in collectors:
         nv = sum(1 for s in c.splits if s == 1)
         lines.append(f"| {c.source_name} | {len(c)} | {len(c) - nv} | {nv} |")
 
-    lines += ["\n## 🗑️ Mẫu bị loại theo lý do (QA Gates)\n", "| Nguồn | Lý do | Số mẫu |", "|---|---|---|"]
+    lines += ["\n## ðŸ—‘ï¸ Máº«u bá»‹ loáº¡i theo lÃ½ do (QA Gates)\n", "| Nguá»“n | LÃ½ do | Sá»‘ máº«u |", "|---|---|---|"]
     for c in collectors:
         for reason, cnt in c.rejected.most_common():
             lines.append(f"| {c.source_name} | {reason} | {cnt} |")
@@ -828,17 +887,17 @@ def export_report(collectors, output_npz, preview_dir, total_time):
         yaw_deg = poses[:, 0] * 90.0
         pitch_deg = poses[:, 1] * 90.0
         bins = [(-90, -40), (-40, -20), (-20, 20), (20, 40), (40, 90)]
-        lines += ["\n## 📐 Phân bố góc Yaw (độ) — phải phủ đều 2 phía\n", "| Khoảng | Số mẫu |", "|---|---|"]
+        lines += ["\n## ðŸ“ PhÃ¢n bá»‘ gÃ³c Yaw (Ä‘á»™) â€” pháº£i phá»§ Ä‘á»u 2 phÃ­a\n", "| Khoáº£ng | Sá»‘ máº«u |", "|---|---|"]
         for lo, hi in bins:
             cnt = int(np.sum((yaw_deg >= lo) & (yaw_deg < hi)))
             lines.append(f"| [{lo:+d}, {hi:+d}) | {cnt} |")
-        lines += ["\n## 🥱 Phân bố trạng thái sinh trắc\n",
-                  "| Trạng thái | Ngưỡng | Số mẫu |", "|---|---|---|",
-                  f"| Ngáp (MAR cao) | MAR >= 0.40 | {int(np.sum(mars >= 0.40))} |",
-                  f"| Nhắm mắt | EAR < 0.21 | {int(np.sum(ears < 0.21))} |",
-                  f"| Bình thường | còn lại | {int(np.sum((mars < 0.40) & (ears >= 0.21)))} |",
-                  "\n> ⚠️ Nếu cột Yaw [-90,-40) hoặc [40,90) bằng 0 → bổ sung 300W-LP/AFLW2000",
-                  "để mô hình học bất biến góc quay (nguyên nhân tracking hỏng cũ)."]
+        lines += ["\n## ðŸ¥± PhÃ¢n bá»‘ tráº¡ng thÃ¡i sinh tráº¯c\n",
+                  "| Tráº¡ng thÃ¡i | NgÆ°á»¡ng | Sá»‘ máº«u |", "|---|---|---|",
+                  f"| NgÃ¡p (MAR cao) | MAR >= 0.40 | {int(np.sum(mars >= 0.40))} |",
+                  f"| Nháº¯m máº¯t | EAR < 0.21 | {int(np.sum(ears < 0.21))} |",
+                  f"| BÃ¬nh thÆ°á»ng | cÃ²n láº¡i | {int(np.sum((mars < 0.40) & (ears >= 0.21)))} |",
+                  "\n> âš ï¸ Náº¿u cá»™t Yaw [-90,-40) hoáº·c [40,90) báº±ng 0 â†’ bá»• sung 300W-LP/AFLW2000",
+                  "Ä‘á»ƒ mÃ´ hÃ¬nh há»c báº¥t biáº¿n gÃ³c quay (nguyÃªn nhÃ¢n tracking há»ng cÅ©)."]
     report_path = ROOT_DIR / "output" / "dataset_report.md"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines), encoding="utf-8")
@@ -851,30 +910,30 @@ def export_report(collectors, output_npz, preview_dir, total_time):
 def main():
     parser = argparse.ArgumentParser(description="Build Clean Dataset cho TinyDriverNet")
     parser.add_argument("--data-dir", type=str, default=None,
-                        help="Thư mục dữ liệu bổ sung (ảnh tự chụp / WFLW / YawDD...)")
+                        help="ThÆ° má»¥c dá»¯ liá»‡u bá»• sung (áº£nh tá»± chá»¥p / WFLW / YawDD...)")
     parser.add_argument("--download-aflw2000", action="store_true",
-                        help="Tự tải AFLW2000-3D (~83 MB, 2000 ảnh phủ góc quay đầu ±90°)")
+                        help="Tá»± táº£i AFLW2000-3D (~83 MB, 2000 áº£nh phá»§ gÃ³c quay Ä‘áº§u Â±90Â°)")
     parser.add_argument("--download-facesynth", action="store_true",
-                        help="Tự tải Microsoft FaceSynthetics dataset_1000 (~322 MB, 1000 mặt 512x512 nhãn 68-pt iBUG chính xác pixel)")
+                        help="Tá»± táº£i Microsoft FaceSynthetics dataset_1000 (~322 MB, 1000 máº·t 512x512 nhÃ£n 68-pt iBUG chÃ­nh xÃ¡c pixel)")
     parser.add_argument("--download-300wlp", action="store_true",
-                        help="Thử tải 300W-LP (~1.7 GB) — LƯU Ý: link chính thức hiện 404, chỉ còn tải thủ công")
+                        help="Thá»­ táº£i 300W-LP (~1.7 GB) â€” LÆ¯U Ã: link chÃ­nh thá»©c hiá»‡n 404, chá»‰ cÃ²n táº£i thá»§ cÃ´ng")
     parser.add_argument("--aflw2000-zip", type=str, default=None,
-                        help="Đường dẫn file AFLW2000-3D.zip đã tải sẵn")
+                        help="ÄÆ°á»ng dáº«n file AFLW2000-3D.zip Ä‘Ã£ táº£i sáºµn")
     parser.add_argument("--output-npz", type=str,
                         default=str(TRAINING_DIR / "preprocessed_driver_dataset.npz"))
     parser.add_argument("--val-percent", type=int, default=8,
-                        help="Phần trăm mẫu giữ-out cho validation (mặc định 8%%)")
+                        help="Pháº§n trÄƒm máº«u giá»¯-out cho validation (máº·c Ä‘á»‹nh 8%%)")
     parser.add_argument("--max-per-source", type=int, default=25000)
     parser.add_argument("--max-previews", type=int, default=60)
     args = parser.parse_args()
 
     t0 = time.time()
     print("=" * 78)
-    print("🧬 BUILD CLEAN DATASET - Đồ án 13 (pipeline thay thế dữ liệu bẩn)")
+    print("ðŸ§¬ BUILD CLEAN DATASET - Äá»“ Ã¡n 13 (pipeline thay tháº¿ dá»¯ liá»‡u báº©n)")
     print("=" * 78)
 
-    # [v2.0.5] Teacher LAZY: chỉ khởi tạo MediaPipe khi gặp nguồn KHÔNG có nhãn sẵn
-    # (trước đây init trước cả khi tải file -> noise + chậm vô ích với nguồn mat68/pts68)
+    # [v2.0.5] Teacher LAZY: chá»‰ khá»Ÿi táº¡o MediaPipe khi gáº·p nguá»“n KHÃ”NG cÃ³ nhÃ£n sáºµn
+    # (trÆ°á»›c Ä‘Ã¢y init trÆ°á»›c cáº£ khi táº£i file -> noise + cháº­m vÃ´ Ã­ch vá»›i nguá»“n mat68/pts68)
     teacher_holder = {}
 
     def _get_teacher():
@@ -891,7 +950,7 @@ def main():
         with zipfile.ZipFile(str(z), 'r') as zf:
             zf.extractall(str(dest))
         (dest / "_extracted_ok").write_text("ok", encoding="utf-8")
-        print(f"[AFLW2000] Đã giải nén từ {z.name}")
+        print(f"[AFLW2000] ÄÃ£ giáº£i nÃ©n tá»« {z.name}")
 
     if args.download_aflw2000:
         if not download_aflw2000(RAW_FACES_DIR / "AFLW2000"):
@@ -903,9 +962,9 @@ def main():
 
     if args.download_300wlp:
         if not download_300wlp(RAW_FACES_DIR / "300W-LP"):
-            failed_downloads.append("300W-LP (link 404 — tải thủ công từ trang 3DDFA)")
+            failed_downloads.append("300W-LP (link 404 â€” táº£i thá»§ cÃ´ng tá»« trang 3DDFA)")
 
-    # Danh sách nguồn: mọi thư mục con của datasets/raw_faces + data-dir tùy chọn
+    # Danh sÃ¡ch nguá»“n: má»i thÆ° má»¥c con cá»§a datasets/raw_faces + data-dir tÃ¹y chá»n
     source_dirs = []
     if RAW_FACES_DIR.exists():
         for d in sorted(RAW_FACES_DIR.iterdir()):
@@ -916,32 +975,44 @@ def main():
         if extra.exists():
             source_dirs.append(extra)
         else:
-            print(f"⚠️ --data-dir không tồn tại: {extra}")
+            print(f"âš ï¸ --data-dir khÃ´ng tá»“n táº¡i: {extra}")
 
     if failed_downloads:
-        print("\n⚠️ CẢNH BÁO: Có nguồn tải thất bại: " + ", ".join(failed_downloads))
-        print("   (Vẫn tiếp tục build với những nguồn còn lại.)")
+        print("\nâš ï¸ Cáº¢NH BÃO: CÃ³ nguá»“n táº£i tháº¥t báº¡i: " + ", ".join(failed_downloads))
+        print("   (Váº«n tiáº¿p tá»¥c build vá»›i nhá»¯ng nguá»“n cÃ²n láº¡i.)")
 
     if not source_dirs:
-        print("\n❌ KHÔNG CÓ DỮ LIỆU NÀO trong datasets/raw_faces/!")
-        print("👉 Làm 1 trong các việc sau:")
+        print("\nâŒ KHÃ”NG CÃ“ Dá»® LIá»†U NÃ€O trong datasets/raw_faces/!")
+        print("ðŸ‘‰ LÃ m 1 trong cÃ¡c viá»‡c sau:")
         print("   1. python tools/build_clean_dataset.py --download-aflw2000 --download-facesynth")
-        print("   2. Tải thủ công 300W / WFLW / YawDD vào datasets/raw_faces/<ten>/")
-        print("      (hướng dẫn link ở đầu file này)")
+        print("   2. Táº£i thá»§ cÃ´ng 300W / WFLW / YawDD vÃ o datasets/raw_faces/<ten>/")
+        print("      (hÆ°á»›ng dáº«n link á»Ÿ Ä‘áº§u file nÃ y)")
         sys.exit(1)
 
     collectors = []
     for src_dir in source_dirs:
         name = src_dir.name
-        # [v2.0.5] Bỏ qua thư mục RỖNG (thường do tải thất bại) thay vì in "0 mẫu" gây rối
+        # [v2.0.5] Bá» qua thÆ° má»¥c Rá»–NG (thÆ°á»ng do táº£i tháº¥t báº¡i) thay vÃ¬ in "0 máº«u" gÃ¢y rá»‘i
         has_any = next(src_dir.rglob("*"), None)
         if has_any is None:
-            print(f"\n⏭️ [SKIP] {name}: thư mục RỖNG (nguồn chưa được tải về) — bỏ qua.")
+            print(f"\nâ­ï¸ [SKIP] {name}: thÆ° má»¥c Rá»–NG (nguá»“n chÆ°a Ä‘Æ°á»£c táº£i vá») â€” bá» qua.")
             continue
-        print(f"\n📥 NGUỒN: {name} ({src_dir})")
+        print(f"\nðŸ“¥ NGUá»’N: {name} ({src_dir})")
         collector = SampleCollector(teacher=None, source_name=name,
                                     val_percent=args.val_percent)
         low_name = name.lower()
+
+        # [v2.3.0 - FIX DATA NGHIÃŠM TRá»ŒNG] LOáº I Bá»Ž 300W-LP.
+        # ÄÃ£ kiá»ƒm chá»©ng: file .mat cá»§a 300W-LP chá»‰ chá»©a `pt2d` á»Ÿ há»‡ toáº¡ Ä‘á»™ áº¢NH Gá»C (frontal),
+        # KHÃ”NG khá»›p vá»›i áº£nh Ä‘Ã£ render pose. CÃ¹ng má»™t khuÃ´n máº·t á»Ÿ 18 pose khÃ¡c nhau cÃ³ pt2d
+        # Y Há»†T NHAU; táº¡i yaw=50Â° sai lá»‡ch lÃªn tá»›i 45px so vá»›i MediaPipe. ÄÃ¢y lÃ  3500/11174
+        # máº«u (31%) bá»‹ há»ng nhÃ£n -> dáº¡y sai mÃ´ hÃ¬nh. Thay báº±ng AFLW2000_3D + YawDD (ngÆ°á»i tháº­t,
+        # cÃ³ gÃ³c quay lá»›n tá»›i Â±90Â° vÃ  nhÃ£n chuáº©n).
+        if "300w" in low_name:
+            print(f"  â­ï¸ [SKIP] {name}: nhÃ£n 300W-LP á»Ÿ há»‡ toáº¡ Ä‘á»™ frontal, KHÃ”NG khá»›p áº£nh render pose "
+                  f"(sai tá»›i 45px á»Ÿ yaw 50Â°). Bá» Ä‘á»ƒ trÃ¡nh há»ng dá»¯ liá»‡u.")
+            continue
+
         if "yawdd" in low_name:
             teacher = _get_teacher()
             n = collect_from_yawdd_videos(src_dir, collector, teacher, max_samples=3500)
@@ -950,15 +1021,11 @@ def main():
             teacher = _get_teacher()
             n = collect_from_cew(src_dir, collector, teacher, max_samples=3500)
             fmt = "cew_images"
-        elif "300w" in low_name:
-            n = collect_from_mat68(src_dir, collector, max_samples=3500, shuffle=True)
-            fmt = "mat68_300w"
-            if n == 0:
-                n = collect_from_300w(src_dir, collector, max_samples=3500)
-                fmt = "pts68" if n > 0 else None
         elif "aflw" in low_name:
-            n = collect_from_mat68(src_dir, collector, max_samples=2000, shuffle=False)
-            fmt = "mat68_aflw"
+            # [v2.4.2] Dán nhãn lại bằng MediaPipe để đồng bộ quy ước 22 điểm với CEW/YawDD.
+            teacher = _get_teacher()
+            n = collect_from_aflw_teacher(src_dir, collector, teacher, max_samples=2000)
+            fmt = "mediapipe_aflw"
         else:
             n = collect_from_mat68(src_dir, collector, args.max_per_source)
             fmt = "mat68" if n > 0 else None
@@ -971,20 +1038,20 @@ def main():
             if n == 0:
                 teacher = _get_teacher()
                 if teacher is None or not teacher.available:
-                    print(f"  ⏭️ [SKIP] {name}: không có nhãn sẵn và MediaPipe Teacher không khả dụng.")
+                    print(f"  â­ï¸ [SKIP] {name}: khÃ´ng cÃ³ nhÃ£n sáºµn vÃ  MediaPipe Teacher khÃ´ng kháº£ dá»¥ng.")
                     continue
                 n = collect_from_images(src_dir, collector, teacher, args.max_per_source)
                 fmt = "mediapipe" if n > 0 else None
-        print(f"  ✅ {name}: {n} mẫu hợp lệ (format={fmt}) | loại: "
+        print(f"  âœ… {name}: {n} máº«u há»£p lá»‡ (format={fmt}) | loáº¡i: "
               f"{dict(collector.rejected.most_common()) if collector.rejected else '{}'}")
         if n > 0:
             collectors.append(collector)
 
     if not collectors:
-        print("\n❌ Không thu thập được mẫu hợp lệ nào! Kiểm tra lại dữ liệu.")
+        print("\nâŒ KhÃ´ng thu tháº­p Ä‘Æ°á»£c máº«u há»£p lá»‡ nÃ o! Kiá»ƒm tra láº¡i dá»¯ liá»‡u.")
         sys.exit(1)
 
-    # Gộp + xuất npz
+    # Gá»™p + xuáº¥t npz
     images = np.concatenate([np.array(c.images, dtype=np.uint8) for c in collectors])
     landmarks = np.concatenate([np.array(c.landmarks, dtype=np.float32) for c in collectors])
     poses = np.concatenate([np.array(c.poses, dtype=np.float32) for c in collectors])
@@ -993,7 +1060,7 @@ def main():
     splits = np.concatenate([np.array(c.splits, dtype=np.uint8) for c in collectors])
     sources = np.concatenate([np.array([c.source_name] * len(c), dtype='U32') for c in collectors])
 
-    # Shuffle nhất quán (theo seed) nhưng GIỮ nguyên cột split
+    # Shuffle nháº¥t quÃ¡n (theo seed) nhÆ°ng GIá»® nguyÃªn cá»™t split
     rng = np.random.RandomState(1234)
     perm = rng.permutation(len(images))
     images, landmarks, poses = images[perm], landmarks[perm], poses[perm]
@@ -1010,26 +1077,26 @@ def main():
     n_val = int(np.sum(splits == 1))
 
     print("\n" + "=" * 78)
-    print(f"🎉 HOÀN TẤT: {output_npz.name} ({size_mb:.1f} MB)")
-    print(f"   • Tổng mẫu      : {len(images)} (train {len(images) - n_val} / val giữ-out {n_val})")
-    print(f"   • Ngáp (MAR>=0.4): {int(np.sum(mars >= 0.40))} | Nhắm (EAR<0.21): {int(np.sum(ears < 0.21))}")
+    print(f"ðŸŽ‰ HOÃ€N Táº¤T: {output_npz.name} ({size_mb:.1f} MB)")
+    print(f"   â€¢ Tá»•ng máº«u      : {len(images)} (train {len(images) - n_val} / val giá»¯-out {n_val})")
+    print(f"   â€¢ NgÃ¡p (MAR>=0.4): {int(np.sum(mars >= 0.40))} | Nháº¯m (EAR<0.21): {int(np.sum(ears < 0.21))}")
     saved = export_previews(collectors, PREVIEW_DIR, args.max_previews)
-    print(f"   • Preview        : {saved} ảnh tại {PREVIEW_DIR}")
+    print(f"   â€¢ Preview        : {saved} áº£nh táº¡i {PREVIEW_DIR}")
     report = export_report(collectors, output_npz, PREVIEW_DIR, time.time() - t0)
-    print(f"   • Báo cáo        : {report}")
+    print(f"   â€¢ BÃ¡o cÃ¡o        : {report}")
     yaw_deg = poses[:, 0] * 90.0
     big_pose = int(np.sum(np.abs(yaw_deg) >= 40))
-    print(f"   • Mẫu |Yaw|>=40° : {big_pose} "
-          f"({'✅ OK' if big_pose > 200 else '⚠️ CẦN BỔ SUNG dữ liệu góc quay lớn'})")
+    print(f"   â€¢ Máº«u |Yaw|>=40Â° : {big_pose} "
+          f"({'âœ… OK' if big_pose > 200 else 'âš ï¸ Cáº¦N Bá»” SUNG dá»¯ liá»‡u gÃ³c quay lá»›n'})")
     print("=" * 78)
 
-    # [v2.0.5] Thông báo tiếp theo PHỤ THỤCH chất lượng dữ liệu (không in máy móc)
+    # [v2.0.5] ThÃ´ng bÃ¡o tiáº¿p theo PHá»¤ THá»¤CH cháº¥t lÆ°á»£ng dá»¯ liá»‡u (khÃ´ng in mÃ¡y mÃ³c)
     if len(images) < 3000:
-        print("\n⚠️ DATASET VẪN NHỎ (< 3000 mẫu). Khuyến nghị TRƯỚC KHI train:")
-        print("   1. python tools/build_clean_dataset.py --download-facesynth (tự động, 322MB)")
-        print("   2. Tải WFLW thủ công (Google Drive, ~9.8k ảnh) bỏ vào datasets/raw_faces/WFLW/")
-        print("   3. Chạy lại lệnh build này để gộp thêm nguồn mới.")
-    print("\n👉 BƯỚC TIẾP THEO: python tools/project_manager.py --pack-colab (train trên Colab)")
+        print("\nâš ï¸ DATASET VáºªN NHá»Ž (< 3000 máº«u). Khuyáº¿n nghá»‹ TRÆ¯á»šC KHI train:")
+        print("   1. python tools/build_clean_dataset.py --download-facesynth (tá»± Ä‘á»™ng, 322MB)")
+        print("   2. Táº£i WFLW thá»§ cÃ´ng (Google Drive, ~9.8k áº£nh) bá» vÃ o datasets/raw_faces/WFLW/")
+        print("   3. Cháº¡y láº¡i lá»‡nh build nÃ y Ä‘á»ƒ gá»™p thÃªm nguá»“n má»›i.")
+    print("\nðŸ‘‰ BÆ¯á»šC TIáº¾P THEO: python tools/project_manager.py --pack-colab (train trÃªn Colab)")
 
 
 if __name__ == "__main__":

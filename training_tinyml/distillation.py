@@ -50,7 +50,8 @@ MEDIAPIPE_TO_22_INDICES = [
     152   # Chin bottom (Chóp cằm)
 ]
 
-# Standard Anthropometric 3D Human Face Model in millimeters for PnP
+# [v2.4.1 - RESTORE] Standard Anthropometric 3D Human Face Model in millimeters for PnP.
+# Bản gốc — đồng bộ với host_laptop/local_model_tester.py + firmware pnp_solver.cpp.
 FACE_3D_MODEL = np.array([
     [  0.0,   0.0,   0.0],    # 0: Nose Tip (Index 19)
     [  0.0,  65.0, -35.0],    # 1: Chin (Index 21: +Y down)
@@ -66,6 +67,7 @@ def estimate_pose_from_landmarks(pts_22_norm):
     Estimates 3D Head Pose (Yaw, Pitch, Roll in radians) from 22 normalized landmarks.
     """
     pts_px = pts_22_norm.copy() * 96.0
+    # [v2.4.1 RESTORE] 6 điểm gốc: chóp mũi, cằm, 2 khóe mắt ngoài, 2 khóe miệng
     pts_2d = np.array([
         pts_px[19],
         pts_px[21],

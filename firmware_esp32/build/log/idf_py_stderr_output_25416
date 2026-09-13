@@ -1,0 +1,3 @@
+warning: the value '1440CONFIG_LWIP_TCP_WND_DEFAULT=14400' is invalid for LWIP_TCP_MSS (defined at C:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/Kconfig:612), which has type int -- assignment ignored
+ninja: error: remove(CMakeFiles\mbedcrypto.rsp): The process cannot access the file because it is being used by another process.
+

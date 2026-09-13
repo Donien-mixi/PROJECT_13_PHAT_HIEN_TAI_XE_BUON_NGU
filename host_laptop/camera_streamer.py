@@ -18,6 +18,15 @@ from socketserver import ThreadingMixIn
 # Magic protocol header for ESP32 TCP frame sync
 TCP_MAGIC_HEADER = b'\xaa\x55\xaa\x55'
 
+# [v2.4.3 SYNC] Dùng chung bộ trích xuất MediaPipe với local_model_tester để anchor
+# khớp CHÍNH XÁC với lúc TRAIN (teacher) và lúc test laptop. Fallback Haar nếu không có.
+try:
+    from local_model_tester import MediaPipeLandmarkExtractor
+    _HAS_MP_EXTRACTOR = True
+except Exception:
+    MediaPipeLandmarkExtractor = None
+    _HAS_MP_EXTRACTOR = False
+
 
 def enhance_low_light(frame_bgr, target_luma=115.0):
     """
@@ -115,6 +124,18 @@ class CameraStreamer:
         else:
             print("ℹ️ [Face Tracking] Sử dụng Square Center-Crop đẳng hướng 1:1.")
 
+        # [v2.4.3 SYNC] Anchor MediaPipe (giống lúc train và test laptop)
+        self.mp_extractor = None
+        if _HAS_MP_EXTRACTOR and MediaPipeLandmarkExtractor is not None and self.use_dynamic_face:
+            try:
+                self.mp_extractor = MediaPipeLandmarkExtractor()
+            except Exception:
+                self.mp_extractor = None
+        if self.mp_extractor is not None and getattr(self.mp_extractor, 'is_loaded', False):
+            print("💎 [Face Tracking] Dùng ANCHOR MEDIAPIPE (đồng bộ TRAIN + test laptop).")
+        elif self.face_cascades:
+            print("🎯 [Face Tracking] Dùng anchor Haar Cascade (MediaPipe không khả dụng).")
+
         # Thread-safe buffer
         self.lock = threading.Lock()
         self.latest_raw_frame = None
@@ -199,28 +220,40 @@ class CameraStreamer:
                 if target_face_center is not None:
                     target_cx, target_cy = target_face_center
                     target_S = 260.0
-                elif self.face_cascades:
-                    enh_frame = enhance_low_light(frame, target_luma=115.0)
-                    small_gray = cv2.resize(cv2.cvtColor(enh_frame, cv2.COLOR_BGR2GRAY), (w // 2, h // 2))
-                    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-                    small_gray = clahe.apply(small_gray)
-                    for cc in self.face_cascades:
-                        faces = cc.detectMultiScale(
-                            small_gray, scaleFactor=1.06, minNeighbors=2, minSize=(30, 30)
-                        )
-                        if len(faces) > 0:
-                            faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                            fx, fy, fw, fh = faces[0]
-                            # [v2.0.5 SYNC] Haar -> mỏ neo Canonical (đồng bộ
-                            # compute_canonical_anchor của isomorphic_transform.py):
-                            # d_eyes ≈ 0.46*fw; h ≈ 1.40*d_eyes; S = 2.05*h; cy = eye_y + 0.32*h
-                            d_eyes_est = 0.46 * float(fw)
-                            h_skull = max(d_eyes_est * 0.45 * 2.10, d_eyes_est * 1.40,
-                                          d_eyes_est * 0.45 * 2.2 / 1.20)
-                            target_cx = (fx + fw / 2.0) * 2.0
-                            target_cy = ((fy + fh * 0.40) * 2.0) + 0.32 * h_skull
-                            target_S = float(np.clip(h_skull * 2.05, 160, default_S))
-                            break
+                else:
+                    got_face = False
+                    # (A) [v2.4.3 SYNC] Anchor MediaPipe — khớp công thức canonical_face_crop lúc TRAIN.
+                    if self.mp_extractor is not None and getattr(self.mp_extractor, 'is_loaded', False):
+                        try:
+                            _mp_pts, mp_info = self.mp_extractor.extract(frame)
+                        except Exception:
+                            mp_info = None
+                        if mp_info is not None:
+                            target_cx = float(mp_info[0])
+                            target_cy = float(mp_info[1])
+                            target_S = float(mp_info[2])   # = round(h_skull * 2.05)
+                            got_face = True
+                    # (B) Fallback Haar Cascade
+                    if (not got_face) and self.face_cascades:
+                        enh_frame = enhance_low_light(frame, target_luma=115.0)
+                        small_gray = cv2.resize(cv2.cvtColor(enh_frame, cv2.COLOR_BGR2GRAY), (w // 2, h // 2))
+                        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+                        small_gray = clahe.apply(small_gray)
+                        for cc in self.face_cascades:
+                            faces = cc.detectMultiScale(
+                                small_gray, scaleFactor=1.06, minNeighbors=2, minSize=(30, 30)
+                            )
+                            if len(faces) > 0:
+                                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                                fx, fy, fw, fh = faces[0]
+                                # [v2.2.0 FIX] Haar dò trên ảnh HALF-RES -> quy về FULL-RES.
+                                d_eyes_est = 0.46 * float(fw) * 2.0
+                                h_skull = max(d_eyes_est * 0.45 * 2.10, d_eyes_est * 1.40,
+                                              d_eyes_est * 0.45 * 2.2 / 1.20)
+                                target_cx = (fx + fw / 2.0) * 2.0
+                                target_cy = (fy + fh * 0.40) * 2.0 + 0.32 * h_skull
+                                target_S = float(np.clip(h_skull * 2.05, 160, default_S * 1.5))
+                                break
 
             # Apply Anti-Jitter Deadband and Exponential Moving Average (EMA) smoothing
             if self.smooth_cx is None:
@@ -239,22 +272,30 @@ class CameraStreamer:
                     self.smooth_S = self.ema_alpha * target_S + (1.0 - self.ema_alpha) * self.smooth_S
 
             cx = self.smooth_cx
-            # Bù trừ tóc/trán: Dịch nhẹ tâm cy xuống dưới 5% kích thước mặt để định tâm mắt và miệng
-            cy = self.smooth_cy + (0.05 * self.smooth_S)
+            # [v2.2.0 FIX] Bỏ dịch +5%S: mỏ neo lúc TRAIN là cy = eye_y + 0.32*h_skull,
+            # KHÔNG có offset này. Thêm offset gây lệch khung crop so với phân phối train.
+            cy = self.smooth_cy
             S = int(round(self.smooth_S))
 
-            # Calculate crop bounds ensuring box remains inside image
+            # [v2.4.0] Cắt vuông 1:1 + PAD ĐEN khi crop vượt khung (S có thể tới 1.5*min(w,h)).
+            # KHÔNG clamp x0/y0 vào trong khung: với S>w, clamp sẽ làm crop méo tỉ lệ.
             x0 = int(round(cx - S / 2.0))
             y0 = int(round(cy - S / 2.0))
-            x0 = max(0, min(w - S, x0))
-            y0 = max(0, min(h - S, y0))
+            x1 = x0 + S
+            y1 = y0 + S
+            pad_l = max(0, -x0); pad_t = max(0, -y0)
+            pad_r = max(0, x1 - w); pad_b = max(0, y1 - h)
+            if pad_l or pad_t or pad_r or pad_b:
+                padded = cv2.copyMakeBorder(frame, pad_t, pad_b, pad_l, pad_r,
+                                            cv2.BORDER_CONSTANT, value=(0, 0, 0))
+                crop = padded[y0 + pad_t:y1 + pad_t, x0 + pad_l:x1 + pad_l]
+            else:
+                crop = frame[y0:y1, x0:x1]
 
-            # Crop square region (1:1 Isomorphic)
-            crop = frame[y0:y0 + S, x0:x0 + S]
             square_resized = cv2.resize(crop, (self.stream_size, self.stream_size), interpolation=cv2.INTER_LINEAR)
-            # Nâng sáng và tương phản thích ứng nếu crop tối để ESP32 nhận diện rõ nét
-            if np.mean(square_resized) < 95.0:
-                square_resized = enhance_low_light(square_resized, target_luma=120.0)
+            # [v2.2.0 SYNC] KHÔNG enhance/CLAHE crop trước khi encode: input lúc train là
+            # canonical crop thô + photometric aug (brightness/gamma/noise), KHÔNG CLAHE.
+            # (enhance_low_light chỉ dùng cho bộ DÒ mặt, không dùng cho input model.)
 
             # Encode to JPEG
             ret_enc, jpeg_buf = cv2.imencode('.jpg', square_resized, self.jpeg_quality)

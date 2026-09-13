@@ -11,6 +11,7 @@
 
 // Submodules
 #include "wifi_stream_client.h"
+#include "camera_capture.h"
 #include "image_decoder.h"
 #include "ai_inference.h"
 #include "pnp_solver.h"
@@ -19,6 +20,8 @@
 #include "tinydriver_model_data.h"
 
 static const char* TAG = "MAIN_APP";
+
+static uint32_t s_device_frame_counter = 0;
 
 // Core 1 Task: Edge AI & ADAS State Machine Execution
 static void vTaskEdgeAI_ADAS(void* pvParameters) {
@@ -34,6 +37,20 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
     float current_fps = 0.0f;
 
     while (1) {
+        const uint8_t* jpeg_data = NULL;
+        size_t jpeg_len = 0;
+        uint32_t frame_index = 0;
+
+#if CONFIG_TD_USE_ONBOARD_CAMERA
+        camera_frame_t cam_frame;
+        if (!camera_capture_acquire(&cam_frame)) {
+            vTaskDelay(pdMS_TO_TICKS(5));
+            continue;
+        }
+        jpeg_data = cam_frame.data;
+        jpeg_len = cam_frame.length;
+        frame_index = ++s_device_frame_counter;
+#else
         frame_buffer_t frame;
         // 1. Acquire the latest 1:1 JPEG frame from PSRAM Double Buffer
         if (!wifi_stream_acquire_latest_frame(&frame, 100)) {
@@ -41,19 +58,28 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
+        jpeg_data = frame.buffer;
+        jpeg_len = frame.length;
+        frame_index = frame.frame_index;
+#endif
 
         int64_t t0 = esp_timer_get_time();
 
         // 2. Fast JPEG Decode & Isomorphic Downsample directly to 96x96 INT8
         bool dec_ok = image_decoder_process_jpeg(
-            frame.buffer, frame.length,
+            jpeg_data, jpeg_len,
             input_tensor_ptr,
             TINYDRIVER_INPUT_SCALE, TINYDRIVER_INPUT_ZERO_POINT
         );
+
+#if CONFIG_TD_USE_ONBOARD_CAMERA
+        camera_capture_release();
+#else
         wifi_stream_release_frame();
+#endif
 
         if (!dec_ok) {
-            ESP_LOGW(TAG, "Lỗi giải nén frame #%u", (unsigned int)frame.frame_index);
+            ESP_LOGW(TAG, "Lỗi giải nén frame #%u", (unsigned int)frame_index);
             continue;
         }
         int64_t t_decode = esp_timer_get_time() - t0;
@@ -133,6 +159,13 @@ extern "C" void app_main(void) {
         return;
     }
 
+#if CONFIG_TD_USE_ONBOARD_CAMERA
+    if (!camera_capture_init()) {
+        ESP_LOGE(TAG, "Khởi tạo Camera OV5640 thất bại!");
+        return;
+    }
+#endif
+
     if (!image_decoder_init()) {
         ESP_LOGE(TAG, "Khởi tạo Image Decoder thất bại!");
         return;
@@ -154,6 +187,9 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng!");
 
     // 4. Create Dual-Core FreeRTOS Tasks
+#if CONFIG_TD_USE_ONBOARD_CAMERA
+    ESP_LOGI(TAG, "📷 Chế độ ONBOARD CAMERA: ESP32 tự thu hình, không dùng TCP laptop.");
+#else
     // Task Core 0: Wi-Fi TCP Frame Receiver (Network Ingestion)
     xTaskCreatePinnedToCore(
         wifi_stream_receiver_task,
@@ -164,6 +200,7 @@ extern "C" void app_main(void) {
         NULL,
         0   // Pinned to Core 0
     );
+#endif
 
     // Task Core 1: TinyML Inference & ADAS FSM Decision (Real-Time Edge AI)
     xTaskCreatePinnedToCore(

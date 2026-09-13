@@ -1,0 +1,176 @@
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x19b4
+load:0x403c8700,len:0x4
+load:0x403c8704,len:0xe8c
+load:0x403cb700,len:0x3144
+entry 0x403c8940
+[0;32mI (27) boot: ESP-IDF v5.3.5 2nd stage bootloader[0m
+[0;32mI (27) boot: compile time Sep 13 2026 10:20:33[0m
+[0;32mI (27) boot: Multicore bootloader[0m
+[0;32mI (30) boot: chip revision: v0.2[0m
+[0;32mI (34) boot: efuse block revision: v1.4[0m
+[0;32mI (38) qio_mode: Enabling default flash chip QIO[0m
+[0;32mI (43) boot.esp32s3: Boot SPI Speed : 80MHz[0m
+[0;32mI (48) boot.esp32s3: SPI Mode       : QIO[0m
+[0;32mI (53) boot.esp32s3: SPI Flash Size : 16MB[0m
+[0;32mI (58) boot: Enabling RNG early entropy source...[0m
+[0;32mI (63) boot: Partition Table:[0m
+[0;32mI (67) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (74) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (82) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (89) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (97) boot: End of partition table[0m
+[0;32mI (101) esp_image: segment 0: paddr=00010020 vaddr=3c0a0020 size=1b2fch (111356) map[0m
+[0;32mI (126) esp_image: segment 1: paddr=0002b324 vaddr=3fc9bf00 size=04cf4h ( 19700) load[0m
+[0;32mI (130) esp_image: segment 2: paddr=00030020 vaddr=42000020 size=91dcch (597452) map[0m
+[0;32mI (225) esp_image: segment 3: paddr=000c1df4 vaddr=3fca0bf4 size=00900h (  2304) load[0m
+[0;32mI (225) esp_image: segment 4: paddr=000c26fc vaddr=40374000 size=17e94h ( 97940) load[0m
+[0;32mI (259) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (259) boot: Disabling RNG early entropy source...[0m
+[0;32mI (271) octal_psram: vendor id    : 0x0d (AP)[0m
+[0;32mI (271) octal_psram: dev id       : 0x02 (generation 3)[0m
+[0;32mI (272) octal_psram: density      : 0x03 (64 Mbit)[0m
+[0;32mI (277) octal_psram: good-die     : 0x01 (Pass)[0m
+[0;32mI (282) octal_psram: Latency      : 0x01 (Fixed)[0m
+[0;32mI (287) octal_psram: VCC          : 0x01 (3V)[0m
+[0;32mI (292) octal_psram: SRF          : 0x01 (Fast Refresh)[0m
+[0;32mI (298) octal_psram: BurstType    : 0x01 (Hybrid Wrap)[0m
+[0;32mI (304) octal_psram: BurstLen     : 0x01 (32 Byte)[0m
+[0;32mI (309) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)[0m
+[0;32mI (315) octal_psram: DriveStrength: 0x00 (1/1)[0m
+[0;32mI (321) MSPI Timing: PSRAM timing tuning index: 11[0m
+[0;32mI (326) esp_psram: Found 8MB PSRAM device[0m
+[0;32mI (331) esp_psram: Speed: 80MHz[0m
+[0;32mI (335) cpu_start: Multicore app[0m
+[0;32mI (350) cpu_start: Pro cpu start user code[0m
+[0;32mI (350) cpu_start: cpu freq: 240000000 Hz[0m
+[0;32mI (350) app_init: Application information:[0m
+[0;32mI (353) app_init: Project name:     tinydriver_esp32s3_edge_ai[0m
+[0;32mI (360) app_init: App version:      11e6830-dirty[0m
+[0;32mI (365) app_init: Compile time:     Sep 13 2026 10:18:09[0m
+[0;32mI (371) app_init: ELF file SHA256:  56d23a2b6...[0m
+[0;32mI (376) app_init: ESP-IDF:          v5.3.5[0m
+[0;32mI (381) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (386) efuse_init: Max chip rev:     v0.99 [0m
+[0;32mI (391) efuse_init: Chip rev:         v0.2[0m
+[0;32mI (396) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (403) heap_init: At 3FCA8710 len 00041000 (260 KiB): RAM[0m
+[0;32mI (409) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM[0m
+[0;32mI (415) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM[0m
+[0;32mI (421) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM[0m
+[0;32mI (428) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator[0m
+[0;32mI (435) spi_flash: detected chip: generic[0m
+[0;32mI (440) spi_flash: flash io: qio[0m
+[0;32mI (444) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (450) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (458) main_task: Started on CPU0[0m
+[0;32mI (462) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations[0m
+[0;32mI (471) main_task: Calling app_main()[0m
+[0;32mI (475) MAIN_APP: =================================================================[0m
+[0;32mI (483) MAIN_APP: 🚘 PROJECT 13: DRIVER DROWSINESS & DISTRACTION DETECTION[0m
+[0;32mI (491) MAIN_APP: ⚡ 100% EDGE AI ON ESP32-S3 N16R8 DEVKIT (16MB Flash, 8MB PSRAM)[0m
+[0;32mI (499) MAIN_APP: =================================================================[0m
+[0;32mI (518) MAIN_APP: Bộ nhớ Octal PSRAM : 8 MB (Còn trống: 8189 KB)[0m
+[0;32mI (519) MAIN_APP: Bộ nhớ Internal SRAM: 298 KB[0m
+[0;32mI (520) WIFI_STREAM: Đang cấp phát Double Buffer trong Octal PSRAM (64 KB mỗi buffer)...[0m
+[0;32mI (531) pp: pp rom version: e7ae62f[0m
+[0;32mI (534) net80211: net80211 rom version: e7ae62f[0m
+[0;32mI (540) wifi:wifi driver task: 3fcba760, prio:23, stack:6656, core=0[0m
+[0;32mI (551) wifi:wifi firmware version: 18db208[0m
+[0;32mI (551) wifi:wifi certification version: v7.0[0m
+[0;32mI (553) wifi:config NVS flash: enabled[0m
+[0;32mI (557) wifi:config nano formating: disabled[0m
+[0;32mI (561) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (566) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (570) wifi:Init management short buffer num: 32[0m
+[0;32mI (574) wifi:Init static tx buffer num: 16[0m
+[0;32mI (578) wifi:Init tx cache buffer num: 32[0m
+[0;32mI (582) wifi:Init static tx FG buffer num: 2[0m
+[0;32mI (586) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (590) wifi:Init static rx buffer num: 16[0m
+[0;32mI (593) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (598) wifi_init: rx ba win: 16[0m
+[0;32mI (601) wifi_init: accept mbox: 6[0m
+[0;32mI (605) wifi_init: tcpip mbox: 32[0m
+[0;32mI (609) wifi_init: udp mbox: 32[0m
+[0;32mI (613) wifi_init: tcp mbox: 32[0m
+[0;32mI (617) wifi_init: tcp tx win: 5760[0m
+[0;32mI (621) wifi_init: tcp rx win: 14400[0m
+[0;32mI (625) wifi_init: tcp mss: 1440[0m
+[0;32mI (629) wifi_init: WiFi/LWIP prefer SPIRAM[0m
+[0;32mI (634) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (639) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (644) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10[0m
+[0;33mW (650) phy_init: failed to load RF calibration data (0xffffffff), falling back to full calibration[0m
+[0;32mI (690) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)[0m
+[0;32mI (701) wifi:mode : sta (68:ee:8f:4f:16:9c)[0m
+[0;32mI (702) wifi:enable tsf[0m
+[0;32mI (703) WIFI_STREAM: Đã khởi động Wi-Fi Station, đang kết nối tới SSID: Phong 2...[0m
+[0;32mI (706) IMAGE_DECODER: Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray 100 KB + rgb)...[0m
+[0;32mI (709) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (723) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (727) IMAGE_DECODER: ✅ esp_new_jpeg đã sẵn sàng (RGB888 output, baseline JPEG).[0m
+[0;32mI (731) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (739) PNP_SOLVER: Đã khởi tạo bộ giải thuần C++ POSIT PnP thành công![0m
+[0;32mI (744) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (751) ADAS_CONTROLLER: Đã khởi tạo ADAS Controller State Machine. Bắt đầu giai đoạn tự hiệu chuẩn (5 giây)...[0m
+[0;32mI (764) AI_INFERENCE: Đang khởi tạo AI Inference Engine trong Octal PSRAM...[0m
+[0;32mI (772) AI_INFERENCE: ✅ Cấp phát thành công Tensor Arena (1536 KB) trong 8MB PSRAM.[0m
+[0;32mI (781) AI_INFERENCE: ℹ️ TFLite Micro Arena sẵn sàng (Chế độ tương thích nhúng Standalone).[0m
+[0;32mI (791) gpio: GPIO[4]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0 [0m
+[0;32mI (800) gpio: GPIO[48]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0 [0m
+[0;32mI (810) TELEMETRY: ✅ Đã khởi tạo Telemetry Sender -> Laptop UDP tại 192.168.56.1:8889[0m
+[0;32mI (819) MAIN_APP: ✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng![0m
+[0;32mI (828) WIFI_STREAM: Khởi chạy Network Receiver Task trên Core 0.[0m
+[0;32mI (835) MAIN_APP: 🎉 Hệ thống đa nhân FreeRTOS đã khởi chạy song song trên 2 nhân LX7![0m
+[0;32mI (844) wifi:[0;32mI (835) MAIN_APP: 🚀 Khởi chạy Edge AI & ADAS Task trên Core 1 (Priority 6, 240MHz)[0m[0m
+connected with Phong 2, aid = 1, channel 8, BW20, bssid = 28:77:77:af:15:0c
+[0;32mI (862) wifi:security: WPA2-PSK, phy: bgn, rssi: -29[0m
+[0;32mI (868) wifi:pm start, type: 1[0m
+
+[0;32mI (870) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (878) wifi:set rx beacon pti, rx_bcn_pti: 0, bcn_timeout: 25000, mt_pti: 0, mt_time: 10000[0m
+[0;32mI (845) main_task: Returned from app_main()[0m
+[0;32mI (927) wifi:AP's beacon interval = 102400 us, DTIM period = 1[0m
+[0;32mI (2982) wifi:<ba-add>idx:0 (ifx:0, 28:77:77:af:15:0c), tid:6, ssn:2, winSize:64[0m
+[0;32mI (3887) esp_netif_handlers: sta ip: 192.168.2.31, mask: 255.255.255.0, gw: 192.168.2.253[0m
+[0;32mI (3888) WIFI_STREAM: Đã nhận IP từ Router: 192.168.2.31[0m
+[0;32mI (3892) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (22150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (24150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (42650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (44650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (63150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (65150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (83650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (85650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (104150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (106150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (124650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (126650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (145150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (147150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (165650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (167650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (186150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (188150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (206650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (208650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (227150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (229150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (247650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (249650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (268150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (270150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (288650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (290650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (309150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (311150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (329650) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (331650) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m
+[0;33mW (350150) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (352150) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.56.1:8888...[0m

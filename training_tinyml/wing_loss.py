@@ -43,15 +43,19 @@ def _compute_point_distance(p1, p2):
     return tf.sqrt(tf.reduce_sum(tf.square(p1 - p2), axis=-1) + 1e-7)
 
 
-def compute_tensor_ear(pts_44, detach_width=True):
+def compute_tensor_ear(pts_44, min_width=0.05, detach_width=True):
     """
-    Computes Differentiable Eye Aspect Ratio (EAR) for both eyes from (batch, 44).
+    [v2.3.0] Differentiable Eye Aspect Ratio (EAR) for both eyes from (batch, 44).
     Points:
       Left Eye: P0 (outer), P1 (top-out), P2 (top-in), P3 (inner), P4 (bot-in), P5 (bot-out)
       Right Eye: P6 (inner), P7 (top-in), P8 (top-out), P9 (outer), P10 (bot-out), P11 (bot-in)
-    When detach_width=True, tf.stop_gradient is applied to eye widths (w_l, w_r) so that
-    gradient does not backpropagate into corner coordinates (P0, P3, P6, P9), preventing
-    denominator collapse.
+
+    Vì sao khôi phục detach_width cho MẮT:
+      - Mắt cần phản hồi nhắm/mở rất nhạy -> phải có loss tỉ lệ EAR MẠNH để kéo mí mắt.
+      - Nếu không detach, gradient mẫu số 1/w^2 có thể kéo khóe mắt (P0,P3,P6,P9) co lại.
+      - stop_gradient(w) chỉ cho gradient chảy vào mí (P1,P2,P4,P5) -> khóe mắt được
+        bảo vệ bởi coordinate loss, mí mắt chịu trách nhiệm mở/đóng. Mẫu số vẫn được
+        clamp để tuyệt đối không nổ gradient.
     Returns:
       ear_l, ear_r: shape (batch,)
     """
@@ -68,9 +72,10 @@ def compute_tensor_ear(pts_44, detach_width=True):
     w_l = _compute_point_distance(p0, p3)
     if detach_width:
         w_l = tf.stop_gradient(w_l)
+    w_l = tf.maximum(w_l, min_width)
     h1_l = _compute_point_distance(p1, p5)
     h2_l = _compute_point_distance(p2, p4)
-    ear_l = (h1_l + h2_l) / (2.0 * w_l + 1e-5)
+    ear_l = (h1_l + h2_l) / (2.0 * w_l)
 
     # Right Eye
     p6 = pts[:, 6, :]
@@ -83,22 +88,24 @@ def compute_tensor_ear(pts_44, detach_width=True):
     w_r = _compute_point_distance(p6, p9)
     if detach_width:
         w_r = tf.stop_gradient(w_r)
+    w_r = tf.maximum(w_r, min_width)
     h1_r = _compute_point_distance(p7, p11)
     h2_r = _compute_point_distance(p8, p10)
-    ear_r = (h1_r + h2_r) / (2.0 * w_r + 1e-5)
+    ear_r = (h1_r + h2_r) / (2.0 * w_r)
 
     return ear_l, ear_r
 
 
-def compute_tensor_mar(pts_44, detach_width=True):
+def compute_tensor_mar(pts_44, min_width=0.15):
     """
-    Computes Differentiable Mouth Aspect Ratio (MAR) from (batch, 44).
+    [v2.2.0] Differentiable Mouth Aspect Ratio (MAR = (h_outer + h_inner) / (2*w_m)).
     Points:
       P12 (left corner), P13 (right corner), P14 (top outer), P15 (bot outer),
       P16 (top inner), P17 (bot inner)
-    When detach_width=True, tf.stop_gradient is applied to mouth width (w_m) so that
-    gradient does NOT backpropagate into mouth corners (P12, P13). This completely eliminates
-    denominator gradient explosion which previously caused P12/P13 to collapse inward.
+
+    Mẫu số w_m = |P12-P13| được KẸP xuống `min_width` để chặn đạo hàm 1/w^2 nổ.
+    Khi khóe miệng co cụm, mẫu số bị kẹp -> MAR không còn là "đường tắt" để hạ loss,
+    buộc mạng phải định vị đúng P12/P13.
     Returns:
       mar: shape (batch,)
     """
@@ -111,23 +118,38 @@ def compute_tensor_mar(pts_44, detach_width=True):
     p16 = pts[:, 16, :]
     p17 = pts[:, 17, :]
 
-    w_m = _compute_point_distance(p12, p13)
-    if detach_width:
-        w_m = tf.stop_gradient(w_m)
+    w_m = tf.maximum(_compute_point_distance(p12, p13), min_width)
     h_inner = _compute_point_distance(p16, p17)
     h_outer = _compute_point_distance(p14, p15)
 
-    mar = (h_outer + h_inner) / (2.0 * w_m + 1e-5)
+    mar = (h_outer + h_inner) / (2.0 * w_m)
     return mar
 
 
 class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
     """
-    Combined PFLD-style Landmark Loss with Asymmetric Biometric Penalties and Detached Denominators:
-      L_total = L_Wing(landmarks)/44 + lambda_ear * L_Focal_EAR + lambda_mar * L_Focal_MAR + lambda_gap * L_Lip_Gap + 2.0 * L_Mouth_Width
+    [v2.3.0 - COORD + EAR-MANH + MAR-YEU]
+
+    L_total = L_wing(toạ độ) + ear_w * L_EAR + mar_w * L_MAR
+              + gap_w * L_lip_gap + width_w * L_mouth_width
+
+    Triết lý (đồng thời sửa 2 lỗi đối lập):
+      1. L_wing (hồi quy trực tiếp 44 toạ độ) là NỀN TẢNG.
+      2. L_EAR MẠNH (mặc định 20) + stop_gradient mẫu số: gradient chỉ chảy vào MÍ MẮT
+         (P1,P2,P4,P5,P7,P8,P10,P11) -> mắt phản hồi nhắm/mở nhạy; khóe mắt được bảo vệ
+         bởi coordinate loss nên không co cụm. (Bản v2.2.0 để EAR=1.5 làm mắt bị nén dải.)
+      3. L_MAR YẾU (1.5) + mẫu số KẸP (clamp) + KHÔNG stop_gradient: đây là điều đã sửa
+         lỗi sập khóe miệng P12/P13. Ratio yếu nên không lấn át; clamp chặn nổ 1/w^2;
+         L_mouth_width neo cứng P12-P13.
+      4. Loại bỏ Focal bất đối xứng (nguồn xung gradient đột biến làm mạng "ăn gian").
+
+    Lỗi bản cũ: EAR x25/MAR x20 (focal x2) khiến gradient tỉ lệ lấn át toạ độ; MAR dùng
+    stop_gradient tạo thế cân bằng suy biến ép P12/P13 co cụm. Bản v2.2.0 hạ cả EAR xuống
+    1.5 -> hết sập miệng nhưng mắt bị nén dải. v2.3.0 tách đúng vai trò: EAR mạnh, MAR yếu.
     """
+
     def __init__(self, w=10.0, epsilon=1.5, image_scale=96.0,
-                 ear_weight=25.0, mar_weight=20.0, gap_weight=8.0,
+                 ear_weight=20.0, mar_weight=1.5, gap_weight=3.0, width_weight=5.0,
                  name="adaptive_biometric_wing_loss", **kwargs):
         super(AdaptiveBiometricWingLoss, self).__init__(name=name, **kwargs)
         self.w = float(w)
@@ -136,6 +158,7 @@ class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
         self.ear_weight = float(ear_weight)
         self.mar_weight = float(mar_weight)
         self.gap_weight = float(gap_weight)
+        self.width_weight = float(width_weight)
 
         # Precompute Wing constant C = w - w * ln(1 + w / epsilon)
         self.c = self.w - self.w * tf.math.log(1.0 + self.w / self.epsilon)
@@ -148,40 +171,32 @@ class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
         """
         y_true, y_pred: shape (batch, 44) normalized to [0.0, 1.0]
         """
-        # 1. Base Wing Loss in pixel space (96x96)
+        # 1. PRIMARY: Base Wing Loss in pixel space (96x96)
         y_true_px = y_true * self.image_scale
         y_pred_px = y_pred * self.image_scale
 
-        diff = y_true_px - y_pred_px
-        abs_diff = tf.abs(diff)
-
+        abs_diff = tf.abs(y_true_px - y_pred_px)
         loss1 = self.w * tf.math.log(1.0 + abs_diff / self.epsilon)
         loss2 = abs_diff - self.c
         elementwise_loss = tf.where(tf.less(abs_diff, self.w), loss1, loss2)
 
-        # Apply Biometric Weights & Chuẩn hóa chia 44.0 để Coord Loss ở mức hợp lý (~20.0)
         weighted_elem_loss = elementwise_loss * self.weights_tensor
         coord_loss = tf.reduce_mean(tf.reduce_sum(weighted_elem_loss, axis=-1)) / 44.0
 
-        # 2. Geometric EAR Loss với Asymmetric Focal Weight (detach_width=True để bảo vệ khóe mắt)
+        # 2. AUXILIARY: EAR loss (MẠNH, mẫu số kẹp + detach bảo vệ khóe mắt)
+        #    -> mí mắt (P1,P2,P4,P5...) chịu trách nhiệm nhắm/mở, cho phản hồi sinh trắc nhạy.
         ear_l_true, ear_r_true = compute_tensor_ear(y_true, detach_width=False)
         ear_l_pred, ear_r_pred = compute_tensor_ear(y_pred, detach_width=True)
-        focal_ear_l = tf.where((ear_l_true < 0.21) & (ear_l_pred >= 0.21), 2.0,
-                               tf.where(ear_l_true < 0.21, 1.5, 1.0))
-        focal_ear_r = tf.where((ear_r_true < 0.21) & (ear_r_pred >= 0.21), 2.0,
-                               tf.where(ear_r_true < 0.21, 1.5, 1.0))
-        ear_diff = focal_ear_l * tf.abs(ear_l_true - ear_l_pred) + focal_ear_r * tf.abs(ear_r_true - ear_r_pred)
-        ear_loss = tf.reduce_mean(ear_diff)
+        ear_loss = tf.reduce_mean(
+            0.5 * (tf.abs(ear_l_true - ear_l_pred) + tf.abs(ear_r_true - ear_r_pred))
+        )
 
-        # 3. Geometric MAR Loss với Asymmetric Focal Weight (detach_width=True triệt tiêu gradient vào khóe miệng P12, P13)
-        mar_true = compute_tensor_mar(y_true, detach_width=False)
-        mar_pred = compute_tensor_mar(y_pred, detach_width=True)
-        focal_mar = tf.where((mar_true >= 0.38) & (mar_pred < 0.35), 2.0,
-                             tf.where(mar_true >= 0.38, 1.5, 1.0))
-        mar_diff = focal_mar * tf.abs(mar_true - mar_pred)
-        mar_loss = tf.reduce_mean(mar_diff)
+        # 3. AUXILIARY: MAR loss (yếu, mẫu số kẹp, KHÔNG detach — tránh sập khóe miệng)
+        mar_true = compute_tensor_mar(y_true)
+        mar_pred = compute_tensor_mar(y_pred)
+        mar_loss = tf.reduce_mean(tf.abs(mar_true - mar_pred))
 
-        # 4. Direct Linear Lip Gap Loss (Pixel space, tuyệt đối ổn định gradient +-1.0)
+        # 4. Direct Linear Lip Gap Loss (pixel space, gradient hằng số ổn định)
         pts_true_px = tf.reshape(y_true_px, [-1, 22, 2])
         pts_pred_px = tf.reshape(y_pred_px, [-1, 22, 2])
         gap_outer_true = _compute_point_distance(pts_true_px[:, 14, :], pts_true_px[:, 15, :])
@@ -190,18 +205,17 @@ class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
         gap_inner_pred = _compute_point_distance(pts_pred_px[:, 16, :], pts_pred_px[:, 17, :])
         gap_loss = tf.reduce_mean(tf.abs(gap_outer_true - gap_outer_pred) + tf.abs(gap_inner_true - gap_inner_pred)) / self.image_scale
 
-        # 5. Mouth Width Anchor Loss (Giữ khoảng cách khóe miệng P12-P13 chuẩn hóa)
+        # 5. Mouth Width Anchor Loss (NEO CỨNG P12-P13, chống sập khóe miệng)
         w_mouth_true = _compute_point_distance(pts_true_px[:, 12, :], pts_true_px[:, 13, :])
         w_mouth_pred = _compute_point_distance(pts_pred_px[:, 12, :], pts_pred_px[:, 13, :])
-        mouth_w_diff = tf.abs(w_mouth_true - w_mouth_pred)
-        mouth_w_loss = tf.reduce_mean(mouth_w_diff) / self.image_scale
+        width_loss = tf.reduce_mean(tf.abs(w_mouth_true - w_mouth_pred)) / self.image_scale
 
         total_loss = (
             coord_loss +
             (self.ear_weight * ear_loss) +
             (self.mar_weight * mar_loss) +
             (self.gap_weight * gap_loss) +
-            (2.0 * mouth_w_loss)
+            (self.width_weight * width_loss)
         )
         return total_loss
 
@@ -213,7 +227,8 @@ class AdaptiveBiometricWingLoss(tf.keras.losses.Loss):
             "image_scale": self.image_scale,
             "ear_weight": self.ear_weight,
             "mar_weight": self.mar_weight,
-            "gap_weight": self.gap_weight
+            "gap_weight": self.gap_weight,
+            "width_weight": self.width_weight
         })
         return config
 

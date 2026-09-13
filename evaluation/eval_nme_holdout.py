@@ -177,8 +177,12 @@ def main():
         part_px = {k: float(np.mean(err[:, v]) * INPUT_W) for k, v in PARTS.items()}
         worst_i = int(np.argmax(np.mean(err, axis=-1)))
         worst_pt = int(np.argmax(err[worst_i]))
+        point_px = np.mean(err, axis=0) * INPUT_W          # (22,) sai số trung bình từng điểm
+        point_bias_x = (pt_p[:, :, 0] - pt_t[:, :, 0]).mean(axis=0) * INPUT_W
+        point_bias_y = (pt_p[:, :, 1] - pt_t[:, :, 1]).mean(axis=0) * INPUT_W
         return {"nme": nme, "parts": part_nme, "px": part_px,
                 "overall_px": float(np.mean(err) * INPUT_W),
+                "point_px": point_px, "point_bias_x": point_bias_x, "point_bias_y": point_bias_y,
                 "worst_sample": worst_i, "worst_pt": worst_pt,
                 "worst_px": float(err[worst_i, worst_pt] * INPUT_W)}
 
@@ -190,7 +194,11 @@ def main():
             print(f"{name:<14} | {m['parts'][name]*100:>7.2f}% | {m['px'][name]:>7.2f}px")
         print("-" * 42)
         print(f"{'TỔNG THỂ':<14} | {m['nme']*100:>7.2f}% | {m['overall_px']:>7.2f}px")
-        print(f"• Mẫu tệ nhất : #{m['worst_sample']} | P{m['worst_pt']} lệch {m['worst_px']:.1f}px\n")
+        print(f"• Mẫu tệ nhất : #{m['worst_sample']} | P{m['worst_pt']} lệch {m['worst_px']:.1f}px")
+        # [v2.2.0] Per-point diagnostics: phát hiện ngay điểm bị kéo lệch/sập
+        order = np.argsort(m["point_px"])[::-1][:5]
+        pts_str = " | ".join(f"P{p}({m['point_px'][p]:.1f}px, biasX{m['point_bias_x'][p]:+.1f})" for p in order)
+        print(f"• 5 điểm tệ nhất: {pts_str}\n")
 
     def compute_biometric_metrics(preds, lms):
         pt_t = lms.reshape(-1, NUM_LANDMARKS, 2)
@@ -279,6 +287,8 @@ def main():
     preds_j = predict_all(jit_imgs)
     m_j = compute_metrics(preds_j, jit_lms)
     print_table("NME JITTER (LOCALIZATION — chỉ số quyết định)", m_j)
+    bio_j = compute_biometric_metrics(preds_j, jit_lms)
+    print_biometrics_table(bio_j)
 
     ratio = m_j["nme"] / max(m_c["nme"], 1e-6)
     print("=" * 74)
@@ -288,12 +298,33 @@ def main():
     print("\n" + "=" * 74)
     nme_j = m_j["nme"]
     nme_c = m_c["nme"]
-    if nme_c < 0.08 and nme_j < 0.12 and ratio < 2.0:
+    mouth_j = float(m_j["parts"]["Miệng"])
+    mouth_ok = mouth_j < 0.12
+    print(f"• CỔNG NHÓM MIỆNG (P12-P17): NME Jitter = {mouth_j*100:.2f}% "
+          f"({'✅ ĐẠT (<12%)' if mouth_ok else '❌ KHÔNG ĐẠT (>=12%) — sập/lệch khóe miệng!'})")
+
+    # [v2.3.0] CỔNG PHẢN HỒI MẮT (EAR): mắt nhắm phải đoán EAR thấp, không bị nén dải.
+    ear_mae = float(bio_j["ear_mae"])
+    closed_pred = float(bio_j["closed"]["mean_pred"])
+    eye_ok = (ear_mae < 0.06) and (closed_pred < 0.16)
+    print(f"• CỔNG PHẢN HỒI MẮT (EAR) : EAR_MAE = {ear_mae*100:.2f}% | EAR khi nhắm = {closed_pred:.3f} "
+          f"({'✅ ĐẠT (<6% / <0.16)' if eye_ok else '❌ KHÔNG ĐẠT — mắt bị nén dải, khó bắt microsleep!'})")
+
+    if not mouth_ok:
+        verdict = (f"❌ TỪ CHỐI: NME Miệng Jitter {mouth_j*100:.2f}% >= 12% — khóe miệng P12/P13 "
+                   f"bị kéo lệch/sập. KHÔNG nạp ESP32. Tăng MOUTH_WIDTH_WEIGHT, giảm MAR_LOSS_WEIGHT "
+                   f"trong config.py rồi train lại.")
+        code = 1
+    elif not eye_ok:
+        verdict = (f"❌ TỪ CHỐI: EAR MAE {ear_mae*100:.2f}% / EAR nhắm {closed_pred:.3f} — mô hình bị "
+                   f"nén dải mắt, không bắt được nhắm mắt/microsleep. Tăng EAR_LOSS_WEIGHT rồi train lại.")
+        code = 1
+    elif nme_c < 0.08 and nme_j < 0.12 and ratio < 2.0:
         if nme_c < 0.06 and nme_j < 0.08:
-            verdict = "✅ XUẤT SẮC (Canonical <6%, Jitter <8%) — Tự tin nạp ESP32-S3!"
+            verdict = "✅ XUẤT SẮC (Canonical <6%, Jitter <8%, Miệng <12%, EAR đạt) — Tự tin nạp ESP32-S3!"
             code = 0
         else:
-            verdict = "✅ ĐẠT CHUẨN TỐT (Canonical <8%, Jitter <12%) — Được phép nạp ESP32-S3."
+            verdict = "✅ ĐẠT CHUẨN TỐT (Canonical <8%, Jitter <12%, Miệng <12%, EAR đạt) — Được phép nạp ESP32-S3."
             code = 0
     elif nme_j < 0.15:
         verdict = "⚠️ TRUNG BÌNH (Jitter <15%) — Nên huấn luyện thêm để tối ưu độ chính xác."

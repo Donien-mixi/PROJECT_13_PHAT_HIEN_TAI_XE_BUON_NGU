@@ -1,0 +1,218 @@
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x19b4
+load:0x403c8700,len:0x4
+load:0x403c8704,len:0xe8c
+load:0x403cb700,len:0x3144
+entry 0x403c8940
+[0;32mI (27) boot: ESP-IDF v5.3.5 2nd stage bootloader[0m
+[0;32mI (27) boot: compile time Sep 13 2026 11:04:13[0m
+[0;32mI (27) boot: Multicore bootloader[0m
+[0;32mI (30) boot: chip revision: v0.2[0m
+[0;32mI (34) boot: efuse block revision: v1.4[0m
+[0;32mI (38) qio_mode: Enabling default flash chip QIO[0m
+[0;32mI (43) boot.esp32s3: Boot SPI Speed : 80MHz[0m
+[0;32mI (48) boot.esp32s3: SPI Mode       : QIO[0m
+[0;32mI (53) boot.esp32s3: SPI Flash Size : 16MB[0m
+[0;32mI (58) boot: Enabling RNG early entropy source...[0m
+[0;32mI (63) boot: Partition Table:[0m
+[0;32mI (67) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (74) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (82) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (89) boot:  2 factory          factory app      00 00 00010000 00400000[0m
+[0;32mI (97) boot: End of partition table[0m
+[0;32mI (101) esp_image: segment 0: paddr=00010020 vaddr=3c0c0020 size=72ff0h (471024) map[0m
+[0;32mI (182) esp_image: segment 1: paddr=00083018 vaddr=3fc9bf00 size=05604h ( 22020) load[0m
+[0;32mI (186) esp_image: segment 2: paddr=00088624 vaddr=40374000 size=079f4h ( 31220) load[0m
+[0;32mI (194) esp_image: segment 3: paddr=00090020 vaddr=42000020 size=b5e8ch (745100) map[0m
+[0;32mI (311) esp_image: segment 4: paddr=00145eb4 vaddr=4037b9f4 size=104a0h ( 66720) load[0m
+[0;32mI (334) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (335) boot: Disabling RNG early entropy source...[0m
+[0;32mI (347) octal_psram: vendor id    : 0x0d (AP)[0m
+[0;32mI (347) octal_psram: dev id       : 0x02 (generation 3)[0m
+[0;32mI (347) octal_psram: density      : 0x03 (64 Mbit)[0m
+[0;32mI (352) octal_psram: good-die     : 0x01 (Pass)[0m
+[0;32mI (357) octal_psram: Latency      : 0x01 (Fixed)[0m
+[0;32mI (362) octal_psram: VCC          : 0x01 (3V)[0m
+[0;32mI (367) octal_psram: SRF          : 0x01 (Fast Refresh)[0m
+[0;32mI (373) octal_psram: BurstType    : 0x01 (Hybrid Wrap)[0m
+[0;32mI (379) octal_psram: BurstLen     : 0x01 (32 Byte)[0m
+[0;32mI (384) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)[0m
+[0;32mI (391) octal_psram: DriveStrength: 0x00 (1/1)[0m
+[0;32mI (396) MSPI Timing: PSRAM timing tuning index: 5[0m
+[0;32mI (401) esp_psram: Found 8MB PSRAM device[0m
+[0;32mI (406) esp_psram: Speed: 80MHz[0m
+[0;32mI (410) cpu_start: Multicore app[0m
+[0;32mI (425) cpu_start: Pro cpu start user code[0m
+[0;32mI (425) cpu_start: cpu freq: 240000000 Hz[0m
+[0;32mI (425) app_init: Application information:[0m
+[0;32mI (428) app_init: Project name:     tinydriver_esp32s3_edge_ai[0m
+[0;32mI (435) app_init: App version:      11e6830-dirty[0m
+[0;32mI (440) app_init: Compile time:     Sep 13 2026 11:02:59[0m
+[0;32mI (446) app_init: ELF file SHA256:  259d7ca72...[0m
+[0;32mI (451) app_init: ESP-IDF:          v5.3.5[0m
+[0;32mI (456) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (461) efuse_init: Max chip rev:     v0.99 [0m
+[0;32mI (466) efuse_init: Chip rev:         v0.2[0m
+[0;32mI (471) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (478) heap_init: At 3FCA8B50 len 00040BC0 (258 KiB): RAM[0m
+[0;32mI (484) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM[0m
+[0;32mI (490) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM[0m
+[0;32mI (496) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM[0m
+[0;32mI (503) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator[0m
+[0;32mI (511) spi_flash: detected chip: generic[0m
+[0;32mI (515) spi_flash: flash io: qio[0m
+[0;32mI (519) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (526) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (533) main_task: Started on CPU0[0m
+[0;32mI (537) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations[0m
+[0;32mI (546) main_task: Calling app_main()[0m
+[0;32mI (550) MAIN_APP: =================================================================[0m
+[0;32mI (558) MAIN_APP: 🚘 PROJECT 13: DRIVER DROWSINESS & DISTRACTION DETECTION[0m
+[0;32mI (566) MAIN_APP: ⚡ 100% EDGE AI ON ESP32-S3 N16R8 DEVKIT (16MB Flash, 8MB PSRAM)[0m
+[0;32mI (574) MAIN_APP: =================================================================[0m
+[0;32mI (593) MAIN_APP: Bộ nhớ Octal PSRAM : 8 MB (Còn trống: 8189 KB)[0m
+[0;32mI (593) MAIN_APP: Bộ nhớ Internal SRAM: 296 KB[0m
+[0;32mI (595) WIFI_STREAM: Đang cấp phát Double Buffer trong Octal PSRAM (64 KB mỗi buffer)...[0m
+[0;32mI (606) pp: pp rom version: e7ae62f[0m
+[0;32mI (609) net80211: net80211 rom version: e7ae62f[0m
+[0;32mI (615) wifi:wifi driver task: 3fcbac24, prio:23, stack:6656, core=0[0m
+[0;32mI (626) wifi:wifi firmware version: 18db208[0m
+[0;32mI (626) wifi:wifi certification version: v7.0[0m
+[0;32mI (628) wifi:config NVS flash: enabled[0m
+[0;32mI (632) wifi:config nano formating: disabled[0m
+[0;32mI (636) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (641) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (645) wifi:Init management short buffer num: 32[0m
+[0;32mI (649) wifi:Init static tx buffer num: 16[0m
+[0;32mI (653) wifi:Init tx cache buffer num: 32[0m
+[0;32mI (657) wifi:Init static tx FG buffer num: 2[0m
+[0;32mI (661) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (665) wifi:Init static rx buffer num: 16[0m
+[0;32mI (668) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (673) wifi_init: rx ba win: 16[0m
+[0;32mI (676) wifi_init: accept mbox: 6[0m
+[0;32mI (680) wifi_init: tcpip mbox: 32[0m
+[0;32mI (684) wifi_init: udp mbox: 32[0m
+[0;32mI (688) wifi_init: tcp mbox: 32[0m
+[0;32mI (692) wifi_init: tcp tx win: 5760[0m
+[0;32mI (696) wifi_init: tcp rx win: 14400[0m
+[0;32mI (700) wifi_init: tcp mss: 1440[0m
+[0;32mI (704) wifi_init: WiFi/LWIP prefer SPIRAM[0m
+[0;32mI (709) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (714) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (719) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10[0m
+[0;32mI (759) wifi:mode : sta (68:ee:8f:4f:16:9c)[0m
+[0;32mI (759) wifi:enable tsf[0m
+[0;32mI (760) WIFI_STREAM: Đã khởi động Wi-Fi Station, đang kết nối tới SSID: Phong 2...[0m
+[0;32mI (763) IMAGE_DECODER: Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray 100 KB + rgb)...[0m
+[0;32mI (767) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (781) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (785) IMAGE_DECODER: ✅ esp_new_jpeg đã sẵn sàng (RGB888 output, baseline JPEG).[0m
+[0;32mI (788) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (797) PNP_SOLVER: Đã khởi tạo bộ giải thuần C++ POSIT PnP thành công![0m
+[0;32mI (801) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (809) ADAS_CONTROLLER: Đã khởi tạo ADAS Controller State Machine. Bắt đầu giai đoạn tự hiệu chuẩn (5 giây)...[0m
+[0;32mI (821) AI_INFERENCE: Đang khởi tạo AI Inference Engine trong Octal PSRAM...[0m
+[0;32mI (829) AI_INFERENCE: ✅ Cấp phát thành công Tensor Arena (1536 KB) trong 8MB PSRAM.[0m
+[0;32mI (855) AI_INFERENCE: ✅ TFLite Micro Interpreter nạp mô hình thành công! (Output Type: FLOAT32 (Mixed-Precision Sub-pixel))[0m
+[0;32mI (856) gpio: GPIO[4]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0 [0m
+[0;32mI (865) gpio: GPIO[48]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0 [0m
+[0;32mI (875) TELEMETRY: ✅ Đã khởi tạo Telemetry Sender -> Laptop UDP tại 192.168.2.1:8889[0m
+[0;32mI (884) MAIN_APP: ✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng![0m
+[0;32mI (893) WIFI_STREAM: Khởi chạy Network Receiver Task trên Core 0.[0m
+[0;32mI (898) wifi:connected with Phong 2, aid = 1, channel 8, BW20, bssid = 28:77:77:af:15:0c[0m
+[0;32mI (908) wifi:security: WPA2-PSK, phy: bgn, rssi: -42[0m
+[0;32mI (914) wifi:pm start, type: 1[0m
+
+[0;32mI (916) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (924) wifi:set rx beacon pti, rx_bcn_pti: 0, bcn_timeout: 25000, mt_pti: 0, mt_time: 10000[0m
+[0;32mI (932) MAIN_APP: 🎉 Hệ thống đa nhân FreeRTOS đã khởi chạy song song trên 2 nhân LX7![0m
+[0;32mI (942) main_task: Returned from app_main()[0m
+[0;32mI (933) MAIN_APP: 🚀 Khởi chạy Edge AI & ADAS Task trên Core 1 (Priority 6, 240MHz)[0m
+[0;32mI (948) wifi:AP's beacon interval = 102400 us, DTIM period = 1[0m
+[0;32mI (3003) wifi:<ba-add>idx:0 (ifx:0, 28:77:77:af:15:0c), tid:6, ssn:2, winSize:64[0m
+[0;32mI (3933) esp_netif_handlers: sta ip: 192.168.2.31, mask: 255.255.255.0, gw: 192.168.2.253[0m
+[0;32mI (3934) WIFI_STREAM: Đã nhận IP từ Router: 192.168.2.31[0m
+[0;32mI (3938) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.2.1:8888...[0m
+[0;32mI (4231) WIFI_STREAM: ✅ Đã kết nối thành công tới Laptop Camera Streamer![0m
+[0;32mI (4242) wifi:<ba-add>idx:1 (ifx:0, 28:77:77:af:15:0c), tid:0, ssn:7, winSize:64[0m
+[0;32mI (9106) MAIN_APP: [Frame #  15] FPS:  1.8 | Dec: 31.3ms | AI: 290.3ms | PnP: 0.1ms | Total: 323.2ms | EAR: 0.21 | MAR: 0.88 | Yaw:  -4.1° | Status: NORMAL [0m
+[0;31mE (9238) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (9238) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (9238) task_wdt: Tasks currently running:[0m
+[0;31mE (9238) task_wdt: CPU 0: IDLE0[0m
+[0;31mE (9238) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (9238) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x4203C8F2:0x3FCCE3B0 0x42039212:0x3FCCE3D0 0x42036C19:0x3FCCE470 0x42029D4E:0x3FCCE560 0x4202F822:0x3FCCEAB0 0x4201C346:0x3FCCEAE0 0x4200C4E3:0x3FCCEB00 0x4200AD62:0x3FCCEB40
+
+[0;32mI (13986) MAIN_APP: [Frame #  30] FPS:  3.1 | Dec: 33.1ms | AI: 288.7ms | PnP: 0.1ms | Total: 323.4ms | EAR: 0.24 | MAR: 0.23 | Yaw:  -5.0° | Status: NORMAL [0m
+[0;32mI (18835) MAIN_APP: [Frame #  45] FPS:  3.1 | Dec: 32.9ms | AI: 289.4ms | PnP: 0.1ms | Total: 323.9ms | EAR: 0.21 | MAR: 0.23 | Yaw:  -5.2° | Status: SLOW BLINK WARNING [0m
+[0;31mE (21897) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (21897) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (21897) task_wdt: Tasks currently running:[0m
+[0;31mE (21897) task_wdt: CPU 0: wifi[0m
+[0;31mE (21897) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (21897) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x400570E9:0x3FCCE4D0 0x420386B5:0x3FCCE4E0 0x4202AFC9:0x3FCCE630 0x4202F822:0x3FCCEAB0 0x4201C346:0x3FCCEAE0 0x4200C4E3:0x3FCCEB00 0x4200AD62:0x3FCCEB40
+
+[0;32mI (23692) MAIN_APP: [Frame #  60] FPS:  3.1 | Dec: 33.2ms | AI: 287.7ms | PnP: 0.1ms | Total: 322.5ms | EAR: 0.20 | MAR: 0.22 | Yaw:  +2.1° | Status: NORMAL [0m
+[0;31mE (26897) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (26897) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (26897) task_wdt: Tasks currently running:[0m
+[0;31mE (26897) task_wdt: CPU 0: IDLE0[0m
+[0;31mE (26897) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (26897) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x420AEC53:0x3FCCE530 0x4203AD91:0x3FCCE550 0x4202BE11:0x3FCCE7D0 0x4202F822:0x3FCCEAB0 0x4201C346:0x3FCCEAE0 0x4200C4E3:0x3FCCEB00 0x4200AD62:0x3FCCEB40
+
+[0;32mI (28554) ADAS_CONTROLLER: 🥱 Phát hiện sự kiện NGÁP (Lần thứ 1)![0m
+[0;32mI (28555) MAIN_APP: [Frame #  75] FPS:  3.1 | Dec: 33.4ms | AI: 287.7ms | PnP: 0.2ms | Total: 322.9ms | EAR: 0.21 | MAR: 0.80 | Yaw: -30.3° | Status: YAWNING WARNING [0m
+[0;32mI (33407) MAIN_APP: [Frame #  90] FPS:  3.1 | Dec: 33.5ms | AI: 288.6ms | PnP: 0.1ms | Total: 323.7ms | EAR: 0.12 | MAR: 0.96 | Yaw:  -2.9° | Status: YAWNING WARNING [0m
+[0;31mE (33889) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (33889) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (33889) task_wdt: Tasks currently running:[0m
+[0;31mE (33889) task_wdt: CPU 0: IDLE0[0m
+[0;31mE (33889) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (33889) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x42039223:0x3FCCE3D0 0x42036C19:0x3FCCE470 0x42029D4E:0x3FCCE560 0x4202F822:0x3FCCEAB0 0x4201C346:0x3FCCEAE0 0x4200C4E3:0x3FCCEB00 0x4200AD62:0x3FCCEB40
+
+[0;32mI (38255) MAIN_APP: [Frame # 105] FPS:  3.1 | Dec: 31.1ms | AI: 287.6ms | PnP: 0.1ms | Total: 320.3ms | EAR: 0.31 | MAR: 0.18 | Yaw: +18.2° | Status: NORMAL [0m
+[0;31mE (38889) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (38889) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (38889) task_wdt: Tasks currently running:[0m
+[0;31mE (38889) task_wdt: CPU 0: IDLE0[0m
+[0;31mE (38889) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (38889) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x403776F1:0x3FCCE9E0 0x4201909B:0x3FCCEA00 0x42010DDF:0x3FCCEA30 0x4200E03F:0x3FCCEA60 0x4200B9D8:0x3FCCEAA0 0x4200AD1D:0x3FCCEB40
+
+[0;32mI (43092) MAIN_APP: [Frame # 120] FPS:  3.1 | Dec: 32.1ms | AI: 287.1ms | PnP: 0.1ms | Total: 320.8ms | EAR: 0.28 | MAR: 0.30 | Yaw:  -0.4° | Status: NORMAL [0m
+[0;32mI (47919) MAIN_APP: [Frame # 135] FPS:  3.1 | Dec: 33.4ms | AI: 287.7ms | PnP: 0.1ms | Total: 322.8ms | EAR: 0.23 | MAR: 0.19 | Yaw: +16.9° | Status: NORMAL [0m
+[0;31mE (50985) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:[0m
+[0;31mE (50985) task_wdt:  - IDLE1 (CPU 1)[0m
+[0;31mE (50985) task_wdt: Tasks currently running:[0m
+[0;31mE (50985) task_wdt: CPU 0: wifi[0m
+[0;31mE (50985) task_wdt: CPU 1: Task_EdgeAI_Cor[0m
+[0;31mE (50985) task_wdt: Print CPU 1 backtrace[0m
+
+
+Backtrace: 0x4037999A:0x3FC9E960 0x403784CD:0x3FC9E980 0x420391F4:0x3FCCE3D0 0x42036C19:0x3FCCE470 0x42029D4E:0x3FCCE560 0x4202F822:0x3FCCEAB0 0x4201C346:0x3FCCEAE0 0x4200C4E3:0x3FCCEB00 0x4200AD62:0x3FCCEB40
+
+[0;32mI (52797) MAIN_APP: [Frame # 150] FPS:  3.1 | Dec: 32.9ms | AI: 288.4ms | PnP: 0.1ms | Total: 322.9ms | EAR: 0.16 | MAR: 0.30 | Yaw:  +7.9° | Status: NORMAL [0m
+[0;33mW (53334) WIFI_STREAM: Mất đồng bộ Magic Header hoặc đứt kết nối.[0m
+[0;33mW (53335) WIFI_STREAM: Đã đóng kết nối TCP. Chờ 1 giây trước khi kết nối lại...[0m
+[0;32mI (54341) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.2.1:8888...[0m
+[0;33mW (72591) WIFI_STREAM: Kết nối TCP thất bại (errno=113). Thử lại sau 2 giây...[0m
+[0;32mI (74591) WIFI_STREAM: Đang kết nối tới Laptop Host tại 192.168.2.1:8888...[0m

@@ -161,8 +161,8 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
     # [FIX 2025] Hạ xác suất từ 55% xuống 18%: trước đây 55% mẫu bị đeo "kính ellipse đen"
     # làm phân bố huấn luyện lệch nặng khỏi thế giới thực.
     if np.random.rand() < 0.18:
-        left_eye_pts = lm[0:6] * 96.0
-        right_eye_pts = lm[6:12] * 96.0
+        left_eye_pts = lm[0:6] * float(IMAGE_WIDTH)
+        right_eye_pts = lm[6:12] * float(IMAGE_WIDTH)
         cx_l, cy_l = np.mean(left_eye_pts, axis=0)
         cx_r, cy_r = np.mean(right_eye_pts, axis=0)
         w_l = max(float(np.linalg.norm(left_eye_pts[0] - left_eye_pts[3])), 8.0)
@@ -189,7 +189,7 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
                 glare_eyes.append((cx_r, cy_r, w_r))
 
             for gx, gy, gw in glare_eyes:
-                glare_mask = np.zeros((96, 96), dtype=np.float32)
+                glare_mask = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH), dtype=np.float32)
                 offset_x = float(np.random.uniform(-gw * 0.25, gw * 0.25))
                 offset_y = float(np.random.uniform(-gw * 0.20, gw * 0.20))
                 g_center = (int(round(gx + offset_x)), int(round(gy + offset_y)))
@@ -223,8 +223,8 @@ def apply_cabin_data_augmentation(image, landmarks_norm):
     # 8. Micro-Tilt (+/- 5 độ: tăng mạnh bất biến xoay đầu so với ±2.5° cũ)
     if np.random.rand() > 0.70:
         angle = float(np.random.uniform(-5.0, 5.0))
-        M = cv2.getRotationMatrix2D((48.0, 48.0), angle, 1.0)
-        img = cv2.warpAffine(img, M, (96, 96), borderMode=cv2.BORDER_REFLECT)
+        M = cv2.getRotationMatrix2D((IMAGE_WIDTH / 2.0, IMAGE_HEIGHT / 2.0), angle, 1.0)
+        img = cv2.warpAffine(img, M, (IMAGE_WIDTH, IMAGE_HEIGHT), borderMode=cv2.BORDER_REFLECT)
         rad = math.radians(-angle)
         cos_a = math.cos(rad)
         sin_a = math.sin(rad)
@@ -286,7 +286,8 @@ def generate_synthetic_driver_sample(sample_idx, apply_aug=False, force_state=No
     yaw_shift = int(yaw_deg * 0.40)
 
     eye_open_dy = float(np.random.uniform(0.3, 1.2)) if is_eyes_closed else float(np.random.uniform(4.5, 9.0))
-    mouth_open_dy = float(np.random.uniform(18.0, 35.0)) if is_yawning else float(np.random.uniform(1.5, 4.5))
+    # [v2.3.0] Nâng sàn mouth_open_dy 18->22 để MAR khi ngáp LUÔN >= 0.45 (tránh test flaky).
+    mouth_open_dy = float(np.random.uniform(22.0, 36.0)) if is_yawning else float(np.random.uniform(1.5, 4.5))
 
     # Eye centers with 3D foreshortening
     lex = cx - 23 + yaw_shift

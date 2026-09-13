@@ -1,0 +1,74 @@
+[0;33m--- Warning: GDB cannot open serial ports accessed as COMx[0m
+[0;33m--- Using \\.\COM6 instead...[0m
+[0;33m--- esp-idf-monitor 1.9.0 on \\.\COM6 115200[0m
+[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x4203c8f2: [0;33mesp_nn_multiply_by_quantized_mult_asm_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/common/esp_nn_multiply_by_quantized_mult_esp32s3.S[0m[0m:[1;31m95[0m
+[0m--- 0x42039212: [0;33mesp_nn_conv_s8_mult8_1x1_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_s8_mult8_1x1_esp32s3.S[0m[0m:[1;31m244[0m
+[0m--- 0x42036c19: [0;33mesp_nn_conv_s8_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_esp32s3.c[0m[0m:[1;31m446[0m
+[0m--- 0x42029d4e: [0;33mtflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m256[0m
+[0m--- (inlined by) [0;33mEval[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m371[0m
+[0m--- 0x4202f822: [0;33mtflite::MicroInterpreterGraph::InvokeSubgraph(int)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc[0m[0m:[1;31m277[0m
+[0m--- 0x4201c346: [0;33mtflite::MicroInterpreter::Invoke()[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc[0m[0m:[1;31m294[0m
+[0m--- 0x4200c4e3: [0;33mai_inference_run[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp[0m[0m:[1;31m116[0m
+[0m--- 0x4200ad62: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m63[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x400570e9: [0;33mmemset[0m[0m in [0;32mROM[0m
+[0m--- 0x420386b5: [0;33mesp_nn_depthwise_conv_s8_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_depthwise_conv_s8_esp32s3.c[0m[0m:[1;31m759[0m
+[0m--- 0x4202afc9: [0;33mtflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/depthwise_conv.cc[0m[0m:[1;31m140[0m
+[0m--- (inlined by) [0;33mEval[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/depthwise_conv.cc[0m[0m:[1;31m354[0m
+[0m--- 0x4202f822: [0;33mtflite::MicroInterpreterGraph::InvokeSubgraph(int)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc[0m[0m:[1;31m277[0m
+[0m--- 0x4201c346: [0;33mtflite::MicroInterpreter::Invoke()[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc[0m[0m:[1;31m294[0m
+[0m--- 0x4200c4e3: [0;33mai_inference_run[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp[0m[0m:[1;31m116[0m
+[0m--- 0x4200ad62: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m63[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x420aec53: [0;33mesp_nn_dot_s8_unaligned_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/common/esp_nn_dot_s8_esp32s3.S[0m[0m:[1;31m105[0m
+[0m--- 0x4203ad91: [0;33mesp_nn_fully_connected_per_ch_s8_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/fully_connected/esp_nn_fully_connected_esp32s3.c[0m[0m:[1;31m240[0m
+[0m--- 0x4202be11: [0;33mtflite::(anonymous namespace)::FullyConnectedEval(TfLiteContext*, TfLiteNode*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/fully_connected.cc[0m[0m:[1;31m178[0m
+[0m--- 0x4202f822: [0;33mtflite::MicroInterpreterGraph::InvokeSubgraph(int)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc[0m[0m:[1;31m277[0m
+[0m--- 0x4201c346: [0;33mtflite::MicroInterpreter::Invoke()[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc[0m[0m:[1;31m294[0m
+[0m--- 0x4200c4e3: [0;33mai_inference_run[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp[0m[0m:[1;31m116[0m
+[0m--- 0x4200ad62: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m63[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x42039223: [0;33mesp_nn_conv_s8_mult8_1x1_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_s8_mult8_1x1_esp32s3.S[0m[0m:[1;31m252[0m
+[0m--- 0x42036c19: [0;33mesp_nn_conv_s8_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_esp32s3.c[0m[0m:[1;31m446[0m
+[0m--- 0x42029d4e: [0;33mtflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m256[0m
+[0m--- (inlined by) [0;33mEval[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m371[0m
+[0m--- 0x4202f822: [0;33mtflite::MicroInterpreterGraph::InvokeSubgraph(int)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc[0m[0m:[1;31m277[0m
+[0m--- 0x4201c346: [0;33mtflite::MicroInterpreter::Invoke()[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc[0m[0m:[1;31m294[0m
+[0m--- 0x4200c4e3: [0;33mai_inference_run[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp[0m[0m:[1;31m116[0m
+[0m--- 0x4200ad62: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m63[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x403776f1: [0;33mYUV420_TO_RGB888[0m[0m at [0;32m/builds/adf/esp-adf-libs-source/esp_new_jpeg/esp_opt/xtensa_asm/xtensa_esp32s3/jpeg_dec_color.S[0m[0m:[1;31m247[0m
+[0m--- 0x4201909b: [0;33myuv420_to_rgb888[0m[0m at [0;32m/builds/adf/esp-adf-libs-source/esp_new_jpeg/esp_opt/xtensa_asm/xtensa_esp32s3/jpeg_dec_color.c[0m[0m:[1;31m64[0m
+[0m--- 0x42010ddf: [0;33mjpeg_dec_proc_yuv420_0[0m[0m at [0;32m/builds/adf/esp-adf-libs-source/esp_new_jpeg/src/jpeg_dec_process.c[0m[0m:[1;31m1381[0m
+[0m--- 0x4200e03f: [0;33mjpeg_dec_process[0m[0m at [0;32m/builds/adf/esp-adf-libs-source/esp_new_jpeg/src/esp_jpeg_dec.c[0m[0m:[1;31m641[0m
+[0m--- 0x4200b9d8: [0;33mimage_decoder_process_jpeg[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp[0m[0m:[1;31m181[0m
+[0m--- (inlined by) [0;33mimage_decoder_process_jpeg[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp[0m[0m:[1;31m223[0m
+[0m--- 0x4200ad1d: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m48[0m
+[0m--- 0x4037999a: [0;33mesp_crosscore_isr[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/crosscore_int.c[0m[0m:[1;31m73[0m
+[0m--- 0x403784cd: [0;33m_xt_lowint1[0m[0m at [0;32mC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S[0m[0m:[1;31m1240[0m
+[0m--- 0x420391f4: [0;33mesp_nn_conv_s8_mult8_1x1_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_s8_mult8_1x1_esp32s3.S[0m[0m:[1;31m227[0m
+[0m--- 0x42036c19: [0;33mesp_nn_conv_s8_esp32s3[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-nn/src/convolution/esp_nn_conv_esp32s3.c[0m[0m:[1;31m446[0m
+[0m--- 0x42029d4e: [0;33mtflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m256[0m
+[0m--- (inlined by) [0;33mEval[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc[0m[0m:[1;31m371[0m
+[0m--- 0x4202f822: [0;33mtflite::MicroInterpreterGraph::InvokeSubgraph(int)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc[0m[0m:[1;31m277[0m
+[0m--- 0x4201c346: [0;33mtflite::MicroInterpreter::Invoke()[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc[0m[0m:[1;31m294[0m
+[0m--- 0x4200c4e3: [0;33mai_inference_run[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp[0m[0m:[1;31m116[0m
+[0m--- 0x4200ad62: [0;33mvTaskEdgeAI_ADAS(void*)[0m[0m at [0;32mD:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp[0m[0m:[1;31m63[0m
+[0;33m--- To exit from IDF monitor please use "Ctrl+]". Alternatively, you can use Ctrl+T Ctrl+X to exit.[0m
+[0m
+Traceback (most recent call last):
+  File "C:\Espressif\frameworks\esp-idf-v5.3.5\tools/idf_monitor.py", line 11, in <module>
+    sys.exit(subprocess.run([sys.executable, '-m', 'esp_idf_monitor'] + sys.argv[1:]).returncode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "subprocess.py", line 550, in run
+  File "subprocess.py", line 1199, in communicate
+  File "subprocess.py", line 1262, in wait
+  File "subprocess.py", line 1543, in _wait
+KeyboardInterrupt

@@ -16,14 +16,15 @@ menu "TinyDriver ADAS Configuration"
         string "Laptop Host IP Address"
         default "192.168.1.100"
         help
-            IPv4 Address of the Laptop running host_ip_cam.py (found via 'ipconfig').
+            IPv4 Address of the Laptop running the terminal telemetry receiver.
 
     config TCP_STREAM_PORT
         int "TCP Video Stream Port"
         default 8888
         range 1024 65535
         help
-            TCP Port on Laptop Host serving 1:1 JPEG frames.
+            TCP Port on Laptop Host serving 1:1 JPEG frames (only used when
+            the onboard camera is disabled).
 
     config UDP_TELEMETRY_PORT
         int "UDP Telemetry Port"
@@ -34,14 +35,121 @@ menu "TinyDriver ADAS Configuration"
 
     config BUZZER_GPIO_PIN
         int "Buzzer GPIO Pin"
-        default 4
+        default 2
         help
-            GPIO pin connected to the onboard/external active buzzer.
+            GPIO pin connected to the active buzzer. NOTE: GPIO4 is used by the
+            camera SIOD line on the ESP32-S3 N16R8 CAM board, so the buzzer was
+            moved to GPIO2.
 
     config LED_STATUS_GPIO_PIN
         int "Status LED GPIO Pin"
         default 48
         help
             GPIO pin for the onboard status/alarm LED (e.g., GPIO 48 or 2).
+
+    # ==================================================================
+    # Onboard OV5640 Camera (ESP32-S3 N16R8 CAM - DVP 24-pin)
+    # ==================================================================
+    config TD_USE_ONBOARD_CAMERA
+        bool "Use onboard OV5640 camera (ESP32 does everything, no laptop video)"
+        default y
+        help
+            Capture video directly from the OV5640 via the DVP 24-pin interface.
+            The laptop is then only used to display telemetry in a terminal.
+
+    if TD_USE_ONBOARD_CAMERA
+
+    config TD_CAM_PIN_PWDN
+        int "Camera PWDN GPIO (-1 if unused)"
+        default -1
+
+    config TD_CAM_PIN_RESET
+        int "Camera RESET GPIO (-1 if unused)"
+        default -1
+
+    config TD_CAM_PIN_XCLK
+        int "Camera XCLK GPIO"
+        default 15
+
+    config TD_CAM_PIN_SIOD
+        int "Camera SIOD (SDA) GPIO"
+        default 4
+
+    config TD_CAM_PIN_SIOC
+        int "Camera SIOC (SCL) GPIO"
+        default 5
+
+    config TD_CAM_PIN_D0
+        int "Camera D0 (Y2) GPIO"
+        default 11
+
+    config TD_CAM_PIN_D1
+        int "Camera D1 (Y3) GPIO"
+        default 9
+
+    config TD_CAM_PIN_D2
+        int "Camera D2 (Y4) GPIO"
+        default 8
+
+    config TD_CAM_PIN_D3
+        int "Camera D3 (Y5) GPIO"
+        default 10
+
+    config TD_CAM_PIN_D4
+        int "Camera D4 (Y6) GPIO"
+        default 12
+
+    config TD_CAM_PIN_D5
+        int "Camera D5 (Y7) GPIO"
+        default 18
+
+    config TD_CAM_PIN_D6
+        int "Camera D6 (Y8) GPIO"
+        default 17
+
+    config TD_CAM_PIN_D7
+        int "Camera D7 (Y9) GPIO"
+        default 16
+
+    config TD_CAM_PIN_VSYNC
+        int "Camera VSYNC GPIO"
+        default 6
+
+    config TD_CAM_PIN_HREF
+        int "Camera HREF GPIO"
+        default 7
+
+    config TD_CAM_PIN_PCLK
+        int "Camera PCLK GPIO"
+        default 13
+
+    config TD_CAM_XCLK_FREQ
+        int "Camera XCLK frequency (Hz)"
+        default 20000000
+        help
+            OV5640 is stable at 20 MHz. Reduce to 10000000 if the image is noisy
+            or the board resets (OV5640 draws more power than OV2640).
+
+    choice TD_CAM_FRAMESIZE
+        prompt "Camera frame size"
+        default TD_CAM_FS_QVGA
+        config TD_CAM_FS_240X240
+            bool "240x240 (square)"
+        config TD_CAM_FS_QVGA
+            bool "QVGA 320x240"
+        config TD_CAM_FS_VGA
+            bool "VGA 640x480"
+    endchoice
+
+    config TD_CAM_JPEG_QUALITY
+        int "Camera JPEG quality (0-63, lower = sharper)"
+        default 12
+        range 0 63
+
+    config TD_CAM_GRAB_LATEST
+        bool "Always grab the newest frame (drop stale frames)"
+        default y
+
+    endif
 
 endmenu

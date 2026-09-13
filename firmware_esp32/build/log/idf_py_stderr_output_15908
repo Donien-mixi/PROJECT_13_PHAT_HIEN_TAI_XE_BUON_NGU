@@ -1,0 +1,2 @@
+ninja: error: remove(esp-idf\espressif__esp-tflite-micro\CMakeFiles\__idf_espressif__esp-tflite-micro.dir\tensorflow\lite\micro\micro_profiler.cc.obj.d): The process cannot access the file because it is being used by another process.
+

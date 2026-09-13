@@ -1,0 +1,20 @@
+[1/9] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/ai_inference.cpp.obj
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/ai_inference.cpp:21:15: warning: 's_output_buffer' defined but not used [-Wunused-variable]
+   21 | static int8_t s_output_buffer[TINYDRIVER_OUTPUT_DIMS];
+      |               ^~~~~~~~~~~~~~~
+[2/9] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32\build\bootloader\esp-idf\esptool_py && C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:/Espressif/frameworks/esp-idf-v5.3.5/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader/bootloader.bin"
+Bootloader binary size 0x59f0 bytes. 0x2610 bytes (30%) free.
+[3/9] Linking C static library esp-idf\main\libmain.a
+[4/9] No install step for 'bootloader'
+[5/9] Completed 'bootloader'
+[6/9] Generating ld/sections.ld
+[7/9] Linking CXX executable tinydriver_esp32s3_edge_ai.elf
+[8/9] Generating binary image from built executable
+esptool.py v4.11.0
+Creating esp32s3 image...
+Merged 2 ELF sections
+Successfully created esp32s3 image.
+Generated D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/tinydriver_esp32s3_edge_ai.bin
+[9/9] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32\build\esp-idf\esptool_py && C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:/Espressif/frameworks/esp-idf-v5.3.5/components/partition_table/check_sizes.py --offset 0x8000 partition --type app D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/partition_table/partition-table.bin D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/tinydriver_esp32s3_edge_ai.bin"
+tinydriver_esp32s3_edge_ai.bin binary size 0x146c80 bytes. Smallest app partition is 0x400000 bytes. 0x2b9380 bytes (68%) free.

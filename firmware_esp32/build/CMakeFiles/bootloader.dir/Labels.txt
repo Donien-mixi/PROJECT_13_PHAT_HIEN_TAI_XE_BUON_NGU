@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/CMakeFiles/bootloader
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/CMakeFiles/bootloader.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/CMakeFiles/bootloader-complete.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

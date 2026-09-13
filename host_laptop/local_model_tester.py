@@ -91,7 +91,8 @@ NOSE_TIP_PT = 19
 NOSE_WING_PT = 20
 CHIN_PT = 21
 
-# Mô hình nhân trắc học 3D 6 điểm chuẩn cho PnP đồng bộ trục ảnh (+X sang phải, +Y hướng xuống, -Z hướng ra xa)
+# [v2.4.1 - RESTORE] Model 3D gốc, dùng CHUNG cho cả TinyDriver lẫn MediaPipe.
+# Trả về NGUYÊN BẢN để KHÔNG can thiệp vào phần hiển thị pose/trục của MediaPipe.
 FACE_3D_MODEL = np.array([
     [  0.0,   0.0,   0.0],    # 0: Chóp mũi (Nose Tip P19)
     [  0.0,  65.0, -35.0],    # 1: Chóp cằm (Chin P21: +Y hướng xuống)
@@ -421,7 +422,9 @@ class FaceTracker:
         h, w = frame.shape[:2]
         default_S = min(w, h)
         # Giới hạn kích thước tối thiểu 160px để không bao giờ bị co nhỏ thành một chấm
-        S = int(round(np.clip(S, 160, default_S)))
+        # [v2.4.0] Cho phép S vượt khung tối đa 1.5x (pad đen) để giữ khuôn mặt đúng
+        # tỉ lệ canonical khi tài xế ở QUÁ GẦN — tránh bị kẹp S=min(w,h) làm mặt phóng to.
+        S = int(round(np.clip(S, 160, default_S * 1.5)))
         if S % 2 != 0:
             S += 1
 
@@ -474,7 +477,7 @@ class FaceTracker:
                 d_eyes_est = 0.46 * float(fw)
                 h_skull = max(d_eyes_est * 0.45 * 2.10, d_eyes_est * 1.40,
                               d_eyes_est * 0.45 * 2.2 / 1.20)
-                target_S = float(np.clip(h_skull * 2.05, 160, default_S))
+                target_S = float(np.clip(h_skull * 2.05, 160, default_S * 1.5))
                 target_cx = float(fx + fw / 2.0)
                 # eye_y ≈ fy + 0.40*fh; cy = eye_y + 0.32*h_skull (giống canonical crop)
                 target_cy = float(fy + fh * 0.40 + 0.32 * h_skull)
@@ -515,7 +518,7 @@ class FaceTracker:
         """Cập nhật vị trí mặt từ bộ dò ngoài (MediaPipe / Haar) kết hợp deadband và lọc One-Euro."""
         h, w = frame.shape[:2]
         default_S = min(w, h)
-        target_S = float(np.clip(target_S, 160, default_S))
+        target_S = float(np.clip(target_S, 160, default_S * 1.5))
         self.is_tracking = True
         now = time.time()
         self.last_detection_time = now
@@ -702,7 +705,10 @@ class LocalADASController:
                 base_ear = np.median(self.ear_samples) if self.ear_samples else 0.28
                 base_mar = np.median(self.mar_samples) if self.mar_samples else 0.18
                 # [SYNC 2025] Hệ số hiệu chuẩn khớp firmware: EAR*0.75 clip [0.18,0.25], MAR*1.60 floor 0.40
-                self.ear_threshold = max(0.18, min(0.25, float(base_ear * 0.75)))
+                # [v2.4.1] Hạ ngưỡng EAR: factor 0.75->0.70, sàn 0.18->0.15.
+                # Lý do: model bị lệch thấp EAR mở mắt ~0.05 so với MediaPipe, nên sàn 0.18
+                # khiến người mắt hí nhẹ dễ bị báo nhắm oan. Hạ sàn tăng biên an toàn.
+                self.ear_threshold = max(0.15, min(0.25, float(base_ear * 0.70)))
                 self.mar_threshold = max(0.40, float(base_mar * 1.60))
                 self.calibrated = True
                 print(f"\n🎯 [ADAS] HIỆU CHUẨN HOÀN TẤT: EAR_thresh={self.ear_threshold:.2f}, MAR_thresh={self.mar_threshold:.2f}")
@@ -710,61 +716,58 @@ class LocalADASController:
                 self.current_state = f"CALIBRATING ({self.calib_duration - elapsed:.1f}s)"
                 return
 
-        # 2. Kiểm tra Buồn Ngủ (Mắt nhắm liên tục)
-        is_microsleep = False
-        is_slow_blink = False
+        # 2. Tính thời lượng từng trạng thái (giữ nguyên logic phát hiện)
+        closed_duration = 0.0
         if ear < self.ear_threshold:
             if self.closed_eyes_start is None:
                 self.closed_eyes_start = now
             closed_duration = now - self.closed_eyes_start
-            if closed_duration >= 1.5:
-                self.current_state = "ALARM: MICROSLEEP!"
-                self.alarm_active = True
-                self.alarm_reason = f"Ngủ gật nhắm mắt {closed_duration:.1f}s"
-                is_microsleep = True
-            elif closed_duration >= 0.50:   # [SYNC 2025] = SLOW_BLINK 0.5s của firmware
-                self.current_state = "WARNING: SLOW BLINK"
-                is_slow_blink = True
         else:
             self.closed_eyes_start = None
 
-        # 3. Kiểm tra Ngáp / Mệt Mỏi (Há miệng)
-        is_yawn = False
+        yawn_dur = 0.0
         if mar > self.mar_threshold:
             if self.yawn_start is None:
                 self.yawn_start = now
             yawn_dur = now - self.yawn_start
             if yawn_dur >= 1.5:   # [SYNC 2025] = YAWN_EVENT 1.5s của firmware
-                self.current_state = "YAWNING DETECTED"
-                is_yawn = True
                 if not self.yawn_timestamps or (now - self.yawn_timestamps[-1] > 4.0):
                     self.yawn_timestamps.append(now)
         else:
             self.yawn_start = None
-
-        # Đếm ngáp trong cửa sổ trượt 3 phút (180s)
+        # Cửa sổ trượt 3 phút (180s)
         self.yawn_timestamps = [t for t in self.yawn_timestamps if (now - t) <= 180.0]
-        if len(self.yawn_timestamps) >= 3:
-            self.current_state = "ALARM: FATIGUE!"
-            self.alarm_active = True
-            self.alarm_reason = f"Mệt mỏi: Ngáp {len(self.yawn_timestamps)} lần / 3 phút"
 
-        # 4. Kiểm tra Mất Tập Trung (Quay đầu góc lớn) - [SYNC 2025] Yaw 30°/Pitch 25°/3.0s như firmware
-        is_distracted = False
+        distract_dur = 0.0
         if abs(yaw) > self.yaw_threshold or abs(pitch) > 25.0:
             if self.distraction_start is None:
                 self.distraction_start = now
             distract_dur = now - self.distraction_start
-            if distract_dur >= 3.0:
-                self.current_state = "ALARM: DISTRACTED!"
-                self.alarm_active = True
-                self.alarm_reason = f"Quay mặt góc {yaw:+.0f}° quá {distract_dur:.1f}s"
-                is_distracted = True
         else:
             self.distraction_start = None
 
-        # 5. Tự động chuyển về trạng thái bình thường khi không còn sự kiện nào
-        if not self.alarm_active and not is_slow_blink and not is_yawn and not is_distracted:
+        # 3. Chọn trạng thái theo ĐÚNG thứ tự ưu tiên của firmware (adas_controller.cpp):
+        #    Microsleep > Distraction > Fatigue > SlowBlink > Yawn > Normal.
+        #    (Trước đây laptop gán state tuần tự nên Distraction ghi đè Microsleep -> lệch firmware.)
+        self.alarm_active = False
+        self.alarm_reason = ""
+        if closed_duration >= 1.5:
+            self.current_state = "ALARM: MICROSLEEP!"
+            self.alarm_active = True
+            self.alarm_reason = f"Ngủ gật nhắm mắt {closed_duration:.1f}s"
+        elif distract_dur >= 3.0:
+            self.current_state = "ALARM: DISTRACTED!"
+            self.alarm_active = True
+            self.alarm_reason = f"Quay mặt góc {yaw:+.0f}° quá {distract_dur:.1f}s"
+        elif len(self.yawn_timestamps) >= 3:
+            self.current_state = "ALARM: FATIGUE!"
+            self.alarm_active = True
+            self.alarm_reason = f"Mệt mỏi: Ngáp {len(self.yawn_timestamps)} lần / 3 phút"
+        elif closed_duration >= 0.50:   # [SYNC 2025] = SLOW_BLINK 0.5s của firmware
+            self.current_state = "WARNING: SLOW BLINK"
+        elif yawn_dur >= 1.5:
+            self.current_state = "YAWNING DETECTED"
+        else:
             self.current_state = "NORMAL (ATTENTIVE)"
 
         # Kích hoạt còi hú qua loa máy tính
@@ -806,7 +809,6 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
     p_mouth_r = landmarks_px[MOUTH_PTS[1]]
 
     # 1. Tính toán góc Yaw hình học từ độ bất đối xứng của chóp mũi so với 2 khóe mắt (Geometric Yaw Anchor)
-    # Đây là mỏ neo hình học sọ cứng bất biến trước hiện tượng chụm miệng hay suy biến PnP Levenberg-Marquardt.
     d_eyes = float(np.linalg.norm(p_eye_r - p_eye_l))
     mid_eyes = (p_eye_l + p_eye_r) / 2.0
     dx_nose = float(p_nose[0] - mid_eyes[0])
@@ -857,7 +859,6 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
         roll += 180.0
 
     # 3. Robust Gating: Chỉ can thiệp khi PnP bị lật nghiệm suy biến thực sự (|yaw| > 80° hoặc |yaw - geom_yaw| > 45°)
-    # Không để việc há miệng khi ngáp hay sai số nhỏ của chóp mũi kích hoạt ghi đè góc ảo.
     if abs(yaw) > 80.0 or abs(yaw - geom_yaw) > 45.0:
         yaw = geom_yaw
         rx = np.array([
@@ -1423,7 +1424,7 @@ def draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, ro
     elif pitch < -15.0:
         dir_tag = "NGUA DAU"
 
-    pose_color = (0, 0, 255) if abs(yaw) > adas_ctrl.yaw_threshold or abs(pitch) > 22.0 else (0, 255, 255)
+    pose_color = (0, 0, 255) if abs(yaw) > adas_ctrl.yaw_threshold or abs(pitch) > 25.0 else (0, 255, 255)
     cv2.putText(side, f"Goc Dau: Yaw={yaw:+.1f} | Pitch={pitch:+.1f}", (20, 358), cv2.FONT_HERSHEY_SIMPLEX, 0.42, pose_color, 1)
     cv2.putText(side, f"Huong nhin: {dir_tag}", (20, 376), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (220, 220, 220), 1)
 
@@ -1591,11 +1592,11 @@ def main():
             else:
                 # Chế độ TINYDRIVER INT8 (Thực thi mô hình Edge AI)
                 if ai_model.is_loaded:
+                    # [v2.2.0 SYNC] KHÔNG áp CLAHE tại đây: lúc train canonical crop chỉ được
+                    # augment bằng brightness/gamma/noise (apply_cabin_data_augmentation), KHÔNG có
+                    # CLAHE. Thêm CLAHE lúc suy luận tạo lệch phân phối -> landmark lệch.
+                    # (CLAHE chỉ dùng cho bộ DÒ mặt MediaPipe/Haar, không dùng cho input model.)
                     gray_square_tmp = cv2.cvtColor(cropped_square, cv2.COLOR_BGR2GRAY)
-                    # Nếu vùng mặt tối (mean < 95.0), áp dụng CLAHE để chi tiết mắt/mũi/miệng sắc nét
-                    if np.mean(gray_square_tmp) < 95.0:
-                        clahe_face = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-                        gray_square_tmp = clahe_face.apply(gray_square_tmp)
                     gray_96x96_tmp = cv2.resize(gray_square_tmp, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
                     landmarks_norm = ai_model.predict(gray_96x96_tmp)
                     if landmarks_norm is not None:

@@ -34,7 +34,7 @@
   "adas_thresholds": {
     "calibration_duration_sec": 5.0,
     "ear_default_threshold": 0.21,
-    "ear_calib_factor": 0.75,
+    "ear_calib_factor": 0.70,
     "slow_blink_min_sec": 0.5,
     "microsleep_duration_sec": 1.5,
     "mar_default_threshold": 0.45,

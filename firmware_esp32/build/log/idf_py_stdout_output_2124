@@ -1,0 +1,184 @@
+[1/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult1_3x3_esp32s3.S.obj
+[2/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult1_3x3_no_pad_esp32s3.S.obj
+[3/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult1_esp32s3.S.obj
+[4/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult8_3x3_esp32s3.S.obj
+[5/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult4_esp32s3.S.obj
+[6/35] Linking C static library esp-idf\cmock\libcmock.a
+[7/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s16_mult8_esp32s3.S.obj
+[8/35] Linking C static library esp-idf\app_trace\libapp_trace.a
+[9/35] Linking C static library esp-idf\esp_driver_cam\libesp_driver_cam.a
+[10/35] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s8_mult1_3x3_padded_esp32s3.S.obj
+[11/35] Linking C static library esp-idf\esp_hid\libesp_hid.a
+[12/35] Linking C static library esp-idf\esp_local_ctrl\libesp_local_ctrl.a
+[13/35] Linking C static library esp-idf\esp_lcd\libesp_lcd.a
+[14/35] Linking C static library esp-idf\mqtt\libmqtt.a
+[15/35] Linking C static library esp-idf\fatfs\libfatfs.a
+[16/35] Linking C static library esp-idf\espcoredump\libespcoredump.a
+[17/35] Linking C static library esp-idf\nvs_sec_provider\libnvs_sec_provider.a
+[18/35] Linking C static library esp-idf\perfmon\libperfmon.a
+[19/35] Linking C static library esp-idf\touch_element\libtouch_element.a
+[20/35] Linking C static library esp-idf\spiffs\libspiffs.a
+[21/35] Linking C static library esp-idf\usb\libusb.a
+[22/35] Linking C static library esp-idf\wifi_provisioning\libwifi_provisioning.a
+[23/35] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_opt.c.obj
+In file included from D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/convolution/esp_nn_depthwise_conv_opt.c:16:
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/common/common_functions.h:294:13: warning: 'esp_nn_aligned_s8_pad_end_with_value' defined but not used [-Wunused-function]
+  294 | static void esp_nn_aligned_s8_pad_end_with_value(const int8_t *src, int8_t *dst,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/common/common_functions.h:266:13: warning: 'esp_nn_aligned_s8_pad_asymmetric' defined but not used [-Wunused-function]
+  266 | static void esp_nn_aligned_s8_pad_asymmetric(const int8_t *src, int8_t *dst,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/common/common_functions.h:239:13: warning: 'esp_nn_aligned_s8_pad_with_value' defined but not used [-Wunused-function]
+  239 | static void esp_nn_aligned_s8_pad_with_value(const int8_t *src, int8_t *dst,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[24/35] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/esp_nn/src/convolution/esp_nn_depthwise_conv_s8_esp32s3.c.obj
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/convolution/esp_nn_depthwise_conv_s8_esp32s3.c:158:13: warning: 'esp_nn_depthwise_conv_s8_unrolled' defined but not used [-Wunused-function]
+  158 | static void esp_nn_depthwise_conv_s8_unrolled(const int8_t *input_data,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/convolution/esp_nn_depthwise_conv_s8_esp32s3.c:10:
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/common/common_functions.h:266:13: warning: 'esp_nn_aligned_s8_pad_asymmetric' defined but not used [-Wunused-function]
+  266 | static void esp_nn_aligned_s8_pad_asymmetric(const int8_t *src, int8_t *dst,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[25/35] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/image_decoder.cpp.obj
+FAILED: esp-idf/main/CMakeFiles/__idf_main.dir/image_decoder.cpp.obj 
+ccache C:\Espressif\tools\xtensa-esp-elf\esp-13.2.0_20250707\xtensa-esp-elf\bin\xtensa-esp32s3-elf-g++.exe -DESP_PLATFORM -DIDF_VER=\"v5.3.5\" -DMBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\" -DSOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE -DSOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ -D_GLIBCXX_HAVE_POSIX_SEMAPHORE -D_GLIBCXX_USE_POSIX_SEMAPHORE -D_GNU_SOURCE -D_POSIX_READER_WRITER_LOCKS -ID:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/config -ID:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main -ID:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/include -ID:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/esp_nn/src/common -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/newlib/platform_include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/config/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/config/include/freertos -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/config/xtensa/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/FreeRTOS-Kernel/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/FreeRTOS-Kernel/portable/xtensa/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/esp_additions/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/include/soc -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/include/soc/esp32s3 -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/dma/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/ldo/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/port/esp32s3/. -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_hw_support/port/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/heap/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/log/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/soc/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/soc/esp32s3 -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/soc/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/hal/platform_port/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/hal/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/hal/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_rom/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_rom/include/esp32s3 -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_rom/esp32s3 -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_common/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/port/soc -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/port/include/private -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/deprecated_include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/include/apps -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/include/apps/sntp -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/lwip/src/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/port/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/port/freertos/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/port/esp32xx/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/port/esp32xx/include/arch -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/lwip/port/esp32xx/include/sys -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_wifi/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_wifi/include/local -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_wifi/wifi_apps/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_wifi/wifi_apps/nan_app/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_event/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_phy/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_phy/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_netif/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/nvs_flash/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/spi_flash/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_partition/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_psram/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_timer/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/driver/deprecated -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/driver/i2c/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/driver/touch_sensor/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/driver/twai/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/driver/touch_sensor/esp32s3/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_pm/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_ringbuf/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_gpio/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_pcnt/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_gptimer/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_spi/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_mcpwm/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_ana_cmpr/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_i2s/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_sdmmc/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/sdmmc/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_sdspi/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_sdio/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_dac/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_rmt/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_tsens/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_sdm/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_i2c/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_uart/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/vfs/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_ledc/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_parlio/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_driver_usb_serial_jtag/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/port/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/mbedtls/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/mbedtls/library -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/esp_crt_bundle/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/mbedtls/3rdparty/everest/include -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/mbedtls/3rdparty/p256-m -IC:/Espressif/frameworks/esp-idf-v5.3.5/components/mbedtls/mbedtls/3rdparty/p256-m/p256-m -ID:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp_new_jpeg/include -mlongcalls  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-bzero -fno-builtin-stpcpy -fno-builtin-strncpy -fdiagnostics-color=always -ffunction-sections -fdata-sections -Wall -Werror=all -Wno-error=unused-function -Wno-error=unused-variable -Wno-error=unused-but-set-variable -Wno-error=deprecated-declarations -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-enum-conversion -gdwarf-4 -ggdb -mdisable-hardware-atomics -O2 -fmacro-prefix-map=D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32=. -fmacro-prefix-map=C:/Espressif/frameworks/esp-idf-v5.3.5=/IDF -fstrict-volatile-bitfields -fno-jump-tables -fno-tree-switch-conversion -std=gnu++2b -fno-exceptions -fno-rtti -MD -MT esp-idf/main/CMakeFiles/__idf_main.dir/image_decoder.cpp.obj -MF esp-idf\main\CMakeFiles\__idf_main.dir\image_decoder.cpp.obj.d -o esp-idf/main/CMakeFiles/__idf_main.dir/image_decoder.cpp.obj -c D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp: In function 'bool decode_jpeg_to_gray(const uint8_t*, size_t, int*, int*)':
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:141:21: error: 'JPEG_ROTATE_0' was not declared in this scope; did you mean 'JPEG_ROTATE_0D'?
+  141 |     config.rotate = JPEG_ROTATE_0;
+      |                     ^~~~~~~~~~~~~
+      |                     JPEG_ROTATE_0D
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:150:31: warning: missing initializer for member 'jpeg_dec_io_t::inbuf_len' [-Wmissing-field-initializers]
+  150 |     jpeg_dec_io_t jpeg_io = {0};
+      |                               ^
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:150:31: warning: missing initializer for member 'jpeg_dec_io_t::inbuf_remain' [-Wmissing-field-initializers]
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:150:31: warning: missing initializer for member 'jpeg_dec_io_t::outbuf' [-Wmissing-field-initializers]
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:150:31: warning: missing initializer for member 'jpeg_dec_io_t::out_size' [-Wmissing-field-initializers]
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:154:42: warning: missing initializer for member 'jpeg_dec_header_info_t::height' [-Wmissing-field-initializers]
+  154 |     jpeg_dec_header_info_t jpeg_info = {0};
+      |                                          ^
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp: At global scope:
+D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/image_decoder.cpp:62:13: warning: 'bool parse_jpeg_dimensions(const uint8_t*, size_t, int*, int*)' defined but not used [-Wunused-function]
+   62 | static bool parse_jpeg_dimensions(const uint8_t* data, size_t len, int* out_w, int* out_h) {
+      |             ^~~~~~~~~~~~~~~~~~~~~
+[26/35] Performing build step for 'bootloader'
+[1/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_crc.c.obj
+[2/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_sys.c.obj
+[3/114] Building ASM object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_longjmp.S.obj
+[4/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_gpio.c.obj
+[5/114] Building C object esp-idf/log/CMakeFiles/__idf_log.dir/log_noos.c.obj
+[6/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_efuse.c.obj
+[7/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_spiflash.c.obj
+[8/114] Building C object esp-idf/log/CMakeFiles/__idf_log.dir/log_buffers.c.obj
+[9/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_uart.c.obj
+[10/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_systimer.c.obj
+[11/114] Building ASM object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_cache_writeback_esp32s3.S.obj
+[12/114] Building C object esp-idf/log/CMakeFiles/__idf_log.dir/log.c.obj
+[13/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_wdt.c.obj
+[14/114] Building C object esp-idf/esp_rom/CMakeFiles/__idf_esp_rom.dir/patches/esp_rom_cache_esp32s2_esp32s3.c.obj
+[15/114] Building C object esp-idf/esp_common/CMakeFiles/__idf_esp_common.dir/src/esp_err_to_name.c.obj
+[16/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/esp_memory_utils.c.obj
+[17/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/cpu_region_protect.c.obj
+[18/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/esp_cpu_intr.c.obj
+[19/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/cpu.c.obj
+[20/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/chip_info.c.obj
+[21/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/rtc_clk_init.c.obj
+[22/114] Building C object esp-idf/esp_system/CMakeFiles/__idf_esp_system.dir/esp_err.c.obj
+[23/114] Linking C static library esp-idf\log\liblog.a
+[24/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/esp32s3/esp_efuse_table.c.obj
+[25/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/rtc_sleep.c.obj
+[26/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/esp32s3/esp_efuse_fields.c.obj
+[27/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/rtc_init.c.obj
+[28/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/rtc_time.c.obj
+[29/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/esp32s3/esp_efuse_rtc_calib.c.obj
+[30/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/src/esp_efuse_fields.c.obj
+[31/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/esp32s3/esp_efuse_utility.c.obj
+[32/114] Building C object esp-idf/esp_hw_support/CMakeFiles/__idf_esp_hw_support.dir/port/esp32s3/rtc_clk.c.obj
+[33/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/src/esp_efuse_api.c.obj
+[34/114] Linking C static library esp-idf\esp_rom\libesp_rom.a
+[35/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_mem.c.obj
+[36/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_efuse.c.obj
+[37/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_clock_init.c.obj
+[38/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/src/esp_efuse_utility.c.obj
+[39/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_random.c.obj
+[40/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_common.c.obj
+[41/114] Building C object esp-idf/efuse/CMakeFiles/__idf_efuse.dir/src/efuse_controller/keys/with_key_purposes/esp_efuse_api_key.c.obj
+[42/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_random_esp32s3.c.obj
+[43/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/secure_boot.c.obj
+[44/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_common_loader.c.obj
+[45/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/flash_encrypt.c.obj
+[46/114] Linking C static library esp-idf\esp_common\libesp_common.a
+[47/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/flash_partitions.c.obj
+[48/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_clock_loader.c.obj
+[49/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/bootloader_flash/src/flash_qio_mode.c.obj
+[50/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_console_loader.c.obj
+[51/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_console.c.obj
+[52/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/bootloader_flash/src/bootloader_flash_config_esp32s3.c.obj
+[53/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/esp32s3/bootloader_sha.c.obj
+[54/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_init.c.obj
+[55/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/esp32s3/bootloader_soc.c.obj
+[56/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/bootloader_flash/src/bootloader_flash.c.obj
+[57/114] Linking C static library esp-idf\esp_hw_support\libesp_hw_support.a
+[58/114] Building C object esp-idf/esp_bootloader_format/CMakeFiles/__idf_esp_bootloader_format.dir/esp_bootloader_desc.c.obj
+[59/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/mpu_hal.c.obj
+[60/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_panic.c.obj
+[61/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/hal_utils.c.obj
+[62/114] Building C object esp-idf/spi_flash/CMakeFiles/__idf_spi_flash.dir/spi_flash_wrap.c.obj
+[63/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/esp32s3/bootloader_esp32s3.c.obj
+[64/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/efuse_hal.c.obj
+[65/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/bootloader_utility.c.obj
+[66/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/esp32s3/efuse_hal.c.obj
+[67/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/lldesc.c.obj
+[68/114] Building C object esp-idf/bootloader_support/CMakeFiles/__idf_bootloader_support.dir/src/esp_image_format.c.obj
+[69/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/dport_access_common.c.obj
+[70/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/interrupts.c.obj
+[71/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/mmu_hal.c.obj
+[72/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/uart_periph.c.obj
+[73/114] Building C object esp-idf/hal/CMakeFiles/__idf_hal.dir/cache_hal.c.obj
+[74/114] Linking C static library esp-idf\esp_system\libesp_system.a
+[75/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/adc_periph.c.obj
+[76/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/dedic_gpio_periph.c.obj
+[77/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/gpio_periph.c.obj
+[78/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/gdma_periph.c.obj
+[79/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/sdm_periph.c.obj
+[80/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/spi_periph.c.obj
+[81/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/pcnt_periph.c.obj
+[82/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/ledc_periph.c.obj
+[83/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/rmt_periph.c.obj
+[84/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/temperature_sensor_periph.c.obj
+[85/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/i2s_periph.c.obj
+[86/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/i2c_periph.c.obj
+[87/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/mcpwm_periph.c.obj
+[88/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/lcd_periph.c.obj
+[89/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/timer_periph.c.obj
+[90/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/mpi_periph.c.obj
+[91/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/touch_sensor_periph.c.obj
+[92/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/twai_periph.c.obj
+[93/114] Linking C static library esp-idf\efuse\libefuse.a
+[94/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/sdmmc_periph.c.obj
+[95/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/usb_dwc_periph.c.obj
+[96/114] Generating project_elf_src_esp32s3.c
+[97/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/wdt_periph.c.obj
+[98/114] Building C object esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/eri.c.obj
+[99/114] Building C object esp-idf/soc/CMakeFiles/__idf_soc.dir/esp32s3/rtc_io_periph.c.obj
+[100/114] Building C object esp-idf/xtensa/CMakeFiles/__idf_xtensa.dir/xt_trax.c.obj
+[101/114] Building C object CMakeFiles/bootloader.elf.dir/project_elf_src_esp32s3.c.obj
+[102/114] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/bootloader_start.c.obj
+[103/114] Linking C static library esp-idf\bootloader_support\libbootloader_support.a
+[104/114] Linking C static library esp-idf\esp_bootloader_format\libesp_bootloader_format.a
+[105/114] Building C object esp-idf/micro-ecc/CMakeFiles/__idf_micro-ecc.dir/uECC_verify_antifault.c.obj
+[106/114] Linking C static library esp-idf\spi_flash\libspi_flash.a
+[107/114] Linking C static library esp-idf\hal\libhal.a
+[108/114] Linking C static library esp-idf\micro-ecc\libmicro-ecc.a
+[109/114] Linking C static library esp-idf\soc\libsoc.a
+[110/114] Linking C static library esp-idf\xtensa\libxtensa.a
+[111/114] Linking C static library esp-idf\main\libmain.a
+[112/114] Linking C executable bootloader.elf
+[113/114] Generating binary image from built executable
+esptool.py v4.11.0
+Creating esp32s3 image...
+Merged 2 ELF sections
+Successfully created esp32s3 image.
+Generated D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader/bootloader.bin
+[114/114] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32\build\bootloader\esp-idf\esptool_py && C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:/Espressif/frameworks/esp-idf-v5.3.5/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/build/bootloader/bootloader.bin"
+Bootloader binary size 0x59f0 bytes. 0x2610 bytes (30%) free.
+ninja: build stopped: subcommand failed.
