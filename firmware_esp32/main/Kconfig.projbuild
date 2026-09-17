@@ -143,12 +143,71 @@ menu "TinyDriver ADAS Configuration"
 
     config TD_CAM_JPEG_QUALITY
         int "Camera JPEG quality (0-63, lower = sharper)"
-        default 12
+        default 10
         range 0 63
 
     config TD_CAM_GRAB_LATEST
         bool "Always grab the newest frame (drop stale frames)"
         default y
+
+    config TD_CROP_FIXED
+        bool "Use FIXED face crop (deterministic - recommended)"
+        default y
+        help
+            Crop co dinh vao vung giua khung (KHONG dung vong phan hoi ROI).
+            Bat: on dinh, khong troi. Tat: dung ROI tracker (auto, co the troi).
+
+    config TD_CROP_CX_PCT
+        int "Fixed crop center X (% of width)"
+        range 0 100
+        default 50
+        depends on TD_CROP_FIXED
+
+    config TD_CROP_CY_PCT
+        int "Fixed crop center Y (% of height)"
+        range 0 100
+        default 56
+        depends on TD_CROP_FIXED
+
+    config TD_CROP_SIZE_PCT
+        int "Fixed crop size (% of min(w,h))"
+        range 30 100
+        default 75
+        depends on TD_CROP_FIXED
+
+    config TD_DETECT_PERIODIC
+        bool "Re-detect face periodically (BlazeFace anchor, Core 0)"
+        default n
+        help
+            Chay lai BlazeFace dinh ky de NEO crop canonical (keypoints) tren Core 0.
+            Mac dinh TAT khi da bat TD_USE_LITE_DETECTOR (lite chay moi frame).
+
+    config TD_USE_LITE_DETECTOR
+        bool "Use LITE face detector every frame (recommended)"
+        default y
+        help
+            Bat FaceDetectorLite (96x96, ~227k params) chay MOI FRAME de cap nhat
+            crop canonical -> tracking tuc thi, khong ton 0.5s/frame nhu BlazeFace.
+
+    config TD_LITE_ON_CORE0
+        bool "Run LITE detector on Core 0 (parallel with Core 1 AI)"
+        depends on TD_USE_LITE_DETECTOR
+        default y
+        help
+            Lite detector chay tren Core 0 song song voi mang 22 diem o Core 1
+            -> khong cong 66ms vao thoi gian moi frame (FPS 4.4 -> ~6.4).
+
+    config TD_DETECT_INTERVAL
+        int "Detect interval (frames)"
+        range 3 200
+        default 12
+        depends on TD_DETECT_PERIODIC
+
+    config TD_DETECT_GAP_IDLE_MS
+        int "Detector idle gap (ms) when face is still"
+        range 50 2000
+        default 500
+        depends on TD_DETECT_PERIODIC
 
     endif
 

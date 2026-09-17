@@ -22,7 +22,7 @@ static const char* TAG = "ADAS_CONTROLLER";
 #define CALIBRATION_DURATION_US   (5 * 1000 * 1000)   // 5 seconds calibration
 #define SLOW_BLINK_DURATION_US    (500 * 1000)        // 0.5s slow blink
 #define MICROSLEEP_DURATION_US    (1500 * 1000)       // 1.5s microsleep
-#define YAWN_EVENT_DURATION_US    (1500 * 1000)       // 1.5s mouth wide open
+#define YAWN_EVENT_DURATION_US    (1200 * 1000)       // [D14] 1.2s (bù việc lọc MAR 4-tap ăn ~0.35s mỗi đầu, yawn thật 1.5-3s vẫn dư biên)
 #define DISTRACTION_DURATION_US   (3000 * 1000)       // 3.0s head turned away
 #define YAWN_WINDOW_US            (180 * 1000 * 1000) // 3 minutes rolling window
 
@@ -37,6 +37,10 @@ static bool s_is_calibrated = false;
 #define MAX_CALIB_SAMPLES 256
 static float s_calib_ear_buf[MAX_CALIB_SAMPLES];
 static float s_calib_mar_buf[MAX_CALIB_SAMPLES];
+static float s_calib_pitch_buf[MAX_CALIB_SAMPLES];
+static float s_calib_yaw_buf[MAX_CALIB_SAMPLES];   // [D9] baseline yaw (POSIT lệch hệ thống ~+15°)
+static float s_pitch_bias = 0.0f;   // [v2.6.6] baseline pitch (bias POSIT) trừ đi khi báo mất tập trung
+static float s_yaw_bias = 0.0f;     // [D9] baseline yaw — tránh BÁO ĐỘNG DISTRACTION GIẢ khi nhìn thẳng
 static uint32_t s_calib_count = 0;
 
 // Median (sắp xếp nổi bọt/chèn tại chỗ, n <= 256)
@@ -127,7 +131,21 @@ void adas_controller_update(const point2d_t landmarks[22],
     float mouth_h_outer = euclidean_dist(landmarks[14], landmarks[15]);
     float mouth_h_inner = euclidean_dist(landmarks[16], landmarks[17]);
     float mouth_w       = euclidean_dist(landmarks[12], landmarks[13]);
-    float mar = (mouth_w > 1e-4f) ? ((mouth_h_outer + mouth_h_inner) / (2.0f * mouth_w)) : 0.0f;
+    float mar_raw = (mouth_w > 1e-4f) ? ((mouth_h_outer + mouth_h_inner) / (2.0f * mouth_w)) : 0.0f;
+
+    // [D10] LÀM MƯỢT MAR (trung bình trượt 4 frame).
+    // ĐO THỰC TẾ: điểm miệng của model nhấp nháy (0.99 -> 0.22 trong <1s) vì miệng
+    // là vùng model yếu nhất (lệch MediaPipe 5.68px) -> điều kiện "MAR>ngưỡng LIÊN TỤC
+    // 1.5s" không bao giờ đạt -> KHÔNG BAO GIỜ BÁO NGÁP. Lọc trượt khử nhấp nháy.
+    #define MAR_SMOOTH_N 4
+    static float s_mar_hist[MAR_SMOOTH_N] = {0};
+    static int   s_mar_idx = 0, s_mar_fill = 0;
+    s_mar_hist[s_mar_idx] = mar_raw;
+    s_mar_idx = (s_mar_idx + 1) % MAR_SMOOTH_N;
+    if (s_mar_fill < MAR_SMOOTH_N) s_mar_fill++;
+    float mar_sum = 0.0f;
+    for (int i = 0; i < s_mar_fill; i++) mar_sum += s_mar_hist[i];
+    float mar = (s_mar_fill > 0) ? (mar_sum / (float)s_mar_fill) : mar_raw;
 
     // 3. Calibration Phase (First 5 Seconds)
     if (!s_is_calibrated) {
@@ -135,6 +153,8 @@ void adas_controller_update(const point2d_t landmarks[22],
             if (s_calib_count < MAX_CALIB_SAMPLES) {
                 s_calib_ear_buf[s_calib_count] = ear;
                 s_calib_mar_buf[s_calib_count] = mar;
+                s_calib_pitch_buf[s_calib_count] = pose->pitch;
+                s_calib_yaw_buf[s_calib_count] = pose->yaw;
                 s_calib_count++;
             }
 
@@ -148,6 +168,9 @@ void adas_controller_update(const point2d_t landmarks[22],
             out_metrics->total_blinks = 0;
             out_metrics->total_yawns = 0;
             out_metrics->esp32_fps = fps;
+            out_metrics->ear_threshold = s_ear_threshold;
+            out_metrics->mar_threshold = s_mar_threshold;
+            out_metrics->mouth_open_s = 0.0f;
             snprintf(out_metrics->status_str, sizeof(out_metrics->status_str), "CALIBRATING... (%.1fs)",
                      (float)(CALIBRATION_DURATION_US - (now - s_start_time_us)) / 1e6f);
             return;
@@ -156,13 +179,24 @@ void adas_controller_update(const point2d_t landmarks[22],
             if (s_calib_count > 10) {
                 float avg_ear = compute_median(s_calib_ear_buf, s_calib_count);
                 float avg_mar = compute_median(s_calib_mar_buf, s_calib_count);
+                // [D12] Baseline MAR quá cao = lúc hiệu chuẩn miệng đang mở/nói chuyện
+                // -> ngưỡng bị đẩy lên TRẦN 0.65 -> KHÔNG BAO GIỜ BÁO NGÁP (đo thực tế:
+                // baseline 0.55, MAR ngáp đỉnh 0.71 -> không đạt ngưỡng liên tục 1.5s).
+                // Người nghỉ có MAR ≈ 0.20-0.35 (cả MediaPipe lẫn model đều vậy).
+                if (avg_mar > 0.35f) {
+                    ESP_LOGW(TAG, "⚠️ Baseline MAR=%.2f qua cao (mieng mo khi calib) -> kep ve 0.30", avg_mar);
+                    avg_mar = 0.30f;
+                }
+                s_pitch_bias = compute_median(s_calib_pitch_buf, s_calib_count);
+                s_yaw_bias   = compute_median(s_calib_yaw_buf, s_calib_count);
                 s_ear_threshold = avg_ear * 0.70f;
                 s_mar_threshold = avg_mar * 1.60f;
                 if (s_ear_threshold < 0.15f) s_ear_threshold = 0.15f;
                 if (s_ear_threshold > 0.25f) s_ear_threshold = 0.25f;
                 if (s_mar_threshold < 0.40f) s_mar_threshold = 0.40f;
-                ESP_LOGI(TAG, "✅ Hiệu chuẩn thành công! Baseline: EAR=%.2f, MAR=%.2f | Ngưỡng báo: EAR<%.2f, MAR>%.2f",
-                         avg_ear, avg_mar, s_ear_threshold, s_mar_threshold);
+                if (s_mar_threshold > 0.58f) s_mar_threshold = 0.58f;   // [D12] trần hạ 0.65->0.58: đo thực tế MAR ngáp đỉnh 0.71-0.94
+                ESP_LOGI(TAG, "✅ Hiệu chuẩn thành công! Baseline: EAR=%.2f, MAR=%.2f | Bias pose: pitch=%+.1f° yaw=%+.1f° | Ngưỡng báo: EAR<%.2f, MAR>%.2f",
+                         avg_ear, avg_mar, s_pitch_bias, s_yaw_bias, s_ear_threshold, s_mar_threshold);
             }
             s_is_calibrated = true;
         }
@@ -228,7 +262,7 @@ void adas_controller_update(const point2d_t landmarks[22],
     // 6. Head Pose Distraction Detection
     bool is_distracted_angle = false;
     if (pose->is_valid) {
-        if (fabsf(pose->yaw) > s_yaw_threshold_deg || fabsf(pose->pitch) > s_pitch_threshold_deg) {
+        if (fabsf(pose->yaw - s_yaw_bias) > s_yaw_threshold_deg || fabsf(pose->pitch - s_pitch_bias) > s_pitch_threshold_deg) {
             is_distracted_angle = true;
         }
     }
@@ -279,5 +313,8 @@ void adas_controller_update(const point2d_t landmarks[22],
     out_metrics->total_blinks = s_total_blinks;
     out_metrics->total_yawns = s_total_yawns;
     out_metrics->esp32_fps = fps;
+    out_metrics->ear_threshold = s_ear_threshold;
+    out_metrics->mar_threshold = s_mar_threshold;
+    out_metrics->mouth_open_s = (float)mouth_open_duration / 1e6f;
     strncpy(out_metrics->status_str, status_text, sizeof(out_metrics->status_str));
 }

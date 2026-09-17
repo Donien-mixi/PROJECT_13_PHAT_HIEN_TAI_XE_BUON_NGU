@@ -1,6 +1,8 @@
 #include "telemetry_sender.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 #include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -33,6 +35,28 @@ static bool s_is_initialized = false;
 
 static uint32_t s_tx_ok = 0;
 static uint32_t s_tx_err = 0;
+
+// [v2.8.0] Timing per frame (ms) for the laptop display
+static float s_dec_ms = 0.0f;
+static float s_ai_ms = 0.0f;
+static float s_total_ms = 0.0f;
+
+void telemetry_sender_set_timing(float dec_ms, float ai_ms, float total_ms) {
+    s_dec_ms = dec_ms;
+    s_ai_ms = ai_ms;
+    s_total_ms = total_ms;
+}
+
+// [v2.9.2] Face ROI info for diagnostics
+static int s_roi_active = 0;
+static int s_roi_x0 = 0, s_roi_y0 = 0, s_roi_size = 0;
+
+void telemetry_sender_set_roi(int active, int x0, int y0, int size) {
+    s_roi_active = active;
+    s_roi_x0 = x0;
+    s_roi_y0 = y0;
+    s_roi_size = size;
+}
 
 // JSON Serialization Buffer
 static char s_json_buffer[2048];
@@ -92,7 +116,10 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
     int offset = 0;
     offset += snprintf(s_json_buffer + offset, sizeof(s_json_buffer) - offset,
                        "{\"ear\":%.2f,\"mar\":%.2f,\"yaw\":%.1f,\"pitch\":%.1f,\"roll\":%.1f,"
-                       "\"status\":\"%s\",\"alarm\":%s,\"fps\":%.1f,\"landmarks\":[",
+                       "\"status\":\"%s\",\"alarm\":%s,\"fps\":%.1f,"
+                       "\"dec\":%.1f,\"ai\":%.1f,\"total\":%.1f,"
+                       "\"ear_thr\":%.3f,\"mar_thr\":%.3f,\"mouth_s\":%.2f,\"yawns\":%u,"
+                       "\"roi\":%d,\"rx\":%d,\"ry\":%d,\"rs\":%d,\"landmarks\":[",
                        metrics->ear,
                        metrics->mar,
                        metrics->pose.is_valid ? metrics->pose.yaw : 0.0f,
@@ -100,7 +127,15 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
                        metrics->pose.is_valid ? metrics->pose.roll : 0.0f,
                        metrics->status_str,
                        metrics->is_alarm_active ? "true" : "false",
-                       metrics->esp32_fps);
+                       metrics->esp32_fps,
+                       (double)s_dec_ms,
+                       (double)s_ai_ms,
+                       (double)s_total_ms,
+                       (double)metrics->ear_threshold,
+                       (double)metrics->mar_threshold,
+                       (double)metrics->mouth_open_s,
+                       (unsigned)metrics->total_yawns,
+                       s_roi_active, s_roi_x0, s_roi_y0, s_roi_size);
 
     // Append 22 landmarks as 44 float array [x0, y0, x1, y1, ...]
     if (landmarks_22) {
@@ -133,4 +168,54 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
     }
 
     return (sent > 0);
+}
+
+void telemetry_sender_image(const int8_t* tensor, float scale, int32_t zp, int w, int h) {
+    if (!s_is_initialized || s_udp_sock < 0 || !tensor || w <= 0 || h <= 0) {
+        return;
+    }
+    if (w * h > 128 * 128) {
+        return;
+    }
+
+    static uint8_t pkt[8 + 128 * 128];
+    pkt[0] = 0xAA; pkt[1] = 0x56; pkt[2] = 0xAA; pkt[3] = 0x56;
+    pkt[4] = (uint8_t)(w & 0xFF);      pkt[5] = (uint8_t)((w >> 8) & 0xFF);
+    pkt[6] = (uint8_t)(h & 0xFF);      pkt[7] = (uint8_t)((h >> 8) & 0xFF);
+
+    size_t n = 8;
+    for (int i = 0; i < w * h; i++) {
+        // Dequant: gray = (q - zp) * scale * 128 + 128  (do training normalize (px-128)/128)
+        int g = (int)lroundf(((float)(tensor[i] - zp)) * scale * 128.0f + 128.0f);
+        if (g < 0) g = 0; else if (g > 255) g = 255;
+        pkt[n++] = (uint8_t)g;
+    }
+
+    sendto(s_udp_sock, pkt, n, 0, (struct sockaddr*)&s_dest_addr, sizeof(s_dest_addr));
+}
+
+// [v2.9.4] Preview toàn khung camera (nearest-neighbor downsample) - để chẩn đoán hướng/khung hình.
+void telemetry_sender_preview(const uint8_t* gray, int src_w, int src_h, int out_w, int out_h) {
+    if (!s_is_initialized || s_udp_sock < 0 || !gray || src_w <= 0 || src_h <= 0) {
+        return;
+    }
+    if (out_w <= 0 || out_h <= 0 || out_w > 200 || out_h > 200) {
+        return;
+    }
+    static uint8_t pkt[8 + 200 * 200];
+    pkt[0] = 0xAA; pkt[1] = 0x56; pkt[2] = 0xA0; pkt[3] = 0x01;
+    pkt[4] = (uint8_t)(out_w & 0xFF); pkt[5] = (uint8_t)((out_w >> 8) & 0xFF);
+    pkt[6] = (uint8_t)(out_h & 0xFF); pkt[7] = (uint8_t)((out_h >> 8) & 0xFF);
+
+    size_t n = 8;
+    for (int y = 0; y < out_h; y++) {
+        int sy = (int)((float)y * (float)src_h / (float)out_h);
+        if (sy > src_h - 1) sy = src_h - 1;
+        for (int x = 0; x < out_w; x++) {
+            int sx = (int)((float)x * (float)src_w / (float)out_w);
+            if (sx > src_w - 1) sx = src_w - 1;
+            pkt[n++] = gray[sy * src_w + sx];
+        }
+    }
+    sendto(s_udp_sock, pkt, n, 0, (struct sockaddr*)&s_dest_addr, sizeof(s_dest_addr));
 }

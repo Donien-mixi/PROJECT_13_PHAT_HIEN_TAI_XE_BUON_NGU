@@ -65,7 +65,12 @@ bool camera_capture_init(void) {
 
     sensor_t* s = esp_camera_sensor_get();
     if (s) {
-        ESP_LOGI(TAG, "✅ Camera sẵn sàng: PID=0x%02X VER=0x%02X | JPEG | %s",
+        // [v2.9.4] Đồng bộ hướng ảnh với CameraWebServer đã kiểm chứng:
+        // module gắn ngược -> bật V-Flip, giữ H-Mirror OFF.
+        s->set_vflip(s, 1);
+        s->set_hmirror(s, 0);
+        s->set_quality(s, CONFIG_TD_CAM_JPEG_QUALITY);
+        ESP_LOGI(TAG, "✅ Camera sẵn sàng: PID=0x%02X VER=0x%02X | JPEG | %s | V-Flip=1 H-Mirror=0 | Q=%d",
                  s->id.PID, s->id.VER,
 #if CONFIG_TD_CAM_FS_VGA
                  "VGA 640x480"
@@ -74,6 +79,7 @@ bool camera_capture_init(void) {
 #else
                  "QVGA 320x240"
 #endif
+                 , CONFIG_TD_CAM_JPEG_QUALITY
         );
     } else {
         ESP_LOGW(TAG, "⚠️ Camera init OK nhưng không đọc được sensor_t.");

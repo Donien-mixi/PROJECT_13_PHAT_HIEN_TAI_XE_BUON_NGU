@@ -41,6 +41,16 @@ static uint8_t* s_gray_buffer = NULL;   // grayscale đã decode (MAX_IMG_W*MAX_
 static uint8_t* s_rgb_buffer = NULL;    // RGB888 output của decoder (x3)
 #endif
 
+// [v2.9.4] Kích thước khung gần nhất (cho preview)
+static int s_last_img_w = 0;
+static int s_last_img_h = 0;
+
+// [v2.9.5 - M1] CROP CỐ ĐỊNH (deterministic, không vòng phản hồi)
+static int s_crop_fixed    = 1;   // 1 = dùng crop cố định; 0 = dùng ROI (nếu truyền vào)
+static int s_crop_cx_pct   = 50;  // tâm crop theo % chiều rộng
+static int s_crop_cy_pct   = 52;  // tâm crop theo % chiều cao
+static int s_crop_size_pct = 75;  // cạnh crop theo % cạnh ngắn
+
 bool image_decoder_init(void) {
     ESP_LOGI(TAG, "Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray %d KB%s)...",
              (MAX_IMG_W * MAX_IMG_H) / 1024,
@@ -75,9 +85,6 @@ static bool parse_jpeg_dimensions(const uint8_t* data, size_t len, int* out_w, i
     while (i < len - 8) {
         if (data[i] == 0xFF) {
             uint8_t marker = data[i + 1];
-            if (marker == 0xC0 || marker == 0xC1) {
-                *out_h = (data[i + 5] << 8) | data[i + 6];
-                *out_w = (data[i + 7] << 8) | data[i + 8];
                 return true;
             }
             if (marker != 0xD8 && marker != 0xD9 && marker != 0x00 && marker != 0xFF) {
@@ -92,29 +99,63 @@ static bool parse_jpeg_dimensions(const uint8_t* data, size_t len, int* out_w, i
 }
 #endif
 
+// [v2.9.0] Wrapper tương thích: crop giữa khung (không ROI).
+bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
+                                int8_t* out_int8_tensor,
+                                float input_scale, int32_t input_zero_point) {
+    return image_decoder_process_jpeg_roi(jpeg_data, jpeg_len, out_int8_tensor,
+                                          input_scale, input_zero_point, NULL, NULL);
+}
+
+// [v2.9.4] Trả buffer xám toàn khung gần nhất + kích thước (cho preview)
+const uint8_t* image_decoder_get_last_gray(int* out_w, int* out_h) {
+    if (out_w) *out_w = s_last_img_w;
+    if (out_h) *out_h = s_last_img_h;
+    if (s_last_img_w <= 0 || s_last_img_h <= 0) return NULL;
+    return s_gray_buffer;
+}
+
+// [v2.9.5 - M1] Bật/tắt + cấu hình crop cố định (deterministic)
+void image_decoder_set_fixed_crop(int enabled, int cx_pct, int cy_pct, int size_pct) {
+    s_crop_fixed = enabled ? 1 : 0;
+    if (cx_pct >= 0 && cx_pct <= 100)   s_crop_cx_pct = cx_pct;
+    if (cy_pct >= 0 && cy_pct <= 100)   s_crop_cy_pct = cy_pct;
+    if (size_pct >= 30 && size_pct <= 100) s_crop_size_pct = size_pct;
+    ESP_LOGI(TAG, "Crop mode: %s (cx=%d%% cy=%d%% size=%d%%)",
+             s_crop_fixed ? "FIXED" : "ROI/AUTO", s_crop_cx_pct, s_crop_cy_pct, s_crop_size_pct);
+}
+
 // Bilinear Downsampling & INT8 Quantization Engine
 // Guarantees strict 1:1 Aspect Ratio Preservation (scale_x == scale_y)
-static void downsample_and_quantize(const uint8_t* src_gray, int src_w, int src_h,
-                                    int8_t* out_tensor,
-                                    float input_scale, int32_t input_zp) {
-    // Determine square crop bounds
-    int S = (src_w < src_h) ? src_w : src_h;
-    int x0 = (src_w - S) / 2;
-    int y0 = (src_h - S) / 2;
-
-    float step = (float)S / (float)TARGET_WIDTH; // Identical step in X and Y (scale_x == scale_y)
+// [v2.9.0] Nhận vùng crop vuông (crop_x0, crop_y0, crop_size) thay vì cố định giữa khung.
+static void downsample_and_quantize_crop(const uint8_t* src_gray, int src_w, int src_h,
+                                         int crop_x0, int crop_y0, int crop_size,
+                                         int8_t* out_tensor,
+                                         float input_scale, int32_t input_zp) {
+    if (crop_size < 1) {
+        crop_size = (src_w < src_h) ? src_w : src_h;
+    }
+    float step = (float)crop_size / (float)TARGET_WIDTH; // Identical step in X and Y
 
     for (int dst_y = 0; dst_y < TARGET_HEIGHT; dst_y++) {
-        float src_y_f = y0 + dst_y * step;
+        float src_y_f = (float)crop_y0 + dst_y * step;
         int sy0 = (int)floorf(src_y_f);
-        int sy1 = (sy0 + 1 < src_h) ? sy0 + 1 : sy0;
+        int sy1 = sy0 + 1;
         float dy = src_y_f - (float)sy0;
+        if (sy0 < 0) sy0 = 0;
+        if (sy0 > src_h - 1) sy0 = src_h - 1;
+        if (sy1 < 0) sy1 = 0;
+        if (sy1 > src_h - 1) sy1 = src_h - 1;
 
         for (int dst_x = 0; dst_x < TARGET_WIDTH; dst_x++) {
-            float src_x_f = x0 + dst_x * step;
+            float src_x_f = (float)crop_x0 + dst_x * step;
             int sx0 = (int)floorf(src_x_f);
-            int sx1 = (sx0 + 1 < src_w) ? sx0 + 1 : sx0;
+            int sx1 = sx0 + 1;
             float dx = src_x_f - (float)sx0;
+            if (sx0 < 0) sx0 = 0;
+            if (sx0 > src_w - 1) sx0 = src_w - 1;
+            if (sx1 < 0) sx1 = 0;
+            if (sx1 > src_w - 1) sx1 = src_w - 1;
 
             // 4 neighbor pixels
             float p00 = src_gray[sy0 * src_w + sx0];
@@ -208,9 +249,11 @@ static bool decode_jpeg_to_gray(const uint8_t* jpeg_data, size_t jpeg_len,
 }
 #endif
 
-bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
-                                int8_t* out_int8_tensor,
-                                float input_scale, int32_t input_zero_point) {
+bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
+                                    int8_t* out_int8_tensor,
+                                    float input_scale, int32_t input_zero_point,
+                                    const image_crop_roi_t* roi_in,
+                                    image_crop_roi_t* roi_used) {
     if (!jpeg_data || jpeg_len == 0 || !out_int8_tensor) {
         return false;
     }
@@ -257,11 +300,51 @@ bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
 #endif
 
     int64_t t_dec_end = esp_timer_get_time();
+    s_last_img_w = img_w;
+    s_last_img_h = img_h;
+
+    // [v2.9.5 - M1] Xác định vùng crop theo thứ tự ưu tiên:
+    //   1) ROI tuyệt đối nếu được truyền (detector/tracker)
+    //   2) CROP CỐ ĐỊNH theo % (mặc định, deterministic)
+    //   3) Crop giữa khung
+    int crop_size = (img_w < img_h) ? img_w : img_h;
+    int crop_x0 = (img_w - crop_size) / 2;
+    int crop_y0 = (img_h - crop_size) / 2;
+    if (roi_in && roi_in->size > 0) {
+        crop_size = roi_in->size;
+        crop_x0 = roi_in->x0;
+        crop_y0 = roi_in->y0;
+    } else if (s_crop_fixed) {
+        int minDim = (img_w < img_h) ? img_w : img_h;
+        crop_size = minDim * s_crop_size_pct / 100;
+        if (crop_size < 32) crop_size = 32;
+        if (crop_size > minDim) crop_size = minDim;
+        int cx = img_w * s_crop_cx_pct / 100;
+        int cy = img_h * s_crop_cy_pct / 100;
+        crop_x0 = cx - crop_size / 2;
+        crop_y0 = cy - crop_size / 2;
+    }
+    // Kẹp trong khung
+    if (crop_size > img_w) crop_size = img_w;
+    if (crop_size > img_h) crop_size = img_h;
+    if (crop_x0 < 0) crop_x0 = 0;
+    if (crop_y0 < 0) crop_y0 = 0;
+    if (crop_x0 + crop_size > img_w) crop_x0 = img_w - crop_size;
+    if (crop_y0 + crop_size > img_h) crop_y0 = img_h - crop_size;
+    if (crop_x0 < 0) crop_x0 = 0;
+    if (crop_y0 < 0) crop_y0 = 0;
+    if (roi_used) {
+        roi_used->x0 = crop_x0;
+        roi_used->y0 = crop_y0;
+        roi_used->size = crop_size;
+        roi_used->src_w = img_w;
+        roi_used->src_h = img_h;
+    }
 
     // Isomorphic Downsampling to 96x96 INT8 (scale_x == scale_y tuyệt đối)
-    downsample_and_quantize(s_gray_buffer, img_w, img_h,
-                            out_int8_tensor,
-                            input_scale, input_zero_point);
+    downsample_and_quantize_crop(s_gray_buffer, img_w, img_h, crop_x0, crop_y0, crop_size,
+                                 out_int8_tensor,
+                                 input_scale, input_zero_point);
     int64_t t_dec_all = esp_timer_get_time();
 
     s_acc_jpeg_us += (t_dec_end - t_dec_start);

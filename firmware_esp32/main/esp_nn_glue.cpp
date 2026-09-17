@@ -453,11 +453,11 @@ TfLiteStatus DwConvEval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace
 
-TfLiteRegistration Register_CONV_2D_ESPNN() {
+TFLMRegistration Register_CONV_2D_ESPNN() {
   return tflite::micro::RegisterOp(ConvInit, ConvPrepare, ConvEval);
 }
 
-TfLiteRegistration Register_DEPTHWISE_CONV_2D_ESPNN() {
+TFLMRegistration Register_DEPTHWISE_CONV_2D_ESPNN() {
   return tflite::micro::RegisterOp(DwConvInit, DwConvPrepare, DwConvEval);
 }
 
