@@ -31,6 +31,10 @@ typedef struct {
     uint32_t total_blinks;
     uint32_t total_yawns;
     float esp32_fps;
+    // [v2.8.0 - DISPLAY] Ngưỡng hiện tại + thời lượng há miệng, để Laptop vẽ trực quan.
+    float ear_threshold;
+    float mar_threshold;
+    float mouth_open_s;
 } adas_metrics_t;
 
 /**

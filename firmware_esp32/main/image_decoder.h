@@ -9,6 +9,15 @@
 extern "C" {
 #endif
 
+/** [v2.9.0] Vùng crop vuông trong khung đã giải mã (pixel). */
+typedef struct {
+    int x0;      // góc trên-trái
+    int y0;
+    int size;    // cạnh vuông
+    int src_w;   // kích thước khung gốc (đầu ra)
+    int src_h;
+} image_crop_roi_t;
+
 /**
  * Initializes image decoding buffers in Octal PSRAM.
  * @return true on success.
@@ -30,6 +39,33 @@ bool image_decoder_init(void);
 bool image_decoder_process_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
                                 int8_t* out_int8_tensor,
                                 float input_scale, int32_t input_zero_point);
+
+/**
+ * [v2.9.0 - FACE ROI] Như image_decoder_process_jpeg nhưng crop theo ROI chỉ định
+ * (bám khuôn mặt). Nếu roi_in == NULL hoặc không hợp lệ -> tự crop giữa khung.
+ * @param roi_in   ROI mong muốn (có thể NULL).
+ * @param roi_used ROI thực tế đã dùng (để map landmark ngược ra khung gốc).
+ */
+bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
+                                    int8_t* out_int8_tensor,
+                                    float input_scale, int32_t input_zero_point,
+                                    const image_crop_roi_t* roi_in,
+                                    image_crop_roi_t* roi_used);
+
+/**
+ * [v2.9.4 - DIAG] Lấy buffer xám TOÀN KHUNG của lần giải mã gần nhất (để gửi preview).
+ * @param out_w,out_h  Kích thước khung (ra).
+ * @return con trỏ buffer xám (không được free), hoặc NULL.
+ */
+const uint8_t* image_decoder_get_last_gray(int* out_w, int* out_h);
+
+/**
+ * [v2.9.5 - M1] Cấu hình CROP CỐ ĐỊNH (deterministic, không vòng phản hồi).
+ * @param enabled  1 = dùng crop cố định theo %; 0 = dùng ROI truyền vào (auto)
+ * @param cx_pct,cy_pct  tâm crop theo % (0..100)
+ * @param size_pct  cạnh crop theo % cạnh ngắn (30..100)
+ */
+void image_decoder_set_fixed_crop(int enabled, int cx_pct, int cy_pct, int size_pct);
 
 #ifdef __cplusplus
 }

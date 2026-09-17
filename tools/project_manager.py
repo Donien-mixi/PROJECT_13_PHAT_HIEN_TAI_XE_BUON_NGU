@@ -339,15 +339,18 @@ def cmd_pack_colab(args):
         "run_colab_train.py",
         "preprocessed_driver_dataset.npz",
         "live_landmarks.npz",
+        # [D5] face detector nhẹ
+        "face_detection_dataset.npz",
+        "train_face_detector.py",
     ]
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for fname in included_files:
             fpath = training_dir / fname
             if fpath.exists():
-                # [v2.0.4] npz dataset có thể ~200MB -> chỉ ghi 1 lần (bản ghi 2 lần
-                # arcname trùng làm gói phình đôi). run_colab_train tìm được ở cả 2 vị trí.
-                if fname in ("preprocessed_driver_dataset.npz", "live_landmarks.npz"):
+                # [v2.0.4] npz dataset có thể ~200MB -> chỉ ghi 1 lần
+                if fname in ("preprocessed_driver_dataset.npz", "live_landmarks.npz",
+                             "face_detection_dataset.npz"):
                     zf.write(fpath, arcname=f"training_tinyml/{fname}")
                     print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024 / 1024:.1f} MB)")
                 else:
@@ -355,7 +358,8 @@ def cmd_pack_colab(args):
                     zf.write(fpath, arcname=fname)
                     print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024:.1f} KB)")
             else:
-                if fname not in ("preprocessed_driver_dataset.npz", "live_landmarks.npz"):
+                if fname not in ("preprocessed_driver_dataset.npz", "live_landmarks.npz",
+                                 "face_detection_dataset.npz"):
                     print(f"  ⚠️ Cảnh báo thiếu file: {fname}")
 
         # Thêm script build dữ liệu sạch (Colab tự build nếu npz chưa có)
@@ -383,6 +387,34 @@ def cmd_pack_colab(args):
     print("=" * 70)
 
 
+def cmd_pack_face_detector(args):
+    """[D5] Đóng gói RIÊNG bộ train FACE DETECTOR NHẸ -> face_detector_colab.zip"""
+    print("=" * 70)
+    print("📦 ĐÓNG GÓI BỘ TRAIN FACE DETECTOR NHẸ (D5) CHO COLAB")
+    print("=" * 70)
+    zip_path = ROOT_DIR / "face_detector_colab.zip"
+    training_dir = ROOT_DIR / "training_tinyml"
+    files_needed = ["face_detection_dataset.npz", "train_face_detector.py"]
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in files_needed:
+            fpath = training_dir / fname
+            if fpath.exists():
+                zf.write(fpath, arcname=fname)
+                print(f"  ✓ Đã nén: {fname} ({fpath.stat().st_size / 1024 / 1024:.1f} MB)")
+            else:
+                print(f"  ⚠️ THIẾU: {fname} (chạy tools/build_face_detection_dataset.py trước)")
+    print("-" * 70)
+    print(f"🎉 ĐÃ TẠO: {zip_path}")
+    print("\n👉 CÁCH TRAIN TRÊN COLAB (GPU T4) — 1 ô lệnh:")
+    print("from google.colab import files")
+    print("!rm -f face_detector_colab.zip")
+    print("uploaded = files.upload()   # chọn face_detector_colab.zip")
+    print("!unzip -q -o face_detector_colab.zip && python train_face_detector.py")
+    print("files.download('face_detector_lite_model_data.h')")
+    print("files.download('face_detector_lite.tflite')")
+    print("=" * 70)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Project 13 Manager CLI - Quản trị, Nạp Model & Đồng bộ Dự án"
@@ -401,6 +433,10 @@ def main():
     # Lệnh pack-colab
     parser_pack = subparsers.add_parser("pack-colab", help="Đóng gói bộ code training thành file ZIP để nạp lên Colab")
     parser_pack.set_defaults(func=cmd_pack_colab)
+
+    # [D5] Lệnh pack-face-detector
+    parser_pfd = subparsers.add_parser("pack-face-detector", help="Đóng gói riêng bộ train face detector nhẹ (D5)")
+    parser_pfd.set_defaults(func=cmd_pack_face_detector)
 
     # Lệnh preprocess
     parser_prep = subparsers.add_parser("preprocess", help="Chạy tiền xử lý và gán nhãn 22 điểm dữ liệu cộng đồng")
@@ -422,6 +458,9 @@ def main():
             return
         elif arg in ["--pack-colab", "-p"]:
             cmd_pack_colab(None)
+            return
+        elif arg in ["--pack-fd", "--pack-face-detector"]:
+            cmd_pack_face_detector(None)
             return
         elif arg in ["--preprocess"]:
             class PrepArgs:

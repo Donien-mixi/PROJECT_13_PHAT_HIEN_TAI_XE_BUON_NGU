@@ -709,22 +709,24 @@ class LocalADASController:
         self.alarm_active = False
         self.alarm_reason = ""
 
-        # 1. Giai đoạn Tự Hiệu Chuẩn (Calibration 3.5s)
+        # 1. Giai đoạn Tự Hiệu Chuẩn (Calibration 5.0s)
+        if not hasattr(self, 'pitch_samples'):
+            self.pitch_samples = []
+            self.pitch_bias = 0.0
         if not self.calibrated:
             self.ear_samples.append(ear)
             self.mar_samples.append(mar)
+            self.pitch_samples.append(pitch)
             elapsed = now - self.calib_start_time
             if elapsed >= self.calib_duration:
                 base_ear = np.median(self.ear_samples) if self.ear_samples else 0.28
                 base_mar = np.median(self.mar_samples) if self.mar_samples else 0.18
-                # [SYNC 2025] Hệ số hiệu chuẩn khớp firmware: EAR*0.75 clip [0.18,0.25], MAR*1.60 floor 0.40
-                # [v2.4.1] Hạ ngưỡng EAR: factor 0.75->0.70, sàn 0.18->0.15.
-                # Lý do: model bị lệch thấp EAR mở mắt ~0.05 so với MediaPipe, nên sàn 0.18
-                # khiến người mắt hí nhẹ dễ bị báo nhắm oan. Hạ sàn tăng biên an toàn.
+                # [v2.6.6] Baseline PITCH: POSIT có bias hệ thống ~ +9° -> mặt chính diện phải ~0°.
+                self.pitch_bias = float(np.median(self.pitch_samples)) if self.pitch_samples else 0.0
                 self.ear_threshold = max(0.15, min(0.25, float(base_ear * 0.70)))
-                self.mar_threshold = max(0.40, float(base_mar * 1.60))
+                self.mar_threshold = max(0.40, min(0.65, float(base_mar * 1.60)))   # [v2.9.3] tran chong baseline phong
                 self.calibrated = True
-                print(f"\n🎯 [ADAS] HIỆU CHUẨN HOÀN TẤT: EAR_thresh={self.ear_threshold:.2f}, MAR_thresh={self.mar_threshold:.2f}")
+                print(f"\n🎯 [ADAS] HIỆU CHUẨN HOÀN TẤT: EAR_thresh={self.ear_threshold:.2f}, MAR_thresh={self.mar_threshold:.2f}, PITCH_bias={self.pitch_bias:+.1f}°")
             else:
                 self.current_state = f"CALIBRATING ({self.calib_duration - elapsed:.1f}s)"
                 return
@@ -812,7 +814,45 @@ def compute_mar(landmarks_px, mouth_indices):
     return float((A + B) / (2.0 * C))
 
 
-def solve_head_pose_pnp(landmarks_px, img_w, img_h):
+def _posit_head_pose(pts_2d, model_3d):
+    """POSIT y hệt firmware ESP32 (pnp_solver.cpp). Trả (yaw,pitch,roll) độ hoặc None nếu suy biến."""
+    A = np.asarray(model_3d, dtype=np.float64)
+    A_pinv = np.linalg.pinv(A)  # (3x6) = (A^T A)^-1 A^T
+    f_, cx_, cy_ = 96.0, 48.0, 48.0
+    u_ = pts_2d[:, 0] * 96.0 - cx_
+    v_ = pts_2d[:, 1] * 96.0 - cy_
+    eps = np.zeros(6, dtype=np.float64)
+    Tz = 300.0
+    r1 = np.zeros(3, dtype=np.float64)
+    r2 = np.zeros(3, dtype=np.float64)
+    for _ in range(4):
+        I = A_pinv @ (u_ * (1.0 + eps))
+        J = A_pinv @ (v_ * (1.0 + eps))
+        s1 = float(np.linalg.norm(I)); s2 = float(np.linalg.norm(J))
+        if s1 < 1e-5 or s2 < 1e-5:
+            return None
+        Tz = f_ / ((s1 + s2) * 0.5)
+        r1 = I / s1; r2 = J / s2
+        r3 = np.cross(r1, r2)
+        eps = (A @ r3) / Tz
+    r1 = r1 / np.linalg.norm(r1)
+    r2 = r2 - np.dot(r1, r2) * r1
+    r2 = r2 / np.linalg.norm(r2)
+    r3 = np.cross(r1, r2)
+    R = np.vstack([r1, r2, r3])
+    pitch = math.degrees(math.asin(max(-1.0, min(1.0, -R[1, 2]))))
+    if math.cos(math.radians(pitch)) > 1e-4:
+        yaw = math.degrees(math.atan2(R[0, 2], R[2, 2]))
+        roll = math.degrees(math.atan2(R[1, 0], R[1, 1]))
+    else:
+        yaw = math.degrees(math.atan2(-R[0, 1], R[0, 0]))
+        roll = 0.0
+    if abs(yaw) > 60.0 or abs(pitch) > 45.0 or abs(roll) > 45.0:
+        return None
+    return yaw, pitch, roll, R
+
+
+def solve_head_pose_pnp(landmarks_px, img_w, img_h, crop_box=None, crop_size=None):
     """Ước lượng góc xoay đầu 3D (Yaw, Pitch, Roll) bằng PnP đối chiếu với mô hình nhân trắc học kết hợp Robust Gating."""
     p_nose = landmarks_px[NOSE_TIP_PT]
     p_nasion = landmarks_px[NASION_PT]
@@ -840,6 +880,27 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
     model_3d = FACE_3D_MODEL_FULL
     pts_2d = np.array([p_nose, p_chin, p_eye_l, p_eye_r, p_mouth_l, p_mouth_r], dtype=np.float64)
 
+    # [v2.6.5] POSIT của ESP32 nhận landmark CHUẨN HOÁ [0,1] (crop 96), KHÔNG phải pixel khung hình.
+    # Chuyển 6 điểm pixel khung -> [0,1] theo crop_box/crop_size để khớp ĐÚNG ESP32.
+    if crop_box is not None and crop_size:
+        _org = np.array([crop_box[0], crop_box[1]], dtype=np.float64)
+        pts_norm = (pts_2d - _org) / float(crop_size)
+    else:
+        pts_norm = pts_2d / 96.0  # fallback khi không có crop
+
+    # [v2.6.3-SYNC] Pose = CHÍNH thuật toán POSIT của ESP32 (pnp_solver.cpp).
+    posit = _posit_head_pose(pts_norm, model_3d)
+
+    # [v2.6.5] Vẽ trục HUD bằng CHÍNH ma trận xoay POSIT -> trục khớp yaw/pitch/roll
+    # đang in ra và khớp ESP32 (trước đây vẽ tạm bằng OpenCV nên lệch hệ quy chiếu).
+    rvec = None
+    if posit is not None:
+        yaw, pitch, roll, _R_posit = posit
+        rvec, _ = cv2.Rodrigues(_R_posit)
+    else:
+        yaw, pitch, roll = geom_yaw, 0.0, 0.0
+
+    # tvec (vị trí + độ lớn trục trên khung hình) lấy từ OpenCV; chỉ ảnh hưởng vị trí/độ dài trục.
     focal_length = img_w * 1.1
     center = (img_w / 2.0, img_h / 2.0)
     camera_matrix = np.array([
@@ -848,44 +909,14 @@ def solve_head_pose_pnp(landmarks_px, img_w, img_h):
         [0, 0, 1]
     ], dtype=np.float64)
     dist_coeffs = np.zeros((4, 1))
-
-    success, rvec, tvec = cv2.solvePnP(
+    tvec = None
+    ok, _r2, _t2 = cv2.solvePnP(
         model_3d, pts_2d, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_SQPNP
     )
-    if not success:
-        return geom_yaw, 0.0, 0.0, None, camera_matrix, dist_coeffs
-
-    rmat, _ = cv2.Rodrigues(rvec)
-    angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
-    pitch = float(angles[0])
-    yaw = float(angles[1])
-    roll = float(angles[2])
-
-    if roll > 90.0:
-        roll -= 180.0
-    elif roll < -90.0:
-        roll += 180.0
-
-    # 3. Robust Gating: Chỉ can thiệp khi PnP bị lật nghiệm suy biến thực sự (|yaw| > 80° hoặc |yaw - geom_yaw| > 45°)
-    if abs(yaw) > 80.0 or abs(yaw - geom_yaw) > 45.0:
-        yaw = geom_yaw
-        rx = np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, math.cos(math.radians(pitch)), -math.sin(math.radians(pitch))],
-            [0.0, math.sin(math.radians(pitch)), math.cos(math.radians(pitch))]
-        ])
-        ry = np.array([
-            [math.cos(math.radians(yaw)), 0.0, math.sin(math.radians(yaw))],
-            [0.0, 1.0, 0.0],
-            [-math.sin(math.radians(yaw)), 0.0, math.cos(math.radians(yaw))]
-        ])
-        rz = np.array([
-            [math.cos(math.radians(roll)), -math.sin(math.radians(roll)), 0.0],
-            [math.sin(math.radians(roll)), math.cos(math.radians(roll)), 0.0],
-            [0.0, 0.0, 1.0]
-        ])
-        R_clean = rz @ ry @ rx
-        rvec, _ = cv2.Rodrigues(R_clean)
+    if ok:
+        tvec = _t2
+    if rvec is None:
+        rvec = _r2 if ok else None
 
     return yaw, pitch, roll, (rvec, tvec), camera_matrix, dist_coeffs
 
@@ -1448,6 +1479,13 @@ def draw_hud(frame, crop_box, landmarks_px, gray_96x96, ear, mar, yaw, pitch, ro
     return canvas
 
 
+def _save_log_pointer(root_dir: Path, filename: str) -> None:
+    try:
+        (root_dir / "output" / "latest_laptop_log.txt").write_text(filename, encoding="utf-8")
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="Kiểm thử mô hình AI TinyDriver trên Laptop với Webcam")
     parser.add_argument("--cam", type=int, default=0, help="ID cổng camera vật lý (mặc định: 0)")
@@ -1455,9 +1493,23 @@ def main():
     parser.add_argument("--synthetic", action="store_true", help="Chạy chế độ giả lập mô phỏng tài xế (không cần camera)")
     parser.add_argument("--log-mode", type=str, default="FULL", choices=["FULL", "COMPACT", "OFF"], help="Chế độ in Terminal (FULL, COMPACT, OFF)")
     parser.add_argument("--log-interval", type=float, default=1.2, help="Khoảng thời gian giữa 2 lần xuất log Terminal (giây, mặc định 1.2s)")
+    parser.add_argument("--save-log", action="store_true", help="Tự lưu toàn bộ log ra output/laptop_log_<timestamp>.txt (mỗi lần chạy 1 file mới)")
     args = parser.parse_args()
 
     root_dir = Path(__file__).resolve().parent.parent
+
+    # [v2.9.1] Tee toàn bộ stdout ra file log MỚI theo timestamp (không dùng log cũ)
+    _orig_stdout = sys.stdout
+    _log_fh = None
+    _log_path = None
+    if args.save_log:
+        out_dir = root_dir / "output"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _log_path = out_dir / f"laptop_log_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+        _log_fh = open(_log_path, "w", encoding="utf-8")
+        sys.stdout = _TeeStream(_orig_stdout, _log_fh)
+        print(f"💾 [Laptop] Log đang được lưu vào: {_log_path}")
+
     model_path = args.model or str(root_dir / "host_laptop" / "models" / "tinydriver_model.tflite")
 
     print("=" * 70)
@@ -1518,9 +1570,10 @@ def main():
         landmark_filters.extend([fx, fy])
 
     # Bộ lọc One-Euro riêng cho 3 góc quay đầu 3D PnP (giữ số đo góc và trục hiển thị êm ái, zero-jitter)
-    filter_yaw = OneEuroFilter(min_cutoff=0.5, beta=0.02)
-    filter_pitch = OneEuroFilter(min_cutoff=0.5, beta=0.02)
-    filter_roll = OneEuroFilter(min_cutoff=0.5, beta=0.02)
+    # [v2.6.4] beta cao hơn -> bám kịp khi QUAY ĐẦU NHANH (giảm trễ trục), vẫn êm khi tĩnh.
+    filter_yaw = OneEuroFilter(min_cutoff=1.5, beta=0.20)
+    filter_pitch = OneEuroFilter(min_cutoff=1.5, beta=0.20)
+    filter_roll = OneEuroFilter(min_cutoff=1.5, beta=0.20)
 
     while True:
         frame_count += 1
@@ -1639,12 +1692,16 @@ def main():
             ear_r = compute_ear(landmarks_px, RIGHT_EYE_PTS)
             ear = (ear_l + ear_r) / 2.0
             mar = compute_mar(landmarks_px, MOUTH_PTS)
-            # [v2.6.3] Khi đang ngáp (MAR>=0.5): GIỮ pose frame trước (không cập nhật),
-            # vì hàm/miệng biến dạng làm PnP lệch -> tránh hoán đổi trục Y/Z.
+            # [v2.6.4] Khi ngáp (MAR>=0.5): GIỮ pitch/roll (chống lệch do cằm tụt) nhưng
+            # VẪN cập nhật YAW -> quay đầu lúc ngáp không bị trễ trục.
+            _fresh = solve_head_pose_pnp(landmarks_px, w, h, crop_box, crop_size)
             if mar >= 0.50 and last_valid_pose is not None:
-                raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = last_valid_pose
+                raw_yaw = _fresh[0]
+                raw_pitch = last_valid_pose[1]
+                raw_roll = last_valid_pose[2]
+                pnp_res, cam_mat, dist_c = _fresh[3], _fresh[4], _fresh[5]
             else:
-                raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = solve_head_pose_pnp(landmarks_px, w, h)
+                raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = _fresh
                 last_valid_pose = (raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c)
             now_ts = time.time()
             yaw = float(filter_yaw.filter(raw_yaw, now_ts))
@@ -1657,7 +1714,7 @@ def main():
             ear_r = compute_ear(mp_landmarks_px, RIGHT_EYE_PTS)
             ear = (ear_l + ear_r) / 2.0
             mar = compute_mar(mp_landmarks_px, MOUTH_PTS)
-            raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = solve_head_pose_pnp(mp_landmarks_px, w, h)
+            raw_yaw, raw_pitch, raw_roll, pnp_res, cam_mat, dist_c = solve_head_pose_pnp(mp_landmarks_px, w, h, crop_box, crop_size)
             now_ts = time.time()
             yaw = float(filter_yaw.filter(raw_yaw, now_ts))
             pitch = float(filter_pitch.filter(raw_pitch, now_ts))
@@ -1678,6 +1735,8 @@ def main():
         gray_96x96 = cv2.resize(gray_square, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
         # 2. Cập nhật Máy Trạng Thái ADAS
+        # [v2.6.6] Trừ baseline pitch (bias hệ thống POSIT) -> mặt chính diện hiển thị ~0°.
+        pitch = pitch - float(getattr(adas_controller, 'pitch_bias', 0.0))
         adas_controller.update(ear, mar, yaw, pitch)
 
         # 3. Đo FPS
@@ -1760,6 +1819,42 @@ def main():
     mp_engine.close()
     cv2.destroyAllWindows()
     print("👋 Đã dừng chương trình kiểm thử.")
+
+    if _log_fh:
+        try:
+            _orig_stdout.flush()
+            sys.stdout = _orig_stdout
+            _log_fh.close()
+            print(f"💾 [Laptop] Đã lưu log: {_log_path}")
+            _save_log_pointer(root_dir, str(_log_path))
+        except Exception:
+            pass
+
+
+class _TeeStream:
+    """Ghi đồng thời ra console và file log (flush từng dòng để không mất dữ liệu khi dừng đột ngột)."""
+
+    def __init__(self, orig, fh):
+        self._orig = orig
+        self._fh = fh
+
+    def write(self, data):
+        self._orig.write(data)
+        try:
+            self._fh.write(data)
+            self._fh.flush()
+        except Exception:
+            pass
+
+    def flush(self):
+        self._orig.flush()
+        try:
+            self._fh.flush()
+        except Exception:
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self._orig, name)
 
 
 if __name__ == "__main__":

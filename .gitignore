@@ -1,22 +1,54 @@
+# ==============================================================================
+# PROJECT 13 - GITIGNORE
+# ==============================================================================
+
+# Python & Caches
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
 venv/
 .env
-*.log
+
+# System & IDE files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# Compiled binaries & Build outputs
+*.exe
+*.o
+*.a
+*.bin
+*.elf
+*.map
+firmware_esp32/build/
+firmware_esp32/.cache/
+firmware_esp32/dependencies.lock
+
+# Test logs, live logs & generated output
+*.log
+scratch/
+output/
+output/**
+
+# Archives & Colab packages
+*.zip
+*.tar.gz
+*.7z
+
+# Training datasets & Large Data (local only, do not push to GitHub)
+datasets/
+datasets/**
+*.npz
+*.task
+
+# Folders excluded as requested
+PROJECT_5_DIEM_DANH_KHUON_MAT/
+test_camera_ov5620_on_ESP32-S3 WROOM-1 N16R8 CAM/
+
+# Only keep core lightweight models for demo execution (249 KB)
 *.tflite
 !host_laptop/models/tinydriver_model.tflite
 !training_tinyml/tinydriver_model.tflite
-
-# Large datasets folder (local only, do not push to GitHub)
-datasets/
-datasets/**
-
-# Temporary scratch and test artifacts
-scratch/
-

@@ -4,7 +4,7 @@ Tài liệu này vạch ra kiến trúc kỹ thuật, cơ sở khoa học và l�
 - **Cảnh báo ngủ gật:** Đo tỉ lệ mở mắt $EAR$ (Eye Aspect Ratio), nhận diện chớp mắt chậm và vi giấc ngủ (Microsleep).
 - **Cảnh báo mệt mỏi:** Đo tỉ lệ há miệng $MAR$ (Mouth Aspect Ratio), đếm tần suất ngáp (Yawning).
 - **Cảnh báo mất tập trung:** Ước lượng góc xoay đầu 3D (Head Pose: $Yaw, Pitch, Roll$) bằng thuật toán Perspective-n-Point ($PnP$). Báo động khi $Yaw > 30^\circ$ hoặc $Yaw < -30^\circ$ quá $3.0$ giây.
-- **Ràng buộc phần cứng:** Toàn bộ thuật toán AI, thị giác máy tính và logic ADAS chạy 100% trên chip **ESP32-S3 (Xtensa LX7 @ 240MHz, 8MB PSRAM)**. Laptop chỉ đóng vai trò truyền hình ảnh webcam qua mạng (IP Camera).
+- **Ràng buộc phần cứng:** Toàn bộ thuật toán AI, thị giác máy tính và logic ADAS chạy 100% trên chip **ESP32-S3 (Xtensa LX7 @ 240MHz, 8MB PSRAM)**. ESP32-S3 **tự thu hình từ camera OV5640 onboard**; Laptop chỉ đóng vai trò **màn hình hiển thị** (nhận telemetry UDP).
 - **Yêu cầu cốt lõi về chất lượng dữ liệu:** Đảm bảo **đồng bộ hóa tuyệt đối tỉ lệ khung hình (Aspect Ratio Synchronization)** từ khâu cắt ảnh camera IP cho đến khi đưa vào tensor của mô hình AI trên ESP32, chống biến dạng hình học gây sai lệch tính toán sinh trắc học.
 
 ---
@@ -14,11 +14,29 @@ Tài liệu này vạch ra kiến trúc kỹ thuật, cơ sở khoa học và l�
 | Giai đoạn | Nội dung trọng tâm | Trạng thái | Đánh giá & Deliverables |
 | :--- | :--- | :---: | :--- |
 | **Giai đoạn 1** | Xây dựng Bộ Training & Huấn Luyện AI TinyML | **HOÀN THÀNH (100%)** | `training_tinyml/`, 1-Click Colab `training_package.zip`, INT8 Model Header `tinydriver_model_data.h` |
-| **Giai đoạn 2** | Trạm Camera IP Chuẩn Hóa Tỉ Lệ & HUD Telemetry | **HOÀN THÀNH (100%)** | `host_laptop/`, TCP Port 8888, UDP Port 8889, Pass 5/5 bài test `test_phase2_pipeline.py` |
-| **Giai đoạn 3** | Xây Dựng Firmware ESP32-S3 Edge AI (Dual-Core) | **HOÀN THÀNH (100%)** | `firmware_esp32/`, FreeRTOS Core 0/Core 1, POSIT PnP pure C++, Pass 100% `test_embedded_algorithms.cpp` |
+| **Giai đoạn 2** | Trạm Camera IP Chuẩn Hóa Tỉ Lệ & HUD Telemetry | **HOÀN THÀNH (100%)** | `host_laptop/`, TCP Port 8888, UDP Port 8889, Pass 5/5 bài test `test_phase2_pipeline.py` *(nay là **legacy** — ESP32 đã tự thu hình, laptop chỉ hiển thị)* |
+| **Giai đoạn 3** | Xây Dựng Firmware ESP32-S3 Edge AI (Dual-Core) | **HOÀN THÀNH (100%)** | `firmware_esp32/`, camera OV5640 onboard, FreeRTOS Core 0/Core 1, POSIT PnP pure C++ |
 | **Giai đoạn 4** | Kiểm Thử Nghiệm Thu & Đánh Giá Định Lượng | **HOÀN THÀNH (100%)** | `evaluation/`, Méo hình học $0.00\%$, 36.4 FPS, Độ trễ 31.7ms, 96.5% Acc, `bao_cao_danh_gia_dinh_luong.md` |
 
 > [!IMPORTANT]
+> **CHANGELOG v2.9.0 (Face ROI Crop — khớp miền dữ liệu lúc train):**
+> 1. Thêm module `roi_tracker` + mở rộng `image_decoder` để **crop theo vùng khuôn mặt** (ROI vuông) từ 22 landmark của frame trước, dùng đúng **canonical anatomical anchor** như lúc train (`isomorphic_transform.py`).
+> 2. Khắc phục nguyên nhân gốc khiến **MAR ngáp trên ESP32 không tăng** (crop giữa khung làm miệng bị co nhỏ) → đầu vào 96×96 nay là **crop sát mặt** giống laptop/Colab.
+> 3. Bootstrap an toàn: chưa có ROI thì crop giữa khung; ROI làm mượt EMA; **tự reset** về bootstrap khi mất mặt >8 frame.
+> 4. Không đụng model/EAR/MAR/ADAS/PnP (các chỉ số đang chạy tốt giữ nguyên).
+
+> [!IMPORTANT]
+> **CHANGELOG v2.8.x (Bản Đồng Bộ 2026 — Camera OV5640 Onboard & Màn Hình Realtime):**
+> 1. **100% Edge AI với camera OV5640 onboard:** ESP32-S3 tự thu hình (DVP 24-pin → JPEG QVGA → `esp_new_jpeg` → gray 96×96 INT8). Laptop **KHÔNG** còn gửi ảnh; TCP 8888 (magic `0xAA55AA55`) chỉ còn là mã dự phòng.
+> 2. **Còi chuyển sang GPIO 2** (GPIO4 là **SIOD** của camera OV5640). LED trạng thái GPIO 48.
+> 3. **Telemetry UDP 8889 mở rộng:** thêm `dec/ai/total` (ms từng khâu), `ear_thr/mar_thr`, `mouth_s/yawns`, kèm **gói ảnh 96×96** (magic `AA56AA56`) để laptop hiển thị đúng cái model "nhìn thấy".
+> 4. **Màn hình realtime mới** `host_laptop/esp_display_monitor.py`: ảnh + 22 điểm mốc + số liệu + **đồ thị trượt** EAR/MAR/Yaw/Pitch + chỉ số độ trễ Dec/AI/Total.
+> 5. **Tối ưu bộ nhớ Tensor Arena:** cấp phát thích ứng **SRAM nội** (ưu tiên, nhanh) → **PSRAM** (fallback, chậm) + log `khối liền mạch lớn nhất`; tinh chỉnh buffer Wi-Fi/IRAM trong `sdkconfig`.
+> 6. Log trạng thái ESP32 in **mỗi 5 frame** (thay vì 15) để quan sát realtime.
+>
+> **[Sự thật kỹ thuật quan trọng]** Khi arena ở **SRAM nội**: AI $\approx 40 - 80$ ms; khi ở **PSRAM**: AI $\approx 115$ ms. Do đó FPS thực tế hiện tại $\approx 6.5$ (PSRAM) đến $\approx 12$ (SRAM nội) — thấp hơn con số lý thuyết của các bản thiết kế cũ.
+
+> [!NOTE]
 > **CHANGELOG v2.1.0 (Bản Đột Phá 2026 — Dữ Liệu Mặt Người Thật 100% & Triệt Tiêu Nổ Gradient Khóe Miệng):**
 > 1. **Dữ liệu mặt người thật chuẩn quốc tế (11.174 mẫu sạch):**
 >    - Loại bỏ hoàn toàn dữ liệu nhân tạo / AI-generated (FaceSynthetics).
@@ -138,11 +156,12 @@ Mô hình được thiết kế theo dạng **Single Multi-Task Landmark Network
   - **CEW** (*Closed Eyes in the Wild*): 4.846 ảnh mắt nhắm sâu (microsleep) và mắt mở tỉnh táo.
   - **Teacher-Student Distillation:** Dán nhãn chuẩn mực qua **MediaPipe Face Mesh / Tasks Teacher** (468 $\rightarrow$ 22 điểm Ground-Truth).
   - **Hàm mất mát:** **Biometric-Weighted Wing Loss** (Ưu tiên mi mắt $\times 2.0$, khóe miệng $\times 1.8$, dáng đầu $\times 1.0$).
-- **Thông số kỹ thuật thực tế:**
-  - Tổng số tham số: **$\approx 191.840$ tham số (~191K params)**.
-  - FLOPs: $\approx 10.2$ MFLOPs.
-  - Kích thước mô hình sau lượng tử hóa INT8: **$\approx 303$ KB** (File header C: **$\approx 1.92$ MB**, nằm gọn trong Tensor Arena 1.5MB tại Octal PSRAM 8MB và 16MB Flash của ESP32-S3).
-  - Tốc độ suy luận trên ESP32-S3 (240MHz + ESP-NN SIMD): **$\approx 26.8$ ms/frame ($\ge 36 - 37$ FPS)**.
+- **Thông số kỹ thuật thực tế (bản deploy hiện tại):**
+  - Tổng số tham số: **$\approx 200.764$ tham số (deploy INT8)**.
+  - Kích thước mô hình lượng tử hóa: `tinydriver_model.tflite` $\approx$ **249 KB** (file header C `tinydriver_model_data.h` **byte-identical** với file `.tflite`).
+  - Tensor Arena: **$\approx 162$ KB** — cấp phát thích ứng **SRAM nội (ưu tiên)** hoặc **PSRAM (fallback)**.
+  - Tốc độ suy luận trên ESP32-S3 (240MHz + ESP-NN SIMD): **$\approx 40 - 80$ ms** (arena ở SRAM nội) hoặc **$\approx 115$ ms** (arena ở PSRAM).
+  - Tổng chu kỳ/frame thực tế: **$\approx 80$ ms (SRAM nội, ~12 FPS)** hoặc **$\approx 153$ ms (PSRAM, ~6.5 FPS)**.
 - **Bộ chống rung giật khung vàng (Anti-Jitter Deadband Filter):**
   - Tích hợp bộ lọc vùng chết `Deadband` (`deadband_pos=6.0, deadband_size=8.0, ema_alpha=0.15`), triệt tiêu 100% hiện tượng rung giật khung vàng khi tài xế ngáp hoặc cử động môi.
 
@@ -152,41 +171,38 @@ Mô hình được thiết kế theo dạng **Single Multi-Task Landmark Network
 
 ```mermaid
 graph TD
-    subgraph Laptop [Laptop Host (Camera IP & Dashboard)]
-        Cam[Laptop Webcam] --> Crop[Square Center-Crop 1:1]
-        Crop --> PyCam[host_ip_cam.py: JPEG Streamer]
-        PyCam -- "HTTP Stream / TCP Frame (Wi-Fi 1:1 JPEG)" --> ESP32
-        WebDash[Web Dashboard React / Console] <-- "Telemetry JSON (Status, EAR, MAR, Yaw)" --- ESP32
-    end
-
-    subgraph ESP32S3 [ESP32-S3 N16R8 Edge AI Engine]
-        ESP32[Wi-Fi Receiver Double Buffer] --> JpegDec[JPEG Decoder 1:1 PSRAM]
-        JpegDec --> Preproc[Isomorphic Downsample to 96x96 INT8]
+    subgraph ESP32S3 [ESP32-S3 N16R8 Edge AI Engine (100% xử lý)]
+        CamOV[Camera OV5640 Onboard] --> JpegDec[JPEG Decoder esp_new_jpeg]
+        JpegDec --> Preproc[Downsample to 96x96 INT8]
         Preproc --> TFLM[TensorFlow Lite Micro + ESP-NN]
-        TFLM --> Model[TinyDriver-LandmarkNet INT8]
+        TFLM --> Model[TinyDriverNet INT8]
         Model --> Landmarks[22 Facial Keypoints]
-        Landmarks --> CalcEAR[Calculate EAR - Left & Right]
-        Landmarks --> CalcMAR[Calculate MAR - Yawning]
-        Landmarks --> PnP[SolvePnP: Head Pose Yaw/Pitch/Roll]
+        Landmarks --> CalcEAR[EAR - Left & Right]
+        Landmarks --> CalcMAR[MAR - Yawning]
+        Landmarks --> PnP[POSIT PnP: Head Pose Yaw/Pitch/Roll]
         CalcEAR --> ADAS[ADAS Controller State Machine]
         CalcMAR --> ADAS
         PnP --> ADAS
-        ADAS --> Actuator[Onboard Buzzer / RGB LED / Telemetry Output]
+        ADAS --> Actuator[Buzzer GPIO2 / LED GPIO48]
+        Landmarks -- "Telemetry UDP :8889 (JSON + goi anh 96x96)" --> Laptop
+    end
+
+    subgraph Laptop [Laptop Host (Display-Only)]
+        Laptop[esp_display_monitor.py: anh + 22 moc + do thi EAR/MAR/Pose]
     end
 ```
 
 ### 4.1. Phân chia tác vụ Đa luồng trên ESP32-S3 (FreeRTOS)
 ESP32-S3 có 2 nhân Xtensa 240MHz:
-- **Core 0 (Networking & Frame Ingestion Task):**
-  - Kết nối Wi-Fi Station với mạng cục bộ.
-  - Nhận luồng dữ liệu hình ảnh từ Laptop (qua HTTP GET chunked hoặc raw TCP socket stream).
-  - Sử dụng cơ chế **Double Buffering** trong 8MB PSRAM: Luồng mạng ghi vào Buffer A trong khi AI đọc từ Buffer B, triệt tiêu hiện tượng drop frame do độ trễ mạng.
-- **Core 1 (TinyML & ADAS Decision Task):**
-  - Giải nén JPEG bằng `esp_jpeg` hoặc `tjpgd` siêu tốc.
-  - Chạy `TFLite Micro Interpreter` với nhân tăng tốc `esp-nn`.
-  - Tính toán $EAR$, $MAR$, giải PnP góc đầu $Yaw, Pitch, Roll$.
-  - Thực thi Finite State Machine (FSM) phát hiện buồn ngủ và mất tập trung.
-  - Điều khiển còi buzzer/LED và gửi kết quả JSON về Laptop.
+- **Core 0 (Networking & Camera):**
+  - Wi-Fi Station (2.4GHz) + UDP telemetry socket (`:8889`).
+  - Driver `esp32-camera` thu hình **OV5640 onboard** (DVP), frame buffer JPEG trong PSRAM.
+- **Core 1 (TinyML & ADAS Decision Task, prio 6, 16KB stack):**
+  - Lấy frame từ camera, giải nén JPEG bằng `esp_new_jpeg` → downsample gray $96 \times 96$ INT8.
+  - Chạy `TFLite Micro Interpreter` với nhân tăng tốc `esp-nn` (arena thích ứng SRAM nội/PSRAM).
+  - Tính toán $EAR$, $MAR$, giải POSIT PnP góc đầu $Yaw, Pitch, Roll$.
+  - Thực thi FSM phát hiện buồn ngủ/mất tập trung, điều khiển còi **GPIO2**/LED **GPIO48**.
+  - Gửi telemetry JSON + gói ảnh $96 \times 96$ về Laptop qua UDP `:8889`.
 
 ---
 
@@ -199,7 +215,7 @@ ESP32-S3 có 2 nhân Xtensa 240MHz:
 - [x] **Bước 1.4 (BẢN 2025 - PIPELINE DỮ LIỆU SẠCH):** Xây dựng `tools/build_clean_dataset.py`: ingest 300W/AFLW2000-3D/WFLW/YawDD + MediaPipe Teacher, 6 QA gates, anti-duplicate, train/val split giữ-out theo hash. Đã xóa sạch dữ liệu cũ (yawn_faces + Hazeeq Roboflow) và bỏ Mixup landmark gây Mean-Face Collapse. Đánh giá bằng NME giữ-out thật (`evaluation/eval_nme_holdout.py`, ngưỡng NME < 6% mới nạp ESP32).
 - [x] **Bước 1.5:** Viết script `export_tflite.py` lượng tử hóa Full-Integer INT8 với Representative Dataset và xuất header C `tinydriver_model_data.h`. Đã đóng gói tự động huấn luyện 1-Click trên Google Colab qua gói `training_package.zip` (xem hướng dẫn chi tiết tại `huong_dan_chay_project.md`).
 
-### 🔹 Giai đoạn 2: Xây Dựng Laptop Host Camera IP Chuẩn Hóa Tỉ Lệ
+### 🔹 Giai đoạn 2: Xây Dựng Laptop Host Camera IP Chuẩn Hóa Tỉ Lệ *(Legacy — nay ESP32 tự thu hình, laptop chỉ hiển thị)*
 - [x] **Bước 2.1 (TRỌNG TÂM ĐỒNG BỘ):** Viết module `host_ip_cam.py` & `camera_streamer.py` trên Laptop:
   - Bắt luồng webcam ($16:9$ hoặc $4:3$) hoặc chế độ mô phỏng (`--synthetic`) khi không có camera ngoài.
   - Thực hiện thuật toán **Square Center-Crop** cắt vùng vuông trung tâm đúng tỉ lệ $1:1$ (hỗ trợ Face-Guided Dynamic Centering với Haar Cascade).
@@ -212,16 +228,17 @@ ESP32-S3 có 2 nhân Xtensa 240MHz:
 
 ### 🔹 Giai đoạn 3: Xây Dựng Firmware ESP32-S3 (Edge AI)
 - [x] **Bước 3.1:** Khởi tạo project firmware ESP32-S3 (`firmware_esp32/`) hỗ trợ ESP-IDF v5.x với cấu hình `sdkconfig.defaults` bật 8MB Octal PSRAM 80MHz và CPU 240MHz.
-- [x] **Bước 3.2:** Viết module `wifi_stream_client` trên Core 0 bắt luồng JPEG vuông qua TCP socket vào PSRAM Double Buffer (`pBufferA`, `pBufferB` 64KB).
-- [x] **Bước 3.3 (TRỌNG TÂM ĐỒNG BỘ):** Viết module `image_decoder`: Giải nén JPEG $1:1$, áp dụng nội suy tỉ lệ đẳng hướng ($s_x = s_y$) nạp chính xác vào tensor $96 \times 96$ Grayscale INT8 của TinyDriverNet.
-- [x] **Bước 3.4:** Viết module `ai_inference`: Nạp mô hình INT8 vào TFLite Micro Arena (1.5MB trong Octal PSRAM) và suy luận tăng tốc bằng `esp-nn` SIMD vector instructions trên Core 1.
+- [x] **Bước 3.2:** Viết module `camera_capture` thu hình **OV5640 onboard** (DVP, JPEG QVGA, frame buffer PSRAM) + module `wifi_stream_client` *(legacy, TCP `0xAA55AA55`)*.
+- [x] **Bước 3.3 (TRỌNG TÂM ĐỒNG BỘ):** Viết module `image_decoder`: Giải nén JPEG $1:1$ bằng `esp_new_jpeg`, áp dụng nội suy tỉ lệ đẳng hướng ($s_x = s_y$) nạp chính xác vào tensor $96 \times 96$ Grayscale INT8 của TinyDriverNet.
+- [x] **Bước 3.4:** Viết module `ai_inference`: nạp mô hình INT8 vào TFLite Micro Arena **cấp phát thích ứng — ưu tiên SRAM nội, fallback PSRAM** — và suy luận tăng tốc bằng `esp-nn` SIMD trên Core 1.
 - [x] **Bước 3.5:** Viết thuật toán pure C++ **POSIT / PnP Head Pose** ước lượng góc $Yaw, Pitch, Roll$ từ 6 điểm nhân trắc học 3D trong $< 0.3$ ms mà không cần OpenCV.
-- [x] **Bước 3.6:** Viết module `adas_fsm` triển khai máy trạng thái ADAS:
-  - Tự động hiệu chuẩn (Calibration) 5 giây đầu.
+- [x] **Bước 3.6:** Viết module `adas_controller` triển khai máy trạng thái ADAS:
+  - Tự động hiệu chuẩn (Calibration) 5 giây đầu + baseline pitch.
   - Ngủ gật ($EAR < Threshold$ liên tục $> 1.5s$).
-  - Ngáp ($MAR > Threshold$ tích lũy $\ge 3$ lần trong 3 phút).
-  - Mất tập trung ($|Yaw| > 30^\circ$ liên tục $> 3.0s$).
-- [x] **Bước 3.7:** Kích hoạt còi báo động (GPIO 4 Buzzer, GPIO 48 LED) và truyền dữ liệu Telemetry JSON về lại Laptop qua UDP port 8889. Đã kiểm chuẩn thuật toán C++ đạt sai số $0.00^\circ$ (`test_embedded_algorithms.cpp`).
+  - Ngáp ($MAR > Threshold$ liên tục $\ge 1.5s$; $\ge 3$ lần / 3 phút → Fatigue).
+  - Mất tập trung ($|Yaw| > 30^\circ$ hoặc $|Pitch - bias| > 25^\circ$ liên tục $> 3.0s$).
+- [x] **Bước 3.7:** Kích hoạt còi báo động (**GPIO 2** Buzzer, **GPIO 48** LED) và truyền Telemetry JSON + **gói ảnh 96×96** về Laptop qua UDP port `8889`.
+- [x] **Bước 3.8:** Xây dựng viewer realtime phía Laptop (`host_laptop/esp_display_monitor.py`) hiển thị ảnh + 22 mốc + số liệu + đồ thị trượt (display-only).
 
 ### 🔹 Giai đoạn 4: Kiểm Thử, Đánh Giá Định Lượng & Tối Ưu Hóa
 - [x] **Bước 4.1 (Kiểm chuẩn sai số hình học):** So sánh chỉ số $EAR/MAR$ đo được giữa ảnh gốc camera và ảnh qua pipeline ESP32 để khẳng định độ sai lệch $< 2\%$. Đã kiểm chuẩn tự động qua `evaluation/verify_geometric_distortion.py`: Độ méo hình học bằng $0.00\%$ (so với $33.3\% - 77.8\%$ khi dùng phương pháp co dãn Naive).
@@ -237,7 +254,7 @@ ESP32-S3 có 2 nhân Xtensa 240MHz:
 | :--- | :--- | :--- |
 | **Bảo toàn tỉ lệ hình học** | **Đồng bộ $100\%$ ($s_x = s_y$)** | Sai số tỉ lệ EAR giữa ảnh gốc và ESP32 $< 2\%$ |
 | **Nền tảng xử lý** | **100% trên ESP32-S3** | Laptop chỉ gửi ảnh JPEG, toàn bộ tính toán trên ESP32 |
-| **Tốc độ xử lý (Throughput)** | **$\ge 12 - 18$ FPS** | Đo thời gian xử lý chu kỳ frame trên vi điều khiển |
+| **Tốc độ xử lý (Throughput)** | **$\ge 12$ FPS** (thực tế hiện tại ~6.5–12 FPS tuỳ vị trí arena) | Đo thời gian xử lý chu kỳ frame trên vi điều khiển (log mỗi 5 frame) |
 | **Độ trễ phát hiện ngủ gật** | **$< 1.5$ giây** | Còi báo động hú ngay khi mắt nhắm liên tục đủ 1.5s |
 | **Độ trễ phát hiện quay đầu** | **$< 3.0$ giây** | Cảnh báo kích hoạt khi $|Yaw| > 30^\circ$ quá 3s |
 | **Độ chính xác nhận diện** | **$\ge 94 - 96\%$** | Đánh giá trên tập dữ liệu kiểm thử NTHU-DDD |
@@ -289,6 +306,14 @@ python host_laptop/local_model_tester.py --cam 0
 python host_laptop/local_model_tester.py --synthetic
 ```
 👉 Kiểm thử trực quan nhận diện 22 điểm mốc, góc đầu 3D, độ nhạy còi hú với khuôn mặt thật của bạn trên màn hình Laptop trước khi flash vào bo mạch ESP32-S3!
+
+### 7.3b. Màn hình realtime kết quả ESP32 (Display-Only)
+```powershell
+conda activate projet_13
+python host_laptop/esp_display_monitor.py        # ảnh 96x96 + 22 mốc + số liệu + đồ thị trượt
+# python host_laptop/esp_telemetry_terminal.py   # (thay thế) dashboard chữ trên terminal
+```
+👉 Laptop nhận UDP `:8889` (JSON + gói ảnh 96×96) từ ESP32 rồi vẽ lại — **không chạy AI**. Chỉ mở **một** viewer tại một thời điểm (cùng bind cổng 8889). Phím `Q/ESC` thoát, `Space` tạm dừng đồ thị.
 
 ### 7.4. Bộ kiểm chuẩn tự động 1-Click (`tools/run_all_tests.py`)
 ```powershell

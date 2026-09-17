@@ -1,0 +1,231 @@
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x19b4
+load:0x403c8700,len:0x4
+load:0x403c8704,len:0xe8c
+load:0x403cb700,len:0x3144
+entry 0x403c8940
+I (27) boot: ESP-IDF v5.3.5 2nd stage bootloader
+I (27) boot: compile time Sep 13 2026 11:42:56
+I (27) boot: Multicore bootloader
+I (30) boot: chip revision: v0.2
+I (34) boot: efuse block revision: v1.4
+I (38) qio_mode: Enabling QIO for flash chip MXIC
+I (44) boot.esp32s3: Boot SPI Speed : 80MHz
+I (48) boot.esp32s3: SPI Mode       : QIO
+I (53) boot.esp32s3: SPI Flash Size : 16MB
+I (58) boot: Enabling RNG early entropy source...
+I (63) boot: Partition Table:
+I (67) boot: ## Label            Usage          Type ST Offset   Length
+I (74) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (82) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (89) boot:  2 factory          factory app      00 00 00010000 00400000
+I (97) boot: End of partition table
+I (101) esp_image: segment 0: paddr=00010020 vaddr=3c0c0020 size=5efd4h (389076) map
+I (169) esp_image: segment 1: paddr=0006effc vaddr=3fc9ee00 size=0101ch (  4124) load
+I (171) esp_image: segment 2: paddr=00070020 vaddr=42000020 size=be798h (780184) map
+I (296) esp_image: segment 3: paddr=0012e7c0 vaddr=3fc9fe1c size=06c58h ( 27736) load
+I (301) esp_image: segment 4: paddr=00135420 vaddr=40378000 size=16dc0h ( 93632) load
+I (330) boot: Loaded app from partition at offset 0x10000
+I (330) boot: Disabling RNG early entropy source...
+I (342) octal_psram: vendor id    : 0x0d (AP)
+I (342) octal_psram: dev id       : 0x02 (generation 3)
+I (342) octal_psram: density      : 0x03 (64 Mbit)
+I (347) octal_psram: good-die     : 0x01 (Pass)
+I (352) octal_psram: Latency      : 0x01 (Fixed)
+I (358) octal_psram: VCC          : 0x01 (3V)
+I (363) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (369) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (374) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (380) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (386) octal_psram: DriveStrength: 0x00 (1/1)
+I (392) MSPI Timing: PSRAM timing tuning index: 5
+I (397) esp_psram: Found 8MB PSRAM device
+I (401) esp_psram: Speed: 80MHz
+I (434) mmu_psram: Read only data copied and mapped to SPIRAM
+I (500) mmu_psram: Instructions copied and mapped to SPIRAM
+I (501) cpu_start: Multicore app
+I (511) cpu_start: Pro cpu start user code
+I (511) cpu_start: cpu freq: 240000000 Hz
+I (511) app_init: Application information:
+I (514) app_init: Project name:     tinydriver_esp32s3_edge_ai
+I (520) app_init: App version:      493ff45-dirty
+I (526) app_init: Compile time:     Sep 13 2026 20:34:57
+I (532) app_init: ELF file SHA256:  fc2658bdf...
+I (537) app_init: ESP-IDF:          v5.3.5
+I (542) efuse_init: Min chip rev:     v0.0
+I (547) efuse_init: Max chip rev:     v0.99
+I (552) efuse_init: Chip rev:         v0.2
+I (556) heap_init: Initializing. RAM available for dynamic allocation:
+I (564) heap_init: At 3FCB2490 len 00037280 (220 KiB): RAM
+I (570) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (576) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (582) esp_psram: Adding pool of 7040K of PSRAM memory to heap allocator
+I (590) esp_psram: Adding pool of 4K of PSRAM memory gap generated due to end address alignment of drom to the heap allocator
+I (602) spi_flash: detected chip: mxic
+I (606) spi_flash: flash io: qio
+W (610) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (621) sleep: Configure to isolate all GPIO pins in sleep state
+I (627) sleep: Enable automatic switching of GPIO sleep configuration
+I (635) main_task: Started on CPU0
+I (639) esp_psram: Reserving pool of 16K of internal memory for DMA/internal allocations
+I (648) main_task: Calling app_main()
+I (652) MAIN_APP: =================================================================
+I (660) MAIN_APP: 🚘 PROJECT 13: DRIVER DROWSINESS & DISTRACTION DETECTION
+I (668) MAIN_APP: ⚡ 100% EDGE AI ON ESP32-S3 N16R8 DEVKIT (16MB Flash, 8MB PSRAM)
+I (676) MAIN_APP: =================================================================
+I (690) MAIN_APP: Bộ nhớ Octal PSRAM : 8 MB (Còn trống: 7040 KB)
+I (692) MAIN_APP: Bộ nhớ Internal SRAM: 228 KB
+I (697) WIFI_STREAM: Đang cấp phát Double Buffer trong Octal PSRAM (64 KB mỗi buffer)...
+I (707) pp: pp rom version: e7ae62f
+I (711) net80211: net80211 rom version: e7ae62f
+I (717) wifi:wifi driver task: 3fcc02f0, prio:23, stack:6656, core=0
+I (726) wifi:wifi firmware version: 18db208
+I (726) wifi:wifi certification version: v7.0
+I (730) wifi:config NVS flash: enabled
+I (734) wifi:config nano formating: disabled
+I (738) wifi:Init data frame dynamic rx buffer num: 8
+I (742) wifi:Init static rx mgmt buffer num: 3
+I (747) wifi:Init management short buffer num: 16
+I (751) wifi:Init static tx buffer num: 4
+I (755) wifi:Init tx cache buffer num: 8
+I (758) wifi:Init static tx FG buffer num: 2
+I (762) wifi:Init static rx buffer size: 1600
+I (766) wifi:Init static rx buffer num: 4
+I (770) wifi:Init dynamic rx buffer num: 8
+I (774) wifi_init: rx ba win: 6
+I (778) wifi_init: accept mbox: 6
+I (782) wifi_init: tcpip mbox: 32
+I (786) wifi_init: udp mbox: 32
+I (790) wifi_init: tcp mbox: 32
+I (793) wifi_init: tcp tx win: 5760
+I (798) wifi_init: tcp rx win: 14400
+I (802) wifi_init: tcp mss: 1440
+I (806) wifi_init: WiFi/LWIP prefer SPIRAM
+I (811) wifi_init: WiFi IRAM OP enabled
+I (815) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10
+I (851) wifi:mode : sta (28:84:85:65:77:18)
+I (851) wifi:enable tsf
+I (852) WIFI_STREAM: Đã khởi động Wi-Fi Station, đang kết nối tới SSID: Phong 2...
+I (856) CAMERA: Khởi tạo OV5640 (DVP): XCLK=GPIO15 SIOD=GPIO4 SIOC=GPIO5 VSYNC=GPIO6 HREF=GPIO7 PCLK=GPIO13
+I (860) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+I (874) wifi:state: init -> auth (0xb0)
+I (878) s3 ll_cam: DMA Channel=0
+I (881) cam_hal: cam init ok
+I (885) sccb: pin_sda 4 pin_scl 5
+I (889) sccb: sccb_i2c_port=1
+I (891) wifi:state: auth -> assoc (0x0)
+I (903) wifi:state: assoc -> run (0x10)
+I (908) ov3660: Mismatch PID=0x5640
+I (910) camera: Camera PID=0x5640 VER=0x00 MIDL=0x00 MIDH=0x00
+I (910) camera: Detected OV5640 camera
+I (915) camera: Detected camera at address=0x3c
+I (1007) wifi:connected with Phong 2, aid = 1, channel 8, BW20, bssid = 28:77:77:af:15:0c
+I (1007) wifi:security: WPA2-PSK, phy: bgn, rssi: -29
+I (1009) wifi:pm start, type: 1
+
+I (1011) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+I (1019) wifi:set rx beacon pti, rx_bcn_pti: 0, bcn_timeout: 25000, mt_pti: 0, mt_time: 10000
+I (1082) wifi:<ba-add>idx:0 (ifx:0, 28:77:77:af:15:0c), tid:6, ssn:3, winSize:64
+I (1099) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+I (1611) cam_hal: PSRAM DMA mode disabled
+I (1611) cam_hal: buffer_size: 16384, half_buffer_size: 1024, node_buffer_size: 1024, node_cnt: 16, total_cnt: 15
+I (1615) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
+I (1622) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
+I (1628) cam_hal: cam config ok
+I (1645) ov5640: Set PLL: bypass: 0, multiplier: 180, sys_div: 4, pre_div: 2, root_2x: 0, pclk_root_div: 2, pclk_manual: 1, pclk_div: 4
+I (1647) ov5640: Calculated XVCLK: 20000000 Hz, REFIN: 10000000 Hz, VCO: 1800000000 Hz, PLL_CLK: 180000000 Hz, SYSCLK: 45000000 Hz, PCLK: 11250000 Hz
+I (1682) CAMERA: ✅ Camera sẵn sàng: PID=0x5640 VER=0x00 | JPEG | QVGA 320x240
+I (1682) IMAGE_DECODER: Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray 100 KB + rgb)...
+I (1689) IMAGE_DECODER: ✅ esp_new_jpeg đã sẵn sàng (RGB888 output, baseline JPEG).
+I (1698) PNP_SOLVER: Đã khởi tạo bộ giải thuần C++ POSIT PnP thành công!
+I (1707) ADAS_CONTROLLER: Đã khởi tạo ADAS Controller State Machine. Bắt đầu giai đoạn tự hiệu chuẩn (5 giây)...
+I (1719) AI_INFERENCE: Đang khởi tạo AI Inference Engine (ưu tiên SRAM nội cho tốc độ)...
+I (1729) AI_INFERENCE: SRAM nội trống: 171 KB (khối liền mạch lớn nhất: 124 KB) | PSRAM trống: 6461 KB
+W (1741) AI_INFERENCE: ⚠️ Không đủ SRAM nội cho Arena -> dùng PSRAM (chậm ~6x).
+I (1758) AI_INFERENCE: ✅ TFLite Micro nạp mô hình OK | Arena dùng 162 KB ở PSRAM (chậm) | Output: FLOAT32 (Mixed-Precision)
+I (1763) gpio: GPIO[2]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
+I (1772) gpio: GPIO[48]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
+I (1781) TELEMETRY: ✅ Đã khởi tạo Telemetry Sender -> Laptop UDP tại 192.168.2.1:8889
+I (1791) MAIN_APP: ✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng!
+I (1800) MAIN_APP: 📷 Chế độ ONBOARD CAMERA: ESP32 tự thu hình, không dùng TCP laptop.
+I (1809) MAIN_APP: 🎉 Hệ thống đa nhân FreeRTOS đã khởi chạy song song trên 2 nhân LX7!
+I (1809) MAIN_APP: 🚀 Khởi chạy Edge AI & ADAS Task trên Core 1 (Priority 6, 240MHz)
+I (1820) main_task: Returned from app_main()
+W (1979) TELEMETRY: sendto lỗi (sent=-1, errno=118)
+I (2028) esp_netif_handlers: sta ip: 192.168.2.32, mask: 255.255.255.0, gw: 192.168.2.253
+I (2028) WIFI_STREAM: Đã nhận IP từ Router: 192.168.2.32
+I (2133) TELEMETRY: Đã gửi 1 gói telemetry tới 192.168.2.1:8889
+I (2597) MAIN_APP: [Frame #   5] FPS:  6.5 | Dec: 32.3ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.54 | Yaw:  +6.5° | Status: CALIBRATING... (4.1s)
+I (3369) MAIN_APP: [Frame #  10] FPS:  6.5 | Dec: 32.1ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.31 | MAR: 0.41 | Yaw:  +3.8° | Status: CALIBRATING... (3.3s)
+I (4142) MAIN_APP: [Frame #  15] FPS:  6.5 | Dec: 31.9ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.33 | MAR: 0.26 | Yaw: -23.0° | Status: CALIBRATING... (2.6s)
+I (4914) MAIN_APP: [Frame #  20] FPS:  6.5 | Dec: 32.4ms | AI: 117.0ms | PnP: 0.1ms | Total: 154.0ms | EAR: 0.20 | MAR: 0.37 | Yaw: -20.7° | Status: CALIBRATING... (1.8s)
+I (5688) MAIN_APP: [Frame #  25] FPS:  6.5 | Dec: 32.0ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.24 | MAR: 0.29 | Yaw: -29.5° | Status: CALIBRATING... (1.0s)
+I (6461) MAIN_APP: [Frame #  30] FPS:  6.5 | Dec: 32.5ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.25 | MAR: 0.37 | Yaw: -26.5° | Status: CALIBRATING... (0.3s)
+I (6770) ADAS_CONTROLLER: ✅ Hiệu chuẩn thành công! Baseline: EAR=0.25, MAR=0.37 | Ngưỡng báo: EAR<0.18, MAR>0.60
+I (7235) MAIN_APP: [Frame #  35] FPS:  6.5 | Dec: 31.8ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.27 | MAR: 0.40 | Yaw: -35.4° | Status: NORMAL
+I (8006) MAIN_APP: [Frame #  40] FPS:  6.5 | Dec: 32.0ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.26 | MAR: 0.28 | Yaw: -13.4° | Status: NORMAL
+I (8777) MAIN_APP: [Frame #  45] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.18 | MAR: 0.38 | Yaw: +25.6° | Status: NORMAL
+I (9550) MAIN_APP: [Frame #  50] FPS:  6.5 | Dec: 32.4ms | AI: 117.0ms | PnP: 0.1ms | Total: 154.3ms | EAR: 0.19 | MAR: 0.31 | Yaw: +24.6° | Status: NORMAL
+I (10323) MAIN_APP: [Frame #  55] FPS:  6.5 | Dec: 32.3ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.16 | MAR: 0.30 | Yaw: +26.6° | Status: NORMAL
+I (10975) IMAGE_DECODER: [Decode avg] JPEG: 23.8 ms | Gray+Downsample: 8.3 ms
+I (11096) MAIN_APP: [Frame #  60] FPS:  6.5 | Dec: 32.5ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.20 | MAR: 0.40 | Yaw: +12.2° | Status: NORMAL
+I (11868) MAIN_APP: [Frame #  65] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.22 | Yaw: +16.2° | Status: NORMAL
+I (12639) MAIN_APP: [Frame #  70] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.26 | MAR: 0.25 | Yaw: +12.3° | Status: NORMAL
+I (13411) MAIN_APP: [Frame #  75] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.24 | Yaw: +23.0° | Status: NORMAL
+I (14183) MAIN_APP: [Frame #  80] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.24 | MAR: 0.30 | Yaw: +12.4° | Status: NORMAL
+I (14955) MAIN_APP: [Frame #  85] FPS:  6.5 | Dec: 32.4ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.9ms | EAR: 0.27 | MAR: 0.27 | Yaw:  +6.3° | Status: NORMAL
+I (15726) MAIN_APP: [Frame #  90] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.24 | MAR: 0.23 | Yaw: +20.4° | Status: NORMAL
+I (16498) MAIN_APP: [Frame #  95] FPS:  6.5 | Dec: 32.4ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.21 | MAR: 0.26 | Yaw: +11.0° | Status: NORMAL
+I (17269) MAIN_APP: [Frame # 100] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.20 | MAR: 0.28 | Yaw: +16.8° | Status: NORMAL
+I (17423) TELEMETRY: Đã gửi 100 gói telemetry tới 192.168.2.1:8889
+I (18041) MAIN_APP: [Frame # 105] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.22 | MAR: 0.27 | Yaw: +33.9° | Status: NORMAL
+I (18812) MAIN_APP: [Frame # 110] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.22 | MAR: 0.23 | Yaw:  +1.1° | Status: NORMAL
+I (19584) MAIN_APP: [Frame # 115] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.24 | MAR: 0.27 | Yaw: +13.1° | Status: NORMAL
+I (20234) IMAGE_DECODER: [Decode avg] JPEG: 24.0 ms | Gray+Downsample: 8.3 ms
+I (20356) MAIN_APP: [Frame # 120] FPS:  6.5 | Dec: 32.5ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.6ms | EAR: 0.23 | MAR: 0.30 | Yaw: +24.7° | Status: NORMAL
+I (21127) MAIN_APP: [Frame # 125] FPS:  6.5 | Dec: 32.1ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.35 | MAR: 0.41 | Yaw:  +4.3° | Status: NORMAL
+I (21898) MAIN_APP: [Frame # 130] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.26 | MAR: 0.43 | Yaw: +15.5° | Status: NORMAL
+I (22670) MAIN_APP: [Frame # 135] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.28 | MAR: 0.41 | Yaw: +27.6° | Status: NORMAL
+I (23441) MAIN_APP: [Frame # 140] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.31 | MAR: 0.26 | Yaw: +18.2° | Status: NORMAL
+I (24212) MAIN_APP: [Frame # 145] FPS:  6.5 | Dec: 32.2ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.0ms | EAR: 0.43 | MAR: 0.29 | Yaw: -14.6° | Status: NORMAL
+I (24982) MAIN_APP: [Frame # 150] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.45 | MAR: 0.36 | Yaw: -25.2° | Status: NORMAL
+I (25753) MAIN_APP: [Frame # 155] FPS:  6.5 | Dec: 32.2ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.39 | MAR: 0.33 | Yaw: -13.7° | Status: NORMAL
+I (26525) MAIN_APP: [Frame # 160] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.33 | MAR: 0.26 | Yaw: +19.5° | Status: NORMAL
+I (27297) MAIN_APP: [Frame # 165] FPS:  6.5 | Dec: 32.4ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.9ms | EAR: 0.37 | MAR: 0.31 | Yaw: +16.9° | Status: NORMAL
+I (28068) MAIN_APP: [Frame # 170] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.44 | MAR: 0.30 | Yaw: +23.0° | Status: NORMAL
+I (28839) MAIN_APP: [Frame # 175] FPS:  6.5 | Dec: 32.4ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.36 | MAR: 0.29 | Yaw: +28.4° | Status: NORMAL
+I (29490) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
+I (29611) MAIN_APP: [Frame # 180] FPS:  6.5 | Dec: 32.5ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.36 | MAR: 0.29 | Yaw: +25.0° | Status: NORMAL
+I (30382) MAIN_APP: [Frame # 185] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.0ms | EAR: 0.32 | MAR: 0.33 | Yaw: +17.7° | Status: NORMAL
+I (31154) MAIN_APP: [Frame # 190] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.38 | MAR: 0.32 | Yaw:  +9.1° | Status: NORMAL
+I (31925) MAIN_APP: [Frame # 195] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.37 | MAR: 0.38 | Yaw: +18.5° | Status: NORMAL
+I (32696) MAIN_APP: [Frame # 200] FPS:  6.5 | Dec: 32.3ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.36 | MAR: 0.42 | Yaw: +18.3° | Status: NORMAL
+I (32850) TELEMETRY: Đã gửi 200 gói telemetry tới 192.168.2.1:8889
+I (33468) MAIN_APP: [Frame # 205] FPS:  6.5 | Dec: 32.2ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.35 | MAR: 0.36 | Yaw: +30.2° | Status: NORMAL
+I (34239) MAIN_APP: [Frame # 210] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.37 | MAR: 0.37 | Yaw: +28.4° | Status: NORMAL
+I (35010) MAIN_APP: [Frame # 215] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.41 | MAR: 0.27 | Yaw: +22.4° | Status: NORMAL
+I (35782) MAIN_APP: [Frame # 220] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.35 | MAR: 0.28 | Yaw: +14.4° | Status: NORMAL
+I (36554) MAIN_APP: [Frame # 225] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.37 | MAR: 0.29 | Yaw: +26.2° | Status: NORMAL
+I (37325) MAIN_APP: [Frame # 230] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.36 | MAR: 0.26 | Yaw: +16.5° | Status: NORMAL
+I (38096) MAIN_APP: [Frame # 235] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.34 | MAR: 0.26 | Yaw:  +5.3° | Status: NORMAL
+I (38746) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
+I (38868) MAIN_APP: [Frame # 240] FPS:  6.5 | Dec: 32.4ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.33 | Yaw: +18.9° | Status: NORMAL
+I (39639) MAIN_APP: [Frame # 245] FPS:  6.5 | Dec: 32.3ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.36 | MAR: 0.32 | Yaw: +21.4° | Status: NORMAL
+I (40411) MAIN_APP: [Frame # 250] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.37 | MAR: 0.26 | Yaw: +21.7° | Status: NORMAL
+I (41182) MAIN_APP: [Frame # 255] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.34 | MAR: 0.33 | Yaw: +25.5° | Status: NORMAL
+I (41953) MAIN_APP: [Frame # 260] FPS:  6.5 | Dec: 32.2ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.38 | MAR: 0.33 | Yaw: +19.6° | Status: NORMAL
+I (42725) MAIN_APP: [Frame # 265] FPS:  6.5 | Dec: 32.4ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.41 | MAR: 0.27 | Yaw: +21.7° | Status: NORMAL
+I (43496) MAIN_APP: [Frame # 270] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.39 | MAR: 0.29 | Yaw: +22.3° | Status: NORMAL
+I (44267) MAIN_APP: [Frame # 275] FPS:  6.5 | Dec: 32.1ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.38 | Yaw: +18.8° | Status: NORMAL
+I (45037) MAIN_APP: [Frame # 280] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.29 | MAR: 0.26 | Yaw: +14.5° | Status: NORMAL
+I (45808) MAIN_APP: [Frame # 285] FPS:  6.5 | Dec: 31.8ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.29 | MAR: 0.34 | Yaw: +20.5° | Status: NORMAL
+I (46578) MAIN_APP: [Frame # 290] FPS:  6.5 | Dec: 32.2ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.38 | Yaw: +15.4° | Status: NORMAL
+I (47349) MAIN_APP: [Frame # 295] FPS:  6.5 | Dec: 32.3ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.32 | MAR: 0.28 | Yaw:  +8.5° | Status: NORMAL
+I (48000) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
+I (48121) MAIN_APP: [Frame # 300] FPS:  6.5 | Dec: 32.6ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.37 | MAR: 0.28 | Yaw:  -1.0° | Status: NORMAL
+I (48275) TELEMETRY: Đã gửi 300 gói telemetry tới 192.168.2.1:8889
+I (48893) MAIN_APP: [Frame # 305] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.36 | MAR: 0.26 | Yaw:  +2.1° | Status: NORMAL

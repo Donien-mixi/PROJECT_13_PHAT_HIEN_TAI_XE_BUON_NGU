@@ -1,22 +1,12 @@
-# 📡 Trạm Camera IP & Giám Sát Telemetry ADAS (Laptop Host - Giai Đoạn 2)
+# 📺 Laptop Host: Kiểm Thử Mô Hình & Màn Hình Realtime (Display-Only)
 
-Thư mục `host_laptop/` chứa toàn bộ mã nguồn của trạm máy tính đóng vai trò **Camera IP** và **Bảng điều khiển HUD Telemetry** cho đề tài *"Hệ thống phát hiện tài xế ngủ gật & mất tập trung chạy 100% Edge AI trên ESP32-S3"*.
-
----
-
-## 🎯 Trách Nhiệm Của Laptop Host Trong Đồ Án
+Thư mục `host_laptop/` chứa mã nguồn phía máy tính cho đề tài *"Hệ thống phát hiện tài xế ngủ gật & mất tập trung chạy 100% Edge AI trên ESP32-S3"*.
 
 > [!IMPORTANT]
-> **Ràng Buộc Kỹ Thuật Cốt Lõi:**
-> Laptop **CHỈ** đóng vai trò là một camera IP truyền khung hình JPEG vuông qua mạng Wi-Fi và nhận kết quả JSON để vẽ HUD.
-> **TUYỆT ĐỐI KHÔNG** chạy bất kỳ thuật toán AI nào (MediaPipe, PyTorch, TensorFlow...) trên Laptop. Mọi tính toán AI, giải mã ảnh, đo EAR/MAR và ước lượng Head Pose $Yaw, Pitch, Roll$ đều chạy 100% trên chip vi điều khiển **ESP32-S3 N16R8**.
-
-> [!NOTE]
-> **[v2.0] Đồng bộ 1:1 với firmware (bản sửa 2025):**
-> 1. `local_model_tester.py` — Haar box được chuyển sang **mỏ neo Canonical Anatomical** (cùng công thức `canonical_face_crop` lúc huấn luyện), triệt tiêu lệch hệ thống crop train/inference từng khiến landmark lệch + tracking trôi.
-> 2. Ngưỡng ADAS đồng bộ firmware: Calib **5.0s**, EAR_thresh = base×**0.75** (clip 0.18–0.25), MAR_thresh = base×**1.60** (floor 0.40), Slow Blink **0.5s**, Microsleep **1.5s**, Ngáp **1.5s** (3 lần/180s), Mất tập trung **Yaw 30° / Pitch 25° / 3.0s**.
-> 3. Công thức MAR thống nhất: `(h_outer + h_inner) / (2 * w_mouth)` — giống hệt `wing_loss.py` và `adas_controller.cpp`.
-> 4. Trước khi nạp ESP32, bắt buộc chạy gate: `python evaluation/eval_nme_holdout.py` (NME giữ-out < 6%).
+> **Ràng buộc cốt lõi:** Laptop **KHÔNG** chạy AI cho ESP32. Mọi tính toán (JPEG decode, TinyDriverNet, EAR/MAR, POSIT Head Pose, FSM ADAS) chạy 100% trên **ESP32-S3**.
+> Laptop đảm nhận 2 việc:
+> 1. **Kiểm thử mô hình** trên webcam bằng chính model `.tflite` trước khi nạp ESP32 (`local_model_tester.py`).
+> 2. **Hiển thị realtime** những gì ESP32 đã xử lý, nhận qua UDP `:8889` (`esp_display_monitor.py`).
 
 ---
 
@@ -24,128 +14,125 @@ Thư mục `host_laptop/` chứa toàn bộ mã nguồn của trạm máy tính 
 
 ```text
 host_laptop/
-├── camera_streamer.py                    # Thuật toán Square Center-Crop 1:1, TCP Server & HTTP MJPEG Server
-├── dashboard_visualizer.py               # Lắng nghe UDP Telemetry từ ESP32, vẽ HUD Cyberpunk Glassmorphism
-├── host_ip_cam.py                        # Điểm khởi chạy chính (Master Entrypoint)
-├── local_model_tester.py                 # Kiểm thử mô hình TFLite/LiteRT với Webcam Laptop trước khi nạp ESP32
-├── mock_esp32_client.py                  # Client giả lập ESP32-S3 để test hệ thống trước khi nạp mạch thật
-├── test_phase2_pipeline.py               # Bộ kiểm chuẩn tự động 5 bài test (Unit & Integration)
-├── haarcascade_frontalface_default.xml   # Bộ nhận diện khuôn mặt Haar Cascade bám tâm động
-└── requirements.txt                      # opencv-python, numpy, ai-edge-litert
+├── local_model_tester.py           # Kiểm thử model .tflite với webcam (HUD + còi) trước khi nạp ESP32
+├── esp_display_monitor.py          # [CHÍNH] Màn hình realtime: ảnh 96x96 + 22 mốc + số liệu + đồ thị trượt
+├── esp_replay_compare.py           # Đối chiếu ESP32 ↔ Laptop trên CÙNG ảnh 96x96 (kiểm chứng model/firmware)
+├── esp_telemetry_terminal.py       # Dashboard chữ gọn trên terminal (thay thế cho viewer đồ hoạ)
+├── models/
+│   └── tinydriver_model.tflite     # Model byte-identical với firmware (do deploy-model đặt vào)
+├── requirements.txt                # opencv-python, numpy, ai-edge-litert
+│
+│   --- (Legacy Giai đoạn 2: laptop còn gửi ảnh qua TCP; KHÔNG dùng khi ESP32 có camera onboard) ---
+├── camera_streamer.py              # Square Center-Crop 1:1, TCP Server & HTTP MJPEG Server
+├── host_ip_cam.py                  # Entrypoint trạm camera IP cũ
+├── dashboard_visualizer.py         # HUD cũ nhận UDP (đã thay bằng esp_display_monitor.py)
+├── mock_esp32_client.py            # Giả lập ESP32 (test khi chưa có mạch)
+├── test_phase2_pipeline.py         # Bộ 5 test pipeline Giai đoạn 2
+└── haarcascade_frontalface_default.xml
 ```
 
 ---
 
-## 📐 Trọng Tâm Đồng Bộ: Thuật Toán Cắt Vuông Đẳng Hướng (1:1 Isomorphic Crop)
+## 🌐 Giao Thức Nhận Từ ESP32 (UDP Port `8889`)
 
-Để tránh hiện tượng hình ảnh khuôn mặt tài xế bị co bẹp làm lệch tỉ lệ mắt $EAR$, miệng $MAR$ và góc nghiêng $Yaw, Pitch$:
-1. Khung hình gốc từ Webcam ($W \times H$, ví dụ $640 \times 480$ hoặc $1280 \times 720$) được tính cạnh vuông:
-   $$S = \min(W, H)$$
-2. Cắt vùng vuông trung tâm (hoặc bám tâm khuôn mặt với bộ lọc làm mượt EMA):
-   $$x_0 = \text{clamp}\left(c_x - \frac{S}{2}, 0, W - S\right), \quad y_0 = \text{clamp}\left(c_y - \frac{S}{2}, 0, H - S\right)$$
-3. Vùng ảnh cắt $S \times S$ được resize về kích thước chuẩn $240 \times 240$ (hoặc $192 \times 192$):
-   $$s_x = s_y = \frac{240}{S}$$
-   👉 **Hệ số co giãn đồng nhất $s_x = s_y$**, độ méo hình học bằng $0.00\%$.
+ESP32 gửi 2 loại gói trên cùng port `8889`, phân biệt bằng magic:
 
----
-
-## 🌐 Giao Thức Mạng & Truyền Nhận Dữ Liệu
-
-### 1. Luồng Video TCP Frame Server (Port `8888`)
-ESP32-S3 kết nối tới địa chỉ IP của Laptop qua TCP socket tại cổng `8888`:
-```
-┌────────────────────────┬──────────────────────┬─────────────────────────┐
-│ Magic Bytes (4 bytes)  │ Payload Size (4 B)   │ JPEG Image Data         │
-│ 0xAA 0x55 0xAA 0x55    │ uint32 Big-Endian    │ Buffer JPEG 1:1 (Bytes) │
-└────────────────────────┴──────────────────────┴─────────────────────────┘
-```
-- **Tốc độ truyền:** $\approx 25$ FPS.
-- **Dung lượng gói:** $\approx 3.5 - 6.5$ KB / frame (Băng thông chỉ $\approx 100 - 150$ KB/s, cực kỳ mượt mà qua Wi-Fi).
-
-### 2. Luồng Xem Trực Tiếp Trên Trình Duyệt HTTP MJPEG (Port `8080`)
-Truy cập qua bất kỳ trình duyệt nào trên cùng mạng LAN:
-```text
-http://localhost:8080/video_feed
-hoặc http://<IP_LAPTOP>:8080/video_feed
-```
-
-### 3. Luồng Telemetry UDP Listener (Port `8889`)
-ESP32-S3 sau khi suy luận AI sẽ gửi gói tin UDP JSON về lại Laptop tại cổng `8889`:
+### 1) JSON trạng thái (mỗi frame)
 ```json
 {
-  "ear": 0.28,
-  "mar": 0.15,
-  "yaw": 2.5,
-  "pitch": -1.2,
-  "roll": 0.0,
-  "status": "NORMAL",
-  "alarm": false,
-  "fps": 21.3,
+  "ear": 0.28, "mar": 0.15,
+  "yaw": 2.5, "pitch": -1.2, "roll": 0.0,
+  "status": "NORMAL", "alarm": false, "fps": 6.5,
+  "dec": 31.0, "ai": 116.0, "total": 153.0,
+  "ear_thr": 0.21, "mar_thr": 0.70, "mouth_s": 0.0, "yawns": 0,
   "landmarks": [0.38, 0.42, 0.41, 0.40, ...]
 }
 ```
+- `dec/ai/total` = thời gian (ms) từng khâu — dùng để chẩn đoán độ trễ.
+- `ear_thr/mar_thr` = ngưỡng ADAS hiện hành (sau hiệu chuẩn).
+- `mouth_s/yawns` = thời lượng há miệng + tổng số ngáp.
+- `landmarks` = 22 điểm × (x,y) chuẩn hoá [0,1].
+
+### 2) Gói ảnh xám 96×96 (đúng cái model "nhìn thấy")
+```
+Magic "AA 56 AA 56" (4B) | w (uint16 LE) | h (uint16 LE) | pixel (w*h, uint8)
+```
+
+> [!NOTE]
+> Giao thức **TCP 8888 / magic `0xAA55AA55`** thuộc Giai đoạn 2 (laptop gửi ảnh) — **không còn dùng**.
 
 ---
 
 ## 🚀 Hướng Dẫn Vận Hành
 
-### Bước 1: Cài đặt thư viện
-```bash
-pip install -r requirements.txt
+### Bước 1: Cài thư viện & kích hoạt môi trường
+```powershell
+# Chạy được trên cả CMD/Anaconda Prompt và PowerShell (hoặc dùng: cd /d D:\PROJECT_13_PHAT_HIEN_BUON_NGU)
+D:
+cd D:\PROJECT_13_PHAT_HIEN_BUON_NGU
+conda activate projet_13
+pip install -r host_laptop/requirements.txt
 ```
 
-### Bước 2: Chạy trạm Camera IP & Dashboard HUD
-- **Chạy với Webcam thật:**
-  ```bash
-  python host_ip_cam.py --cam 0
-  ```
-- **Chạy chế độ Mô Phỏng (Synthetic Driver Mode - Không cần cắm webcam):**
-  ```bash
-  python host_ip_cam.py --synthetic
-  ```
-- **Tùy chọn cổng mạng:**
-  ```bash
-  python host_ip_cam.py --tcp_port 8888 --udp_port 8889 --http_port 8080
-  ```
+### Bước 2: Kiểm thử mô hình trên Laptop (trước khi nạp ESP32)
+```powershell
+python host_laptop/local_model_tester.py --cam 0
+```
+Phím tắt trong cửa sổ:
+- **`d`**: đổi chế độ log (`FULL` → `COMPACT` → `OFF`).
+- **`p`**: snapshot + in toạ độ 22 điểm mốc.
+- **`m`**: đổi engine `TINYDRIVER` (model nhúng) ↔ `MEDIAPIPE` (ground-truth để đối chiếu).
+- **`f`**: bật/tắt bám mặt 1:1.
+- **`r`**: hiệu chuẩn lại baseline.
+- **`q`/`ESC`**: thoát.
 
-### Bước 3: Phím tắt điều khiển trong giao diện
-- **`d`**: Bật/Tắt tính năng tự động bám tâm khuôn mặt (Face-Guided Dynamic Centering).
-- **`s`**: Chụp và lưu ảnh màn hình giao diện (`snapshot_<timestamp>.jpg`).
-- **`q`**: Thoát chương trình một cách an toàn.
+### Bước 3: Hiển thị realtime kết quả ESP32 (màn hình chính)
+Mở **cửa sổ MỚI** (PowerShell hoặc CMD), kích hoạt môi trường rồi chạy:
+```powershell
+D:
+cd D:\PROJECT_13_PHAT_HIEN_BUON_NGU
+conda activate projet_13
+python host_laptop/esp_display_monitor.py
+# Tuỳ chọn: --port 8889 --bind 0.0.0.0
+```
+Màn hình hiển thị:
+- **Ảnh 96×96** (đúng cái ESP32 thấy) + **22 điểm mốc**.
+- **Dec / AI / Total (ms)** + **FPS** + ms/frame.
+- **EAR / MAR kèm ngưỡng**, thời lượng há miệng, tổng số ngáp.
+- **4 đồ thị trượt**: EAR / MAR / Yaw / Pitch theo thời gian.
+- **Tốc độ gói (gói/s)** + **độ trễ cập nhật** (cảnh báo mất kết nối).
+- Phím: **Q/ESC** thoát, **Space** tạm dừng đồ thị.
+
+### Bước 4 (thay thế): Dashboard chữ trên Terminal
+```powershell
+python host_laptop/esp_telemetry_terminal.py
+```
+
+### Bước 5: Kiểm chứng model/firmware — Replay-Compare trên CÙNG đầu vào
+Chạy lại chính file model trên **đúng ảnh 96×96 mà ESP32 gửi lên**, so sánh output suy luận:
+```powershell
+python host_laptop/esp_replay_compare.py
+# Lưu ảnh 96x96 để bổ sung dữ liệu miền OV5640 (domain adaptation):
+python host_laptop/esp_replay_compare.py --save-dir output\esp_frames
+```
+- `ΔLM mean < 1px` → **model + tiền/hậu xử lý firmware ĐÚNG** (khác biệt số liệu thực tế đến từ **crop/cảm biến**, không phải lỗi firmware).
+- `ΔLM` lớn (> ~2px) → có lỗi ở firmware (decode/normalize/quantize/hậu xử lý).
+
+> [!WARNING]
+> Cả 3 công cụ (`esp_display_monitor.py`, `esp_telemetry_terminal.py`, `esp_replay_compare.py`) đều **bind UDP `8889`** → chỉ chạy **MỘT** cái tại một thời điểm. Nếu báo "cổng đang bị chiếm", đóng cửa sổ kia.
 
 ---
 
-## 🧪 Kiểm Chuẩn & Giả Lập Hệ Thống
-
-### 1. Chạy bộ kiểm chuẩn tự động 5 bài test:
-```bash
-python test_phase2_pipeline.py
-```
-Kết quả kiểm chuẩn:
-- ✅ Test 1: Đẳng hướng hình học ($s_x = s_y$, sai số $0\%$).
-- ✅ Test 2: Khung hình 1:1 và nén JPEG hợp lệ.
-- ✅ Test 3: TCP Server & giao thức Magic Header `0xAA55AA55`.
-- ✅ Test 4: UDP Telemetry & HUD Glassmorphism.
-- ✅ Test 5: HTTP MJPEG web streaming.
-
-### 2. Giả lập kết nối ESP32 bằng script test:
-Nếu chưa có bo mạch ESP32-S3 cắm dây, bạn có thể kiểm thử toàn bộ hệ thống bằng 2 terminal:
-- **Terminal 1:** Khởi động host:
-  ```bash
-  python host_ip_cam.py --synthetic
-  ```
-- **Terminal 2:** Khởi động client giả lập ESP32:
-  ```bash
-  python mock_esp32_client.py
-  ```
-Trình giả lập sẽ nhận frame ảnh thật qua TCP, tính toán giả lập và gửi gói tin UDP với các trạng thái bình thường, ngủ gật (Microsleep), ngáp (Yawn), quay đầu (Distracted), còi cảnh báo trên laptop sẽ kêu bíp tự động!
-
----
-
-## 📌 Lấy Địa Chỉ IP Của Laptop Để Nạp Vào ESP32
-Mở Command Prompt / PowerShell và gõ:
+## 📌 Lấy IP Laptop Để Nạp Vào ESP32
 ```powershell
 ipconfig
 ```
-Tìm mục **Wireless LAN adapter Wi-Fi** $\rightarrow$ dòng **IPv4 Address** (Ví dụ: `192.168.1.15`).
-Điền địa chỉ IP này vào cấu hình Wi-Fi Client của firmware ESP32-S3 trong **Giai đoạn 3**.
+Tìm **Wireless LAN adapter Wi-Fi → IPv4 Address** (ví dụ `192.168.2.1`) và điền vào `menuconfig → TinyDriver ADAS Configuration → Laptop Host IP Address`. Đảm bảo laptop và ESP32 **cùng mạng Wi-Fi 2.4GHz**, và mở firewall cho UDP `8889`.
+
+---
+
+## 🧪 Kiểm Chuẩn Pipeline Giai Đoạn 2 (legacy)
+```powershell
+python host_laptop/test_phase2_pipeline.py        # 5 bài test: crop 1:1, JPEG, TCP, UDP/HUD, MJPEG
+```
+Có thể test end-to-end không cần mạch bằng 2 terminal: `host_ip_cam.py --synthetic` + `mock_esp32_client.py`.

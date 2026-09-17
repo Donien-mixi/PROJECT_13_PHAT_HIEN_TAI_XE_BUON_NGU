@@ -12,7 +12,7 @@ static const char* TAG = "AI_INFERENCE";
 
 // Preferred INTERNAL-SRAM arena sizes (KB), tried largest-first.
 // TFLM only needs ~292 KB; internal SRAM avoids the ~6x PSRAM stall penalty.
-static const size_t kArenaInternalCandidatesKB[] = { 384, 336, 288, 256, 224, 192, 160, 128 };
+static const size_t kArenaInternalCandidatesKB[] = { 384, 336, 288, 256, 224, 192, 176, 168, 160, 144, 128 };
 #define ARENA_NUM_CANDIDATES (sizeof(kArenaInternalCandidatesKB) / sizeof(kArenaInternalCandidatesKB[0]))
 
 static uint8_t* s_tensor_arena = NULL;
@@ -75,8 +75,10 @@ bool ai_inference_init(void) {
 
     size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-    ESP_LOGI(TAG, "SRAM nội trống: %u KB | PSRAM trống: %u KB",
-             (unsigned)(free_internal / 1024), (unsigned)(free_psram / 1024));
+    size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "SRAM nội trống: %u KB (khối liền mạch lớn nhất: %u KB) | PSRAM trống: %u KB",
+             (unsigned)(free_internal / 1024), (unsigned)(largest_internal / 1024),
+             (unsigned)(free_psram / 1024));
 
     // (1) Adaptive: try INTERNAL SRAM arenas largest-first so esp-nn SIMD runs near full speed.
     for (size_t i = 0; i < ARENA_NUM_CANDIDATES && s_interpreter == NULL; i++) {
