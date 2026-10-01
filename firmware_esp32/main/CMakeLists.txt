@@ -11,6 +11,7 @@ idf_component_register(
         "pnp_solver.cpp"
         "adas_controller.cpp"
         "telemetry_sender.cpp"
+        "web_server.cpp"
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -20,6 +21,7 @@ idf_component_register(
         esp_psram
         esp_timer
         esp_netif
+        esp_http_server
         lwip
         driver
         mbedtls

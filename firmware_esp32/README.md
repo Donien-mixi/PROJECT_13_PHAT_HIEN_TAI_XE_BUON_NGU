@@ -15,15 +15,16 @@ Thư mục `firmware_esp32/` chứa toàn bộ mã nguồn firmware C/C++ chạy
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                     ESP32-S3 N16R8 SOC (Xtensa LX7 @ 240MHz)                │
 ├────────────────────────────────────┬───────────────────────────────────────┤
-│   CORE 0: Wi-Fi + Camera DMA        │   CORE 1: Edge AI & ADAS Task         │
-│   (Wi-Fi task prio 23, esp32-cam)   │   (prio 6 - 16KB Stack)               │
+│   CORE 0: Web Server & Network      │   CORE 1: Edge AI & ADAS Task         │
+│   (prio 3-4, esp_http_server)       │   (prio 6 - 16KB Stack)               │
 ├────────────────────────────────────┼───────────────────────────────────────┤
-│ 1. Wi-Fi Station (2.4GHz)           │ 1. camera_capture_acquire (JPEG)      │
-│ 2. esp32-camera DVP driver (OV5640) │ 2. image_decoder → gray 96x96 INT8     │
-│    - Frame buffer trong PSRAM        │ 3. ai_inference: TinyDriverNet(esp-nn) │
-│ 3. UDP socket gửi telemetry :8889    │ 4. pnp_solver: POSIT → Yaw/Pitch/Roll  │
-│                                      │ 5. adas_controller: FSM EAR/MAR/Pose  │
-│                                      │ 6. telemetry_sender + còi GPIO2       │
+│ 1. Wi-Fi Station (2.4GHz)           │ 1. camera_capture_acquire (JPEG OV5640)│
+│ 2. HTTP Web Server (Cổng 80)       │ 2. image_decoder → gray 96x96 INT8     │
+│    - GET /       : Dashboard HTML5 │ 3. ai_inference: TinyDriverNet(esp-nn) │
+│    - GET /stream : MJPEG Video Cam │ 4. pnp_solver: POSIT → Yaw/Pitch/Roll  │
+│    - GET /status : JSON Telemetry  │ 5. adas_controller: FSM EAR/MAR/Pose  │
+│    - POST /api/recalibrate        │ 6. Điều khiển còi GPIO2 & LED GPIO48  │
+│ 3. UDP telemetry debug :8889       │ 7. Gửi dữ liệu sang Shared Buffer     │
 └────────────────────────────────────┴───────────────────────────────────────┘
 ```
 
@@ -33,26 +34,27 @@ Thư mục `firmware_esp32/` chứa toàn bộ mã nguồn firmware C/C++ chạy
 
 ```text
 firmware_esp32/
-├── CMakeLists.txt                 # Cấu hình dự án gốc ESP-IDF
+├── CMakeLists.txt                 # Cấu hình dự án gốc ESP-IDF 5.3
 ├── sdkconfig / sdkconfig.defaults # 240MHz, Octal PSRAM 80MHz, cache, tối ưu bộ nhớ
 ├── partitions.csv                 # App partition 4MB
 ├── README.md                      # Tài liệu hướng dẫn nạp và cấu hình firmware
 └── main/
     ├── CMakeLists.txt             # Đăng ký các file nguồn và thư viện phụ thuộc
-    ├── idf_component.yml          # Dependency espressif/esp_new_jpeg + esp32-camera + esp-tflite-micro
-    ├── Kconfig.projbuild          # Menu Wi-Fi, IP Laptop, GPIO còi, bật camera onboard
+    ├── idf_component.yml          # Dependency esp_new_jpeg + esp32-camera + esp-tflite-micro
+    ├── Kconfig.projbuild          # Menu Wi-Fi, GPIO còi, bật camera onboard
     ├── main.cpp                   # app_main + vòng lặp Edge AI/ADAS (Core 1)
+    ├── web_server.h/.cpp          # [v3.0.0] Web Server nhúng cổng 80: Dashboard HUD + MJPEG Stream
     ├── tinydriver_model_data.h    # Mảng byte mô hình INT8 (~249KB) căn lề 16-byte cho SIMD
-    ├── camera_capture.h/.cpp      # [v2.7.0] Thu hình OV5640 onboard (JPEG QVGA, PSRAM)
-    ├── image_decoder.h/.cpp       # Giải mã JPEG THẬT (esp_new_jpeg) → gray 96x96 INT8 (crop theo ROI)
-    ├── roi_tracker.h/.cpp         # [v2.9.0] Bám FACE ROI (crop sát mặt theo canonical anchor lúc train)
-    ├── ai_inference.h/.cpp        # TFLite Micro Arena (ưu tiên SRAM nội → fallback PSRAM), esp-nn
-    ├── pnp_solver.h/.cpp          # POSIT / PnP thuần C++ → Yaw, Pitch, Roll (<0.3ms)
-    ├── adas_controller.h/.cpp     # FSM ADAS: MAR=(h_outer+h_inner)/(2w) khớp laptop/train
+    ├── camera_capture.h/.cpp      # Thu hình OV5640 onboard (JPEG QVGA, DMA PSRAM)
+    ├── image_decoder.h/.cpp       # Giải mã JPEG THẬT (esp_new_jpeg) → gray 96x96 INT8 (crop ROI)
+    ├── roi_tracker.h/.cpp         # Bám FACE ROI (crop sát mặt theo canonical anchor lúc train)
+    ├── ai_inference.h/.cpp        # TFLite Micro Arena (SRAM nội / PSRAM fallback), SIMD esp-nn
+    ├── pnp_solver.h/.cpp          # POSIT / PnP thuần C++ → Yaw, Pitch, Roll (<0.1ms)
+    ├── adas_controller.h/.cpp     # FSM ADAS: EAR, MAR, Microsleep, Fatigue, Distraction
     ├── esp_nn_glue.h/.cpp         # Glue ESP-NN SIMD kernels vào TFLite Micro
     ├── esp_nn/                    # Nguồn ESP-NN vendor cục bộ
-    ├── telemetry_sender.h/.cpp    # UDP JSON :8889 + gói ảnh 96x96 + điều khiển còi/LED
-    └── wifi_stream_client.h/.cpp  # [Legacy Giai đoạn 2] nhận JPEG qua TCP (không dùng khi có camera)
+    ├── telemetry_sender.h/.cpp    # UDP JSON :8889 debug + điều khiển còi/LED
+    └── wifi_stream_client.h/.cpp  # Quản lý kết nối Wi-Fi Station
 ```
 
 ---
@@ -71,54 +73,49 @@ firmware_esp32/
 
 ---
 
-## 🌐 Giao Thức Telemetry UDP (Port `8889`)
+## 🌐 Giao Diện Web Stream Trực Tiếp (Cổng 80)
 
-ESP32 gửi qua UDP tới IP Laptop, cùng port `8889`, hai loại gói phân biệt bằng magic:
+ESP32-S3 tự động khởi chạy HTTP Server nhúng ngay khi kết nối Wi-Fi thành công. Bạn có thể truy cập từ bất kỳ trình duyệt nào trên điện thoại hoặc máy tính:
 
-### 1) Gói JSON trạng thái (mỗi frame)
+👉 **`http://<IP_ESP32>/`** (Ví dụ: `http://192.168.2.32/`)
+
+### Các Endpoint Cung Cấp:
+| Endpoint | Giao thức | Chức năng |
+| :--- | :---: | :--- |
+| **`/`** | `GET` (HTML5) | Giao diện Dashboard Cockpit ADAS tối màu, tự render 22 điểm mốc và phát còi cảnh báo Web |
+| **`/stream`** | `GET` (MJPEG) | Luồng video camera OV5640 thời gian thực (`multipart/x-mixed-replace;boundary=...`) |
+| **`/status`** | `GET` (JSON) | API trả về các chỉ số EAR, MAR, Head Pose 3D, mảng 22 mốc toạ độ, FPS và độ trễ (ms) |
+| **`/api/recalibrate`** | `POST` (JSON) | Kích hoạt lại 5 giây tự hiệu chuẩn baseline cho tài xế từ xa |
+
+### Cấu Trúc Gói JSON `/status`:
 ```json
 {
   "ear": 0.28, "mar": 0.15,
   "yaw": 2.5, "pitch": -1.2, "roll": 0.0,
   "status": "NORMAL", "alarm": false, "fps": 6.5,
-  "dec": 31.0, "ai": 116.0, "total": 153.0,
-  "ear_thr": 0.21, "mar_thr": 0.70, "mouth_s": 0.0, "yawns": 0,
-  "landmarks": [0.38, 0.42, 0.41, 0.40, ...]   // 22 điểm × (x,y) = 44 số
+  "dec": 31.0, "ai": 116.0, "pnp": 0.1, "total": 153.0,
+  "ear_thr": 0.21, "mar_thr": 0.60, "mouth_s": 0.0, "yawns": 0, "blinks": 12,
+  "roi": {"active": 1, "x": 50, "y": 60, "s": 180},
+  "landmarks": [0.38, 0.42, 0.41, 0.40, ...]   // 22 điểm × (x,y) = 44 số thực [0, 1]
 }
 ```
-| Trường | Ý nghĩa |
-| :--- | :--- |
-| `ear`, `mar` | Chỉ số mắt/miệng hiện tại |
-| `yaw`, `pitch`, `roll` | Góc đầu (độ) từ POSIT |
-| `status`, `alarm` | Trạng thái FSM + cờ còi |
-| `fps` | FPS cuộn của ESP32 |
-| `dec`, `ai`, `total` | Thời gian (ms) từng khâu / cả frame |
-| `ear_thr`, `mar_thr` | Ngưỡng ADAS hiện hành (sau hiệu chuẩn) |
-| `mouth_s`, `yawns` | Thời lượng há miệng (s) + tổng số ngáp |
-| `landmarks` | 22 điểm mốc chuẩn hóa [0,1] |
 
-### 2) Gói ảnh 96×96 (đúng cái model "nhìn thấy")
-```
-┌────────────────────┬──────────────┬──────────────┬─────────────────────────┐
-│ Magic  AA 56 AA 56 │ w (uint16 LE)│ h (uint16 LE)│ pixel (w*h, uint8 xám)  │
-└────────────────────┴──────────────┴──────────────┴─────────────────────────┘
-```
 > [!NOTE]
-> Giao thức **TCP Port 8888 / Magic `0xAA55AA55`** thuộc Giai đoạn 2 (laptop gửi ảnh) — **không còn dùng** khi chạy camera onboard.
+> ESP32 vẫn duy trì gửi song song gói UDP port `8889` làm kênh debug phụ (dành cho script `esp_display_monitor.py` trên laptop nếu cần).
 
 ---
 
-## ⚙️ Cấu Hình (menuconfig)
+## ⚙️ Cấu Hình Wi-Fi (menuconfig)
 
 ```bash
+cd firmware_esp32
 idf.py menuconfig
 ```
 Vào mục **`TinyDriver ADAS Configuration`**:
-- **Wi-Fi SSID / Password:** mạng **2.4GHz**.
-- **Laptop Host IP Address:** IP của laptop chạy viewer (lấy bằng `ipconfig`).
-- **UDP Telemetry Port:** mặc định `8889`.
-- **Buzzer GPIO Pin:** `2` (KHÔNG đổi).
-- **Use onboard OV5640 camera:** `y`; các chân camera giữ mặc định.
+- **Wi-Fi SSID / Password:** Đặt tên và mật khẩu mạng Wi-Fi **2.4GHz**.
+- **Buzzer GPIO Pin:** `2` (Mặc định — còi báo phần cứng).
+- **Use onboard OV5640 camera:** `y`.
+- Bấm **S** (lưu) và **ESC** (thoát).
 
 ---
 
@@ -189,13 +186,12 @@ Aim: đưa arena (~162 KB) vào **SRAM nội** để esp-nn chạy nhanh (AI ~50
 
 Đọc dòng log `AI_INFERENCE: SRAM nội trống: xxx KB (khối liền mạch lớn nhất: xxx KB)` để biết còn thiếu bao nhiêu.
 
----
-
 ## ❓ Sự Cố Thường Gặp (xem thêm tại `huong_dan_chay_project.md`)
 
 | Hiện tượng | Cách xử lý |
 | :--- | :--- |
-| `Could not open COMx` | Chạy `tools\find_esp_port.ps1`; đóng monitor cũ; cắm lại cáp dữ liệu |
-| `esp_camera_init 0x105` | Kiểm tra cáp FPC 24-pin; thử XCLK 10MHz |
+| `Could not open COMx` | Chạy `tools\find_esp_port.ps1`; đóng monitor cũ; cắm lại cáp USB dữ liệu |
+| `esp_camera_init 0x105` | Kiểm tra cáp FPC 24-pin của camera OV5640; thử XCLK 10MHz |
 | Log `Tensor Arena ... PSRAM` | Arena bị phân mảnh SRAM nội → xem mục tối ưu bộ nhớ ở trên |
-| Laptop không thấy số liệu | Chỉ chạy 1 viewer; kiểm tra IP laptop trong menuconfig; mở firewall UDP 8889 |
+| Không mở được Web Dashboard | Đảm bảo điện thoại/laptop cùng mạng Wi-Fi 2.4GHz với ESP32; kiểm tra đúng IP trên Serial Monitor (`http://<IP_ESP32>/`) |
+| Laptop viewer (UDP) không nhận số liệu | Chỉ mở 1 viewer duy nhất; kiểm tra IP laptop trong menuconfig (nếu dùng UDP 8889); mở firewall UDP |

@@ -56,6 +56,11 @@ void adas_controller_update(const point2d_t landmarks_22[22],
                             float fps,
                             adas_metrics_t* out_metrics);
 
+/** [D23] Lấy bias pose đo lúc hiệu chuẩn (độ) để HIỂN THỊ pose đã trừ bias
+ *  -> trục X/Y/Z đúng khi mặt hướng thẳng (nếu không sẽ nghiêng theo bias). */
+float adas_controller_get_pitch_bias(void);
+float adas_controller_get_yaw_bias(void);
+
 #ifdef __cplusplus
 }
 #endif

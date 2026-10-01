@@ -8,8 +8,8 @@
 ## 1. Kiến trúc lớp (hợp đồng rõ ràng)
 ```
 Camera OV5640 ──JPEG──▶ [1 Decode] ──Frame──▶ [2 Detect] ──FaceBox──▶
-   ▶ [3 Align/Crop] ──96x96 INT8──▶ [4 Landmark] ──22pts──▶ [5 Pose(POSIT)]
-   ▶ [6 ADAS FSM] ──▶ [7 Telemetry/Actuator] ; [8 Monitor (laptop)]
+   ▶ [3 Align/Crop] ──96x96 INT8──▶ [4 Landmark] ──22pts──▶ [5 Pose]
+   ▶ [6 ADAS FSM] ──▶ [7 Telemetry/Actuator] ; [8 Web Dashboard (Cổng 80) & Monitor]
 ```
 | Lớp | Trách nhiệm DUY NHẤT | Không được làm |
 |---|---|---|
@@ -20,7 +20,7 @@ Camera OV5640 ──JPEG──▶ [1 Decode] ──Frame──▶ [2 Detect] ─
 | 5 Pose | 22pts → yaw/pitch/roll | ngưỡng ADAS |
 | 6 ADAS | quyết định trạng thái/còi | sửa ảnh/landmark |
 | 7 Telemetry | đóng gói (schema có version) | tính toán AI |
-| 8 Monitor | hiển thị | tính toán cho ESP32 |
+| 8 Web Dashboard | hiển thị trực tiếp trình duyệt (HTML5 Canvas 60 FPS + Web Audio) | tính toán cho ESP32 |
 
 **Nguyên tắc vàng:** [2] hoặc [3] chỉ dùng **nguồn độc lập** — **KHÔNG** để landmark tự định nghĩa lại crop (lỗi vòng phản hồi đã gặp: ROI trôi 240→72).
 
@@ -146,3 +146,23 @@ Camera OV5640 ──JPEG──▶ [1 Decode] ──Frame──▶ [2 Detect] ─
 - **So lieu SRAM noi**: luc boot free **152 KB**; arena can **162 KB** => **KHONG THE lot SRAM noi**. Sau WiFi+camera con 95 KB, khoi lien mach lon nhat **50 KB**. => **~7.0 FPS la nguong thuc te** cua model nay tren ESP32-S3. Nhanh hon nua phai co model arena nho hon (train lai kien truc gon) hoac bo WiFi (mat telemetry).
 - **Nguyen nhan "tracking khong toi" = DO TRE (lag)**: 1 frame pipeline (~143ms) + loc EMA (alpha 0.22-0.5 => tre 2-4.5 frame ~290-640ms) => tong **~430-780ms** => mat da di 30-50px => khung + 22 diem lech khoi mat.
 - Tham khao: github.com/espressif/esp-nn, esp-tflite-micro perf, zediot.com/blog/esp32-s3-tinyml-optimization, ESP-WHO FaceDetect (MSR+MNP ~37ms).
+
+## D18 — STANDALONE WEB STREAM DASHBOARD (CỔNG 80) — 100% KHÔNG CẦN LAPTOP
+- [x] **Web Server nhúng (`web_server.cpp/.h`)**: Chạy trực tiếp trên Core 0 (`esp_http_server`), port 80.
+- [x] **Endpoints chính thức**:
+  - `GET /`: Automotive Cockpit HUD (Dark mode, Web Audio beeper, tương thích 100% Mobile/Tablet/PC).
+  - `GET /stream`: Luồng MJPEG video OV5640 trực tiếp (~10-12 FPS).
+  - `GET /status`: JSON telemetry (EAR, MAR, Head Pose 3D, FPS, Dec/AI/PnP latency, 22 landmarks).
+  - `POST /api/recalibrate`: Nút bấm hiệu chuẩn lại 5s baseline tài xế từ xa.
+- [x] **Zero CPU Overhead trên ESP32**: Lớp phủ 22 điểm mốc, viền mắt, khuôn miệng và mũi tên 3D Pose được render bằng GPU client (HTML5 Canvas 60 FPS) ở phía trình duyệt người dùng.
+- [x] **Cách ly đa nhân**: Web server trên Core 0 (prio 3-4), Edge AI trên Core 1 (prio 6) → web tải chậm hay ngắt kết nối không bao giờ ảnh hưởng đến chu kỳ suy luận ADAS của Core 1.
+- [x] **Không cần cấu hình IP laptop**: ESP32 là host; bất kỳ thiết bị nào cùng mạng Wi-Fi chỉ cần vào `http://<IP_ESP32>/`.
+
+
+## D19 - FIX WEB DASHBOARD KHONG CAP NHAT (da tim ra goc)
+- **Trieu chung**: mo http://<IP>/ thi VIDEO chay nhung 22 diem + thong so = 0.00, status ket "DANG KET NOI...", nut bam khong tac dung.
+- **Nguyen nhan goc (tu source IDF esp_http_server/src/httpd_main.c)**: httpd_process_session() goi URI handler INLINE trong MOT task httpd duy nhat. stream_handler MJPEG lap VO HAN -> chiem task -> MOI request khac (/status polling 120ms, /api/recalibrate) KHONG BAO GIO duoc phuc vu. => Dung trieu chung (video OK, con lai chet).
+- **Fix**: tach API sang **HTTPD THU 2 (cong 81)** chi chua /status + /api/recalibrate (ctrl_port 32769, stack 6144, core 0). JS doi sang API_BASE = http://<host>:81 + tu dong fallback ve duong dan tuong doi neu khong ket noi duoc. CORS da co san tren ca 2 handler.
+- **Khong dung cham**: /, /stream, /capture (cong 80), pipeline AI/ADAS, decode.
+- Kiem chung: 
+ode --check tren JS trich xuat => khong loi cu phap; build PASS.

@@ -1,231 +1,519 @@
-ESP-ROM:esp32s3-20210327
-Build:Mar 27 2021
-rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
-SPIWP:0xee
-mode:DIO, clock div:1
-load:0x3fce2820,len:0x19b4
-load:0x403c8700,len:0x4
-load:0x403c8704,len:0xe8c
-load:0x403cb700,len:0x3144
-entry 0x403c8940
-I (27) boot: ESP-IDF v5.3.5 2nd stage bootloader
-I (27) boot: compile time Sep 13 2026 11:42:56
-I (27) boot: Multicore bootloader
-I (30) boot: chip revision: v0.2
-I (34) boot: efuse block revision: v1.4
-I (38) qio_mode: Enabling QIO for flash chip MXIC
-I (44) boot.esp32s3: Boot SPI Speed : 80MHz
-I (48) boot.esp32s3: SPI Mode       : QIO
-I (53) boot.esp32s3: SPI Flash Size : 16MB
-I (58) boot: Enabling RNG early entropy source...
-I (63) boot: Partition Table:
-I (67) boot: ## Label            Usage          Type ST Offset   Length
-I (74) boot:  0 nvs              WiFi data        01 02 00009000 00006000
-I (82) boot:  1 phy_init         RF data          01 01 0000f000 00001000
-I (89) boot:  2 factory          factory app      00 00 00010000 00400000
-I (97) boot: End of partition table
-I (101) esp_image: segment 0: paddr=00010020 vaddr=3c0c0020 size=5efd4h (389076) map
-I (169) esp_image: segment 1: paddr=0006effc vaddr=3fc9ee00 size=0101ch (  4124) load
-I (171) esp_image: segment 2: paddr=00070020 vaddr=42000020 size=be798h (780184) map
-I (296) esp_image: segment 3: paddr=0012e7c0 vaddr=3fc9fe1c size=06c58h ( 27736) load
-I (301) esp_image: segment 4: paddr=00135420 vaddr=40378000 size=16dc0h ( 93632) load
-I (330) boot: Loaded app from partition at offset 0x10000
-I (330) boot: Disabling RNG early entropy source...
-I (342) octal_psram: vendor id    : 0x0d (AP)
-I (342) octal_psram: dev id       : 0x02 (generation 3)
-I (342) octal_psram: density      : 0x03 (64 Mbit)
-I (347) octal_psram: good-die     : 0x01 (Pass)
-I (352) octal_psram: Latency      : 0x01 (Fixed)
-I (358) octal_psram: VCC          : 0x01 (3V)
-I (363) octal_psram: SRF          : 0x01 (Fast Refresh)
-I (369) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
-I (374) octal_psram: BurstLen     : 0x01 (32 Byte)
-I (380) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
-I (386) octal_psram: DriveStrength: 0x00 (1/1)
-I (392) MSPI Timing: PSRAM timing tuning index: 5
-I (397) esp_psram: Found 8MB PSRAM device
-I (401) esp_psram: Speed: 80MHz
-I (434) mmu_psram: Read only data copied and mapped to SPIRAM
-I (500) mmu_psram: Instructions copied and mapped to SPIRAM
-I (501) cpu_start: Multicore app
-I (511) cpu_start: Pro cpu start user code
-I (511) cpu_start: cpu freq: 240000000 Hz
-I (511) app_init: Application information:
-I (514) app_init: Project name:     tinydriver_esp32s3_edge_ai
-I (520) app_init: App version:      493ff45-dirty
-I (526) app_init: Compile time:     Sep 13 2026 20:34:57
-I (532) app_init: ELF file SHA256:  fc2658bdf...
-I (537) app_init: ESP-IDF:          v5.3.5
-I (542) efuse_init: Min chip rev:     v0.0
-I (547) efuse_init: Max chip rev:     v0.99
-I (552) efuse_init: Chip rev:         v0.2
-I (556) heap_init: Initializing. RAM available for dynamic allocation:
-I (564) heap_init: At 3FCB2490 len 00037280 (220 KiB): RAM
-I (570) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
-I (576) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
-I (582) esp_psram: Adding pool of 7040K of PSRAM memory to heap allocator
-I (590) esp_psram: Adding pool of 4K of PSRAM memory gap generated due to end address alignment of drom to the heap allocator
-I (602) spi_flash: detected chip: mxic
-I (606) spi_flash: flash io: qio
-W (610) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
-I (621) sleep: Configure to isolate all GPIO pins in sleep state
-I (627) sleep: Enable automatic switching of GPIO sleep configuration
-I (635) main_task: Started on CPU0
-I (639) esp_psram: Reserving pool of 16K of internal memory for DMA/internal allocations
-I (648) main_task: Calling app_main()
-I (652) MAIN_APP: =================================================================
-I (660) MAIN_APP: 🚘 PROJECT 13: DRIVER DROWSINESS & DISTRACTION DETECTION
-I (668) MAIN_APP: ⚡ 100% EDGE AI ON ESP32-S3 N16R8 DEVKIT (16MB Flash, 8MB PSRAM)
-I (676) MAIN_APP: =================================================================
-I (690) MAIN_APP: Bộ nhớ Octal PSRAM : 8 MB (Còn trống: 7040 KB)
-I (692) MAIN_APP: Bộ nhớ Internal SRAM: 228 KB
-I (697) WIFI_STREAM: Đang cấp phát Double Buffer trong Octal PSRAM (64 KB mỗi buffer)...
-I (707) pp: pp rom version: e7ae62f
-I (711) net80211: net80211 rom version: e7ae62f
-I (717) wifi:wifi driver task: 3fcc02f0, prio:23, stack:6656, core=0
-I (726) wifi:wifi firmware version: 18db208
-I (726) wifi:wifi certification version: v7.0
-I (730) wifi:config NVS flash: enabled
-I (734) wifi:config nano formating: disabled
-I (738) wifi:Init data frame dynamic rx buffer num: 8
-I (742) wifi:Init static rx mgmt buffer num: 3
-I (747) wifi:Init management short buffer num: 16
-I (751) wifi:Init static tx buffer num: 4
-I (755) wifi:Init tx cache buffer num: 8
-I (758) wifi:Init static tx FG buffer num: 2
-I (762) wifi:Init static rx buffer size: 1600
-I (766) wifi:Init static rx buffer num: 4
-I (770) wifi:Init dynamic rx buffer num: 8
-I (774) wifi_init: rx ba win: 6
-I (778) wifi_init: accept mbox: 6
-I (782) wifi_init: tcpip mbox: 32
-I (786) wifi_init: udp mbox: 32
-I (790) wifi_init: tcp mbox: 32
-I (793) wifi_init: tcp tx win: 5760
-I (798) wifi_init: tcp rx win: 14400
-I (802) wifi_init: tcp mss: 1440
-I (806) wifi_init: WiFi/LWIP prefer SPIRAM
-I (811) wifi_init: WiFi IRAM OP enabled
-I (815) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10
-I (851) wifi:mode : sta (28:84:85:65:77:18)
-I (851) wifi:enable tsf
-I (852) WIFI_STREAM: Đã khởi động Wi-Fi Station, đang kết nối tới SSID: Phong 2...
-I (856) CAMERA: Khởi tạo OV5640 (DVP): XCLK=GPIO15 SIOD=GPIO4 SIOC=GPIO5 VSYNC=GPIO6 HREF=GPIO7 PCLK=GPIO13
-I (860) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
-I (874) wifi:state: init -> auth (0xb0)
-I (878) s3 ll_cam: DMA Channel=0
-I (881) cam_hal: cam init ok
-I (885) sccb: pin_sda 4 pin_scl 5
-I (889) sccb: sccb_i2c_port=1
-I (891) wifi:state: auth -> assoc (0x0)
-I (903) wifi:state: assoc -> run (0x10)
-I (908) ov3660: Mismatch PID=0x5640
-I (910) camera: Camera PID=0x5640 VER=0x00 MIDL=0x00 MIDH=0x00
-I (910) camera: Detected OV5640 camera
-I (915) camera: Detected camera at address=0x3c
-I (1007) wifi:connected with Phong 2, aid = 1, channel 8, BW20, bssid = 28:77:77:af:15:0c
-I (1007) wifi:security: WPA2-PSK, phy: bgn, rssi: -29
-I (1009) wifi:pm start, type: 1
+==> Nạp firmware thành công!
+========================================================================
+🌐 GIAO DIỆN WEB STREAM TRỰC TIẾP:
+   Sau khi khởi động, ESP32 sẽ hiển thị địa chỉ IP trên Serial Log.
+   Mở trình duyệt (điện thoại, tablet hoặc laptop) vào: http://<IP_ESP32>/
+   Xem Video Camera OV5640, lớp phủ 22 mốc khuôn mặt và HUD ADAS!
+========================================================================
+==> Mở Serial Monitor (COM3) + LƯU LOG -> D:\PROJECT_13_PHAT_HIEN_BUON_NGU\output\esp32_serial_20260918_211015.txt
+    (Thoát: Ctrl+C | file log: output\latest_esp32_serial.txt)
+python.exe : --- Warning: GDB cannot open serial ports accessed as COMx
+At C:\Espressif\frameworks\esp-idf-v5.3.5\export.ps1:54 char:19
++ function idf.py { &python "$IDF_PATH\tools\idf.py" $args }
++                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (--- Warning: GD...ccessed as COMx:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
 
-I (1011) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
-I (1019) wifi:set rx beacon pti, rx_bcn_pti: 0, bcn_timeout: 25000, mt_pti: 0, mt_time: 10000
-I (1082) wifi:<ba-add>idx:0 (ifx:0, 28:77:77:af:15:0c), tid:6, ssn:3, winSize:64
-I (1099) wifi:AP's beacon interval = 102400 us, DTIM period = 1
-I (1611) cam_hal: PSRAM DMA mode disabled
-I (1611) cam_hal: buffer_size: 16384, half_buffer_size: 1024, node_buffer_size: 1024, node_cnt: 16, total_cnt: 15
-I (1615) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
-I (1622) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
-I (1628) cam_hal: cam config ok
-I (1645) ov5640: Set PLL: bypass: 0, multiplier: 180, sys_div: 4, pre_div: 2, root_2x: 0, pclk_root_div: 2, pclk_manual: 1, pclk_div: 4
-I (1647) ov5640: Calculated XVCLK: 20000000 Hz, REFIN: 10000000 Hz, VCO: 1800000000 Hz, PLL_CLK: 180000000 Hz, SYSCLK: 45000000 Hz, PCLK: 11250000 Hz
-I (1682) CAMERA: ✅ Camera sẵn sàng: PID=0x5640 VER=0x00 | JPEG | QVGA 320x240
-I (1682) IMAGE_DECODER: Cấp phát buffer giải mã ảnh trong Octal PSRAM (gray 100 KB + rgb)...
-I (1689) IMAGE_DECODER: ✅ esp_new_jpeg đã sẵn sàng (RGB888 output, baseline JPEG).
-I (1698) PNP_SOLVER: Đã khởi tạo bộ giải thuần C++ POSIT PnP thành công!
-I (1707) ADAS_CONTROLLER: Đã khởi tạo ADAS Controller State Machine. Bắt đầu giai đoạn tự hiệu chuẩn (5 giây)...
-I (1719) AI_INFERENCE: Đang khởi tạo AI Inference Engine (ưu tiên SRAM nội cho tốc độ)...
-I (1729) AI_INFERENCE: SRAM nội trống: 171 KB (khối liền mạch lớn nhất: 124 KB) | PSRAM trống: 6461 KB
-W (1741) AI_INFERENCE: ⚠️ Không đủ SRAM nội cho Arena -> dùng PSRAM (chậm ~6x).
-I (1758) AI_INFERENCE: ✅ TFLite Micro nạp mô hình OK | Arena dùng 162 KB ở PSRAM (chậm) | Output: FLOAT32 (Mixed-Precision)
-I (1763) gpio: GPIO[2]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
-I (1772) gpio: GPIO[48]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
-I (1781) TELEMETRY: ✅ Đã khởi tạo Telemetry Sender -> Laptop UDP tại 192.168.2.1:8889
-I (1791) MAIN_APP: ✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng!
-I (1800) MAIN_APP: 📷 Chế độ ONBOARD CAMERA: ESP32 tự thu hình, không dùng TCP laptop.
-I (1809) MAIN_APP: 🎉 Hệ thống đa nhân FreeRTOS đã khởi chạy song song trên 2 nhân LX7!
-I (1809) MAIN_APP: 🚀 Khởi chạy Edge AI & ADAS Task trên Core 1 (Priority 6, 240MHz)
-I (1820) main_task: Returned from app_main()
-W (1979) TELEMETRY: sendto lỗi (sent=-1, errno=118)
-I (2028) esp_netif_handlers: sta ip: 192.168.2.32, mask: 255.255.255.0, gw: 192.168.2.253
-I (2028) WIFI_STREAM: Đã nhận IP từ Router: 192.168.2.32
-I (2133) TELEMETRY: Đã gửi 1 gói telemetry tới 192.168.2.1:8889
-I (2597) MAIN_APP: [Frame #   5] FPS:  6.5 | Dec: 32.3ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.54 | Yaw:  +6.5° | Status: CALIBRATING... (4.1s)
-I (3369) MAIN_APP: [Frame #  10] FPS:  6.5 | Dec: 32.1ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.31 | MAR: 0.41 | Yaw:  +3.8° | Status: CALIBRATING... (3.3s)
-I (4142) MAIN_APP: [Frame #  15] FPS:  6.5 | Dec: 31.9ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.33 | MAR: 0.26 | Yaw: -23.0° | Status: CALIBRATING... (2.6s)
-I (4914) MAIN_APP: [Frame #  20] FPS:  6.5 | Dec: 32.4ms | AI: 117.0ms | PnP: 0.1ms | Total: 154.0ms | EAR: 0.20 | MAR: 0.37 | Yaw: -20.7° | Status: CALIBRATING... (1.8s)
-I (5688) MAIN_APP: [Frame #  25] FPS:  6.5 | Dec: 32.0ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.24 | MAR: 0.29 | Yaw: -29.5° | Status: CALIBRATING... (1.0s)
-I (6461) MAIN_APP: [Frame #  30] FPS:  6.5 | Dec: 32.5ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.25 | MAR: 0.37 | Yaw: -26.5° | Status: CALIBRATING... (0.3s)
-I (6770) ADAS_CONTROLLER: ✅ Hiệu chuẩn thành công! Baseline: EAR=0.25, MAR=0.37 | Ngưỡng báo: EAR<0.18, MAR>0.60
-I (7235) MAIN_APP: [Frame #  35] FPS:  6.5 | Dec: 31.8ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.27 | MAR: 0.40 | Yaw: -35.4° | Status: NORMAL
-I (8006) MAIN_APP: [Frame #  40] FPS:  6.5 | Dec: 32.0ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.26 | MAR: 0.28 | Yaw: -13.4° | Status: NORMAL
-I (8777) MAIN_APP: [Frame #  45] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.18 | MAR: 0.38 | Yaw: +25.6° | Status: NORMAL
-I (9550) MAIN_APP: [Frame #  50] FPS:  6.5 | Dec: 32.4ms | AI: 117.0ms | PnP: 0.1ms | Total: 154.3ms | EAR: 0.19 | MAR: 0.31 | Yaw: +24.6° | Status: NORMAL
-I (10323) MAIN_APP: [Frame #  55] FPS:  6.5 | Dec: 32.3ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.16 | MAR: 0.30 | Yaw: +26.6° | Status: NORMAL
-I (10975) IMAGE_DECODER: [Decode avg] JPEG: 23.8 ms | Gray+Downsample: 8.3 ms
-I (11096) MAIN_APP: [Frame #  60] FPS:  6.5 | Dec: 32.5ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.20 | MAR: 0.40 | Yaw: +12.2° | Status: NORMAL
-I (11868) MAIN_APP: [Frame #  65] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.22 | Yaw: +16.2° | Status: NORMAL
-I (12639) MAIN_APP: [Frame #  70] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.26 | MAR: 0.25 | Yaw: +12.3° | Status: NORMAL
-I (13411) MAIN_APP: [Frame #  75] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.23 | MAR: 0.24 | Yaw: +23.0° | Status: NORMAL
-I (14183) MAIN_APP: [Frame #  80] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.24 | MAR: 0.30 | Yaw: +12.4° | Status: NORMAL
-I (14955) MAIN_APP: [Frame #  85] FPS:  6.5 | Dec: 32.4ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.9ms | EAR: 0.27 | MAR: 0.27 | Yaw:  +6.3° | Status: NORMAL
-I (15726) MAIN_APP: [Frame #  90] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.24 | MAR: 0.23 | Yaw: +20.4° | Status: NORMAL
-I (16498) MAIN_APP: [Frame #  95] FPS:  6.5 | Dec: 32.4ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.21 | MAR: 0.26 | Yaw: +11.0° | Status: NORMAL
-I (17269) MAIN_APP: [Frame # 100] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.20 | MAR: 0.28 | Yaw: +16.8° | Status: NORMAL
-I (17423) TELEMETRY: Đã gửi 100 gói telemetry tới 192.168.2.1:8889
-I (18041) MAIN_APP: [Frame # 105] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.22 | MAR: 0.27 | Yaw: +33.9° | Status: NORMAL
-I (18812) MAIN_APP: [Frame # 110] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.22 | MAR: 0.23 | Yaw:  +1.1° | Status: NORMAL
-I (19584) MAIN_APP: [Frame # 115] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.24 | MAR: 0.27 | Yaw: +13.1° | Status: NORMAL
-I (20234) IMAGE_DECODER: [Decode avg] JPEG: 24.0 ms | Gray+Downsample: 8.3 ms
-I (20356) MAIN_APP: [Frame # 120] FPS:  6.5 | Dec: 32.5ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.6ms | EAR: 0.23 | MAR: 0.30 | Yaw: +24.7° | Status: NORMAL
-I (21127) MAIN_APP: [Frame # 125] FPS:  6.5 | Dec: 32.1ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.35 | MAR: 0.41 | Yaw:  +4.3° | Status: NORMAL
-I (21898) MAIN_APP: [Frame # 130] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.26 | MAR: 0.43 | Yaw: +15.5° | Status: NORMAL
-I (22670) MAIN_APP: [Frame # 135] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.28 | MAR: 0.41 | Yaw: +27.6° | Status: NORMAL
-I (23441) MAIN_APP: [Frame # 140] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.31 | MAR: 0.26 | Yaw: +18.2° | Status: NORMAL
-I (24212) MAIN_APP: [Frame # 145] FPS:  6.5 | Dec: 32.2ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.0ms | EAR: 0.43 | MAR: 0.29 | Yaw: -14.6° | Status: NORMAL
-I (24982) MAIN_APP: [Frame # 150] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.45 | MAR: 0.36 | Yaw: -25.2° | Status: NORMAL
-I (25753) MAIN_APP: [Frame # 155] FPS:  6.5 | Dec: 32.2ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.39 | MAR: 0.33 | Yaw: -13.7° | Status: NORMAL
-I (26525) MAIN_APP: [Frame # 160] FPS:  6.5 | Dec: 32.3ms | AI: 116.6ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.33 | MAR: 0.26 | Yaw: +19.5° | Status: NORMAL
-I (27297) MAIN_APP: [Frame # 165] FPS:  6.5 | Dec: 32.4ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.9ms | EAR: 0.37 | MAR: 0.31 | Yaw: +16.9° | Status: NORMAL
-I (28068) MAIN_APP: [Frame # 170] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.44 | MAR: 0.30 | Yaw: +23.0° | Status: NORMAL
-I (28839) MAIN_APP: [Frame # 175] FPS:  6.5 | Dec: 32.4ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.36 | MAR: 0.29 | Yaw: +28.4° | Status: NORMAL
-I (29490) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
-I (29611) MAIN_APP: [Frame # 180] FPS:  6.5 | Dec: 32.5ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.36 | MAR: 0.29 | Yaw: +25.0° | Status: NORMAL
-I (30382) MAIN_APP: [Frame # 185] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.0ms | EAR: 0.32 | MAR: 0.33 | Yaw: +17.7° | Status: NORMAL
-I (31154) MAIN_APP: [Frame # 190] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.38 | MAR: 0.32 | Yaw:  +9.1° | Status: NORMAL
-I (31925) MAIN_APP: [Frame # 195] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.37 | MAR: 0.38 | Yaw: +18.5° | Status: NORMAL
-I (32696) MAIN_APP: [Frame # 200] FPS:  6.5 | Dec: 32.3ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.5ms | EAR: 0.36 | MAR: 0.42 | Yaw: +18.3° | Status: NORMAL
-I (32850) TELEMETRY: Đã gửi 200 gói telemetry tới 192.168.2.1:8889
-I (33468) MAIN_APP: [Frame # 205] FPS:  6.5 | Dec: 32.2ms | AI: 116.9ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.35 | MAR: 0.36 | Yaw: +30.2° | Status: NORMAL
-I (34239) MAIN_APP: [Frame # 210] FPS:  6.5 | Dec: 32.2ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.37 | MAR: 0.37 | Yaw: +28.4° | Status: NORMAL
-I (35010) MAIN_APP: [Frame # 215] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.41 | MAR: 0.27 | Yaw: +22.4° | Status: NORMAL
-I (35782) MAIN_APP: [Frame # 220] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.35 | MAR: 0.28 | Yaw: +14.4° | Status: NORMAL
-I (36554) MAIN_APP: [Frame # 225] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.37 | MAR: 0.29 | Yaw: +26.2° | Status: NORMAL
-I (37325) MAIN_APP: [Frame # 230] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.36 | MAR: 0.26 | Yaw: +16.5° | Status: NORMAL
-I (38096) MAIN_APP: [Frame # 235] FPS:  6.5 | Dec: 32.2ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.34 | MAR: 0.26 | Yaw:  +5.3° | Status: NORMAL
-I (38746) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
-I (38868) MAIN_APP: [Frame # 240] FPS:  6.5 | Dec: 32.4ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.33 | Yaw: +18.9° | Status: NORMAL
-I (39639) MAIN_APP: [Frame # 245] FPS:  6.5 | Dec: 32.3ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.7ms | EAR: 0.36 | MAR: 0.32 | Yaw: +21.4° | Status: NORMAL
-I (40411) MAIN_APP: [Frame # 250] FPS:  6.5 | Dec: 32.3ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.37 | MAR: 0.26 | Yaw: +21.7° | Status: NORMAL
-I (41182) MAIN_APP: [Frame # 255] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.3ms | EAR: 0.34 | MAR: 0.33 | Yaw: +25.5° | Status: NORMAL
-I (41953) MAIN_APP: [Frame # 260] FPS:  6.5 | Dec: 32.2ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.38 | MAR: 0.33 | Yaw: +19.6° | Status: NORMAL
-I (42725) MAIN_APP: [Frame # 265] FPS:  6.5 | Dec: 32.4ms | AI: 116.2ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.41 | MAR: 0.27 | Yaw: +21.7° | Status: NORMAL
-I (43496) MAIN_APP: [Frame # 270] FPS:  6.5 | Dec: 32.3ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.39 | MAR: 0.29 | Yaw: +22.3° | Status: NORMAL
-I (44267) MAIN_APP: [Frame # 275] FPS:  6.5 | Dec: 32.1ms | AI: 116.8ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.38 | Yaw: +18.8° | Status: NORMAL
-I (45037) MAIN_APP: [Frame # 280] FPS:  6.5 | Dec: 32.2ms | AI: 116.4ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.29 | MAR: 0.26 | Yaw: +14.5° | Status: NORMAL
-I (45808) MAIN_APP: [Frame # 285] FPS:  6.5 | Dec: 31.8ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.1ms | EAR: 0.29 | MAR: 0.34 | Yaw: +20.5° | Status: NORMAL
-I (46578) MAIN_APP: [Frame # 290] FPS:  6.5 | Dec: 32.2ms | AI: 116.7ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.34 | MAR: 0.38 | Yaw: +15.4° | Status: NORMAL
-I (47349) MAIN_APP: [Frame # 295] FPS:  6.5 | Dec: 32.3ms | AI: 116.5ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.32 | MAR: 0.28 | Yaw:  +8.5° | Status: NORMAL
-I (48000) IMAGE_DECODER: [Decode avg] JPEG: 23.9 ms | Gray+Downsample: 8.3 ms
-I (48121) MAIN_APP: [Frame # 300] FPS:  6.5 | Dec: 32.6ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.4ms | EAR: 0.37 | MAR: 0.28 | Yaw:  -1.0° | Status: NORMAL
-I (48275) TELEMETRY: Đã gửi 300 gói telemetry tới 192.168.2.1:8889
-I (48893) MAIN_APP: [Frame # 305] FPS:  6.5 | Dec: 32.3ms | AI: 116.3ms | PnP: 0.1ms | Total: 153.2ms | EAR: 0.36 | MAR: 0.26 | Yaw:  +2.1° | Status: NORMAL
+--- Using \\.\COM3 instead...
+--- esp-idf-monitor 1.9.0 on \\.\COM3 115200
+--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H
+Executing action: monitor
+Running idf_monitor in directory D:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32
+Executing "C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe C:\Espressif\frameworks\esp-idf-v5.3.5\tools/idf_monitor.py -p COM3 -b 115200 --toolchain-prefix xtensa-esp32s3-elf- --target esp32s3 --revision 0 D:\PROJECT_13_PHAT_HIEN_BUON_NGU\firmware_esp32\build\tinydriver_esp32s3_edge_ai.elf --force-color -m 'C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe' 'C:\Espressif\frameworks\esp-idf-v5.3.5\tools\idf.py' '-p' 'COM3'"...
+ESP-ROM:esp32s3-20210327
+
+Build:Mar 27 2021
+
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+
+SPIWP:0xee
+
+mode:DIO, clock div:1
+
+load:0x3fce2820,len:0x19b4
+
+load:0x403c8700,len:0x4
+
+load:0x403c8704,len:0xe8c
+
+load:0x403cb700,len:0x3144
+
+entry 0x403c8940
+
+I (27) boot: ESP-IDF v5.3.5 2nd stage bootloader
+
+I (27) boot: compile time Sep 13 2026 11:42:56
+
+I (27) boot: Multicore bootloader
+
+I (30) boot: chip revision: v0.2
+
+I (34) boot: efuse block revision: v1.4
+
+I (38) qio_mode: Enabling QIO for flash chip MXIC
+
+I (44) boot.esp32s3: Boot SPI Speed : 80MHz
+
+I (48) boot.esp32s3: SPI Mode       : QIO
+
+I (53) boot.esp32s3: SPI Flash Size : 16MB
+
+I (58) boot: Enabling RNG early entropy source...
+
+I (63) boot: Partition Table:
+
+I (67) boot: ## Label            Usage          Type ST Offset   Length
+
+I (74) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+
+I (82) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+
+I (89) boot:  2 factory          factory app      00 00 00010000 00400000
+
+I (97) boot: End of partition table
+
+I (101) esp_image: segment 0: paddr=00010020 vaddr=3c0d0020 size=d1fd4h (860116) map
+
+I (242) esp_image: segment 1: paddr=000e1ffc vaddr=3fc9f000 size=07cd4h ( 31956) load
+
+I (248) esp_image: segment 2: paddr=000e9cd8 vaddr=40378000 size=06340h ( 25408) load
+
+I (254) esp_image: segment 3: paddr=000f0020 vaddr=42000020 size=ced30h (847152) map
+
+I (387) esp_image: segment 4: paddr=001bed58 vaddr=4037e340 size=10bd8h ( 68568) load
+
+I (411) boot: Loaded app from partition at offset 0x10000
+
+I (411) boot: Disabling RNG early entropy source...
+
+I (423) octal_psram: vendor id    : 0x0d (AP)
+
+I (424) octal_psram: dev id       : 0x02 (generation 3)
+
+I (424) octal_psram: density      : 0x03 (64 Mbit)
+
+I (429) octal_psram: good-die     : 0x01 (Pass)
+
+I (434) octal_psram: Latency      : 0x01 (Fixed)
+
+I (439) octal_psram: VCC          : 0x01 (3V)
+
+I (444) octal_psram: SRF          : 0x01 (Fast Refresh)
+
+I (450) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+
+I (456) octal_psram: BurstLen     : 0x01 (32 Byte)
+
+I (461) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+
+I (468) octal_psram: DriveStrength: 0x00 (1/1)
+
+I (473) MSPI Timing: PSRAM timing tuning index: 5
+
+I (478) esp_psram: Found 8MB PSRAM device
+
+I (483) esp_psram: Speed: 80MHz
+
+I (555) mmu_psram: Read only data copied and mapped to SPIRAM
+
+I (626) mmu_psram: Instructions copied and mapped to SPIRAM
+
+I (627) cpu_start: Multicore app
+
+I (637) cpu_start: Pro cpu start user code
+
+I (637) cpu_start: cpu freq: 240000000 Hz
+
+I (637) app_init: Application information:
+
+I (640) app_init: Project name:     tinydriver_esp32s3_edge_ai
+
+I (646) app_init: App version:      84391171-dirty
+
+I (652) app_init: Compile time:     Sep 18 2026 20:46:49
+
+I (658) app_init: ELF file SHA256:  df3e970c5...
+
+I (663) app_init: ESP-IDF:          v5.3.5
+
+I (668) efuse_init: Min chip rev:     v0.0
+
+I (673) efuse_init: Max chip rev:     v0.99
+
+I (678) efuse_init: Chip rev:         v0.2
+
+I (682) heap_init: Initializing. RAM available for dynamic allocation:
+
+I (690) heap_init: At 3FCC5798 len 00023F78 (143 KiB): RAM
+
+I (696) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+
+I (702) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+
+I (708) esp_psram: Adding pool of 6464K of PSRAM memory to heap allocator
+
+I (716) esp_psram: Adding pool of 56K of PSRAM memory gap generated due to end address alignment of drom to the heap allocator
+
+I (728) spi_flash: detected chip: mxic
+
+I (732) spi_flash: flash io: qio
+
+W (736) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+
+I (747) sleep: Configure to isolate all GPIO pins in sleep state
+
+I (753) sleep: Enable automatic switching of GPIO sleep configuration
+
+I (761) main_task: Started on CPU0
+
+I (765) esp_psram: Reserving pool of 16K of internal memory for DMA/internal allocations
+
+I (774) main_task: Calling app_main()
+
+I (778) MAIN_APP: =================================================================
+
+I (786) MAIN_APP: ≡ƒÜÿ PROJECT 13: DRIVER DROWSINESS & DISTRACTION DETECTION
+
+I (794) MAIN_APP: ΓÜí 100% EDGE AI ON ESP32-S3 N16R8 DEVKIT (16MB Flash, 8MB PSRAM)
+
+I (802) MAIN_APP: =================================================================
+
+I (816) MAIN_APP: Bß╗Ö nhß╗¢ Octal PSRAM : 8 MB (C├▓n trß╗æng: 6516 KB)
+
+I (818) MAIN_APP: Bß╗Ö nhß╗¢ Internal SRAM: 151 KB
+
+I (823) WIFI_STREAM: ─Éang cß║Ñp ph├ít Double Buffer trong Octal PSRAM (64 KB mß╗ùi buffer)...
+
+I (833) pp: pp rom version: e7ae62f
+
+I (837) net80211: net80211 rom version: e7ae62f
+
+I (843) wifi:wifi driver task: 3fcd35f8, prio:23, stack:6656, core=0
+
+I (852) wifi:wifi firmware version: 18db208
+
+I (852) wifi:wifi certification version: v7.0
+
+I (856) wifi:config NVS flash: enabled
+
+I (860) wifi:config nano formating: disabled
+
+I (864) wifi:Init data frame dynamic rx buffer num: 8
+
+I (868) wifi:Init static rx mgmt buffer num: 3
+
+I (873) wifi:Init management short buffer num: 16
+
+I (877) wifi:Init static tx buffer num: 4
+
+I (881) wifi:Init tx cache buffer num: 8
+
+I (884) wifi:Init static tx FG buffer num: 2
+
+I (888) wifi:Init static rx buffer size: 1600
+
+I (892) wifi:Init static rx buffer num: 4
+
+I (896) wifi:Init dynamic rx buffer num: 8
+
+I (900) wifi_init: rx ba win: 6
+
+I (904) wifi_init: accept mbox: 6
+
+I (908) wifi_init: tcpip mbox: 32
+
+I (912) wifi_init: udp mbox: 32
+
+I (916) wifi_init: tcp mbox: 32
+
+I (919) wifi_init: tcp tx win: 5760
+
+I (924) wifi_init: tcp rx win: 14400
+
+I (928) wifi_init: tcp mss: 1440
+
+I (932) wifi_init: WiFi/LWIP prefer SPIRAM
+
+I (937) wifi_init: WiFi IRAM OP enabled
+
+I (941) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10
+
+I (978) wifi:mode : sta (28:84:85:65:77:18)
+
+I (978) wifi:enable tsf
+
+I (979) WIFI_STREAM: ─É├ú khß╗ƒi ─æß╗Öng Wi-Fi Station, ─æang kß║┐t nß╗æi tß╗¢i SSID: Phong 2...
+
+I (982) CAMERA: Khß╗ƒi tß║ío OV5640 (DVP): XCLK=GPIO15 SIOD=GPIO4 SIOC=GPIO5 VSYNC=GPIO6 HREF=GPIO7 PCLK=GPIO13
+
+I (984) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+
+I (1001) wifi:state: init -> auth (0xb0)
+
+I (1005) s3 ll_cam: DMA Channel=0
+
+I (1008) cam_hal: cam init ok
+
+I (1012) sccb: pin_sda 4 pin_scl 5
+
+I (1016) sccb: sccb_i2c_port=1
+
+I (1018) wifi:state: auth -> assoc (0x0)
+
+I (1027) wifi:state: assoc -> run (0x10)
+
+I (1035) ov3660: Mismatch PID=0x5640
+
+I (1037) camera: Camera PID=0x5640 VER=0x00 MIDL=0x00 MIDH=0x00
+
+I (1038) camera: Detected OV5640 camera
+
+I (1042) camera: Detected camera at address=0x3c
+
+I (1127) wifi:connected with Phong 2, aid = 1, channel 8, BW20, bssid = 28:77:77:af:15:0c
+
+I (1128) wifi:security: WPA2-PSK, phy: bgn, rssi: -38
+
+I (1130) wifi:pm start, type: 1
+
+
+
+I (1132) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+
+I (1140) wifi:set rx beacon pti, rx_bcn_pti: 0, bcn_timeout: 25000, mt_pti: 0, mt_time: 10000
+
+I (1200) wifi:<ba-add>idx:0 (ifx:0, 28:77:77:af:15:0c), tid:6, ssn:3, winSize:64
+
+I (1226) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+
+I (1739) cam_hal: PSRAM DMA mode disabled
+
+I (1739) cam_hal: buffer_size: 16384, half_buffer_size: 1024, node_buffer_size: 1024, node_cnt: 16, total_cnt: 15
+
+I (1743) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
+
+I (1750) cam_hal: Allocating 15360 Byte frame buffer in PSRAM
+
+I (1756) cam_hal: cam config ok
+
+I (1773) ov5640: Set PLL: bypass: 0, multiplier: 180, sys_div: 4, pre_div: 2, root_2x: 0, pclk_root_div: 2, pclk_manual: 1, pclk_div: 4
+
+I (1775) ov5640: Calculated XVCLK: 20000000 Hz, REFIN: 10000000 Hz, VCO: 1800000000 Hz, PLL_CLK: 180000000 Hz, SYSCLK: 45000000 Hz, PCLK: 11250000 Hz
+
+I (1816) CAMERA: Γ£à Camera sß║╡n s├áng: PID=0x5640 VER=0x00 | JPEG | QVGA 320x240 | V-Flip=1 H-Mirror=0 | Q=10
+
+I (1816) IMAGE_DECODER: Cß║Ñp ph├ít buffer giß║úi m├ú ß║únh trong Octal PSRAM (gray 100 KB + rgb)...
+
+I (1826) IMAGE_DECODER: Γ£à esp_new_jpeg ─æ├ú sß║╡n s├áng (RGB888 output, baseline JPEG).
+
+I (1835) IMAGE_DECODER: Crop mode: FIXED (cx=50% cy=56% size=75%)
+
+I (1841) PNP_SOLVER: ─É├ú khß╗ƒi tß║ío bß╗Ö giß║úi thuß║ºn C++ POSIT PnP th├ánh c├┤ng!
+
+I (1850) ADAS_CONTROLLER: ─É├ú khß╗ƒi tß║ío ADAS Controller State Machine. Bß║»t ─æß║ºu giai ─æoß║ín tß╗▒ hiß╗çu chuß║⌐n (5 gi├óy)...
+
+I (1863) AI_INFERENCE: ─Éang khß╗ƒi tß║ío AI Inference Engine (╞░u ti├¬n SRAM nß╗Öi cho tß╗æc ─æß╗Ö)...
+
+I (1873) AI_INFERENCE: SRAM nß╗Öi trß╗æng: 94 KB (khß╗æi liß╗ün mß║ích lß╗¢n nhß║Ñt: 50 KB) | PSRAM trß╗æng: 5936 KB
+
+W (1884) AI_INFERENCE: ΓÜá∩╕Å Kh├┤ng ─æß╗º SRAM nß╗Öi cho Arena -> d├╣ng PSRAM (chß║¡m ~6x).
+
+I (1901) AI_INFERENCE: Γ£à TFLite Micro nß║íp m├┤ h├¼nh OK | Arena d├╣ng 162 KB ß╗ƒ PSRAM (chß║¡m) | Output: FLOAT32 (Mixed-Precision)
+
+I (1906) gpio: GPIO[2]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
+
+I (1915) gpio: GPIO[48]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 1| Intr:0
+
+I (1925) TELEMETRY: Γ£à ─É├ú khß╗ƒi tß║ío Telemetry Sender -> Laptop UDP tß║íi 192.168.2.1:8889
+
+I (1934) WEB_SERVER: ─Éang khß╗ƒi ─æß╗Öng HTTP Web Server tr├¬n cß╗òng 80...
+
+I (1943) WEB_SERVER: Γ£à HTTP Web Server ─æ├ú sß║╡n s├áng phß╗Ñc vß╗Ñ Dashboard & Video Stream!
+
+I (1951) MAIN_APP: Γ£à Tß║Ñt cß║ú c├íc module phß║ºn cß╗⌐ng v├á phß║ºn mß╗üm ─æ├ú sß║╡n s├áng!
+
+I (1976) FACE_DETECTOR: BlazeFace INT8 san sang | arena dung 588 KB / 700 KB PSRAM | in 128x128x3 INT8
+
+I (2149) esp_netif_handlers: sta ip: 192.168.2.32, mask: 255.255.255.0, gw: 192.168.2.253
+
+I (2149) WIFI_STREAM: ─É├ú nhß║¡n IP tß╗½ Router: 192.168.2.32
+
+I (2153) WIFI_STREAM: ========================================================================
+
+I (2162) WIFI_STREAM: ≡ƒîÉ Hß╗å THß╗ÉNG ADAS WEB STREAM Sß║┤N S├ÇNG!
+
+I (2170) WIFI_STREAM: ≡ƒæë H├úy mß╗ƒ tr├¼nh duyß╗çt tr├¬n ─æiß╗çn thoß║íi / tablet / m├íy t├¡nh v├áo ─æß╗ïa chß╗ë:
+
+I (2181) WIFI_STREAM: ≡ƒæë http://192.168.2.32/
+
+I (2186) WIFI_STREAM: ========================================================================
+
+I (2254) wifi:<ba-add>idx:1 (ifx:0, 28:77:77:af:15:0c), tid:0, ssn:0, winSize:64
+
+W (2561) httpd_uri: httpd_uri: URI '/capture?t=1789740581246' not found
+
+W (2561) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+W (2607) MAIN_APP: DETECT: khong thay mat (lan 1, 600 ms)
+
+W (3184) MAIN_APP: DETECT: khong thay mat (lan 2, 545 ms)
+
+W (3757) MAIN_APP: DETECT: khong thay mat (lan 3, 541 ms)
+
+W (3806) httpd_uri: httpd_uri: URI '/capture?t=1789740622238' not found
+
+W (3806) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+W (4338) MAIN_APP: DETECT: khong thay mat (lan 4, 549 ms)
+
+W (4816) httpd_uri: httpd_uri: URI '/capture?t=1789740623247' not found
+
+W (4817) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+W (4922) MAIN_APP: DETECT: khong thay mat (lan 5, 552 ms)
+
+W (5495) MAIN_APP: DETECT: khong thay mat (lan 6, 542 ms)
+
+W (5944) httpd_uri: httpd_uri: URI '/capture?t=1789740624244' not found
+
+W (5944) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+W (6078) MAIN_APP: DETECT: khong thay mat (lan 7, 551 ms)
+
+W (6650) MAIN_APP: DETECT: khong thay mat (lan 8, 541 ms)
+
+W (6800) httpd_uri: httpd_uri: URI '/capture?t=1789740625247' not found
+
+W (6800) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+E (6816) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:
+
+E (6816) task_wdt:  - IDLE0 (CPU 0)
+
+E (6816) task_wdt: Tasks currently running:
+
+E (6816) task_wdt: CPU 0: main
+
+E (6816) task_wdt: CPU 1: IDLE1
+
+E (6816) task_wdt: Print CPU 0 (current core) backtrace
+
+
+
+
+
+Backtrace: 0x42056996:0x3FCA1580 0x4037C779:0x3FCA15B0 0x42053FCF:0x3FCC86E0 0x42050916:0x3FCC8700 0x4204E321:0x3FCC87A0 0x4203F7E6:0x3FCC8890 0x42047FD2:0x3FCC8DE0 0x4202D902:0x3FCC8E10 0x4200E857:0x3FCC8E30 0x4200CC3B:0x3FCC8EA0 0x420CDDBB:0x3FCC8F60
+
+--- 0x42056996: task_wdt_timeout_handling at
+C:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/task_wdt/task_wdt.c:434
+--- (inlined by) task_wdt_isr at C:/Espressif/frameworks/esp-idf-v5.3.5/components/esp_system/task_wdt/task_wdt.c:507
+--- 0x4037c779: _xt_lowint1 at C:/Espressif/frameworks/esp-idf-v5.3.5/components/xtensa/xtensa_vectors.S:1240
+--- 0x42053fcf: esp_nn_multiply_by_quantized_mult_asm_esp32s3 at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/manage
+d_components/espressif__esp-nn/src/common/esp_nn_multiply_by_quantized_mult_esp32s3.S:84
+--- 0x42050916: esp_nn_conv_s8_mult8_1x1_esp32s3 at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/
+espressif__esp-nn/src/convolution/esp_nn_conv_s8_mult8_1x1_esp32s3.S:244
+--- 0x4204e321: esp_nn_conv_s8_esp32s3 at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif_
+_esp-nn/src/convolution/esp_nn_conv_esp32s3.c:446
+--- 0x4203f7e6: tflite::(anonymous namespace)::Eval(TfLiteContext*, TfLiteNode*) at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/fi
+rmware_esp32/managed_components/espressif__esp-tflite-micro/tensorflow/lite/micro/kernels/esp_nn/conv.cc:256
+
+
+--- (inlined by) Eval at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_components/espressif__esp-tflite-micro
+/tensorflow/lite/micro/kernels/esp_nn/conv.cc:371
+--- 0x42047fd2: tflite::MicroInterpreterGraph::InvokeSubgraph(int) at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/m
+anaged_components/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter_graph.cc:277
+--- 0x4202d902: tflite::MicroInterpreter::Invoke() at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/managed_component
+s/espressif__esp-tflite-micro/tensorflow/lite/micro/micro_interpreter.cc:294
+--- 0x4200e857: face_detector_run at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/face_detector.cpp:155
+--- 0x4200cc3b: app_main at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp:353
+--- (inlined by) app_main at D:/PROJECT_13_PHAT_HIEN_BUON_NGU/firmware_esp32/main/main.cpp:779
+--- 0x420cddbb: main_task at C:/Espressif/frameworks/esp-idf-v5.3.5/components/freertos/app_startup.c:208
+W (7279) MAIN_APP: DETECT: khong thay mat (lan 9, 597 ms)
+
+W (7788) httpd_uri: httpd_uri: URI '/capture?t=1789740626240' not found
+
+W (7788) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+W (7862) MAIN_APP: DETECT: khong thay mat (lan 10, 552 ms)
+
+W (7862) MAIN_APP: Khong detect duoc -> dung crop co dinh
+
+I (7866) FD_LITE: FaceDetectorLite san sang | arena dung 78 KB / 200 KB PSRAM | in 96x96x1 INT8 | out 4 float32
+
+I (7874) ADAS_CONTROLLER: ─É├ú khß╗ƒi tß║ío ADAS Controller State Machine. Bß║»t ─æß║ºu giai ─æoß║ín tß╗▒ hiß╗çu chuß║⌐n (5 gi├óy)...
+
+I (7887) MAIN_APP: D16: task DECODE+PREVIEW+LITE tren Core 0 (double-buffer) san sang
+
+I (7931) MAIN_APP: ≡ƒô╖ Chß║┐ ─æß╗Ö ONBOARD CAMERA: ESP32 tß╗▒ thu h├¼nh, kh├┤ng d├╣ng TCP laptop.
+
+I (8104) MAIN_APP: ≡ƒÄë Hß╗ç thß╗æng ─æa nh├ón FreeRTOS ─æ├ú khß╗ƒi chß║íy song song tr├¬n 2 nh├ón LX7!
+
+I (8104) MAIN_APP: ≡ƒÜÇ Khß╗ƒi chß║íy Edge AI & ADAS Task tr├¬n Core 1 (Priority 6, 240MHz)
+
+I (8112) main_task: Returned from app_main()
+
+I (8259) TELEMETRY: ─É├ú gß╗¡i 1 g├│i telemetry tß╗¢i 192.168.2.1:8889
+
+W (8788) httpd_uri: httpd_uri: URI '/capture?t=1789740627240' not found
+
+W (8788) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (8827) MAIN_APP: [Frame #   5] FPS:  7.1 | Dec: 34.0ms | AI: 137.7ms | PnP: 0.1ms | Lite: 92.6ms | Total: 142.6ms | ROI: 106,49,150 | EAR: 0.17 | MAR: 0.24 | Yaw: +34.6┬░ | Status: CALIBRATING... (4.1s)
+
+I (9539) MAIN_APP: [Frame #  10] FPS:  7.0 | Dec: 33.9ms | AI: 135.8ms | PnP: 0.1ms | Lite: 82.3ms | Total: 140.6ms | ROI: 107,50,149 | EAR: 0.18 | MAR: 0.24 | Yaw: +37.2┬░ | Status: CALIBRATING... (3.3s)
+
+W (9784) httpd_uri: httpd_uri: URI '/capture?t=1789740628236' not found
+
+W (9784) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (10253) MAIN_APP: [Frame #  15] FPS:  7.0 | Dec: 34.0ms | AI: 136.1ms | PnP: 0.1ms | Lite: 81.5ms | Total: 141.0ms | ROI: 107,50,149 | EAR: 0.17 | MAR: 0.24 | Yaw: +37.4┬░ | Status: CALIBRATING... (2.6s)
+
+W (10833) httpd_uri: httpd_uri: URI '/capture?t=1789740629237' not found
+
+W (10833) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (10969) MAIN_APP: [Frame #  20] FPS:  7.0 | Dec: 34.1ms | AI: 140.7ms | PnP: 0.1ms | Lite: 83.3ms | Total: 145.6ms | ROI: 107,50,149 | EAR: 0.18 | MAR: 0.24 | Yaw: +33.7┬░ | Status: CALIBRATING... (1.9s)
+
+I (11681) MAIN_APP: [Frame #  25] FPS:  7.0 | Dec: 34.3ms | AI: 136.0ms | PnP: 0.1ms | Lite: 81.4ms | Total: 140.9ms | ROI: 107,50,149 | EAR: 0.17 | MAR: 0.24 | Yaw: +36.3┬░ | Status: CALIBRATING... (1.2s)
+
+W (11789) httpd_uri: httpd_uri: URI '/capture?t=1789740630245' not found
+
+W (11790) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (12395) MAIN_APP: [Frame #  30] FPS:  7.0 | Dec: 34.1ms | AI: 136.4ms | PnP: 0.1ms | Lite: 82.0ms | Total: 141.3ms | ROI: 107,51,149 | EAR: 0.18 | MAR: 0.24 | Yaw: +32.6┬░ | Status: CALIBRATING... (0.5s)
+
+W (12782) httpd_uri: httpd_uri: URI '/capture?t=1789740631236' not found
+
+W (12783) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (12963) ADAS_CONTROLLER: Γ£à Hiß╗çu chuß║⌐n th├ánh c├┤ng! Baseline: EAR=0.18, MAR=0.24 | Bias pose: pitch=+7.6┬░ yaw=+37.1┬░ | Ng╞░ß╗íng b├ío: EAR<0.15, MAR>0.40
+
+I (13112) MAIN_APP: [Frame #  35] FPS:  7.0 | Dec: 34.3ms | AI: 136.1ms | PnP: 0.1ms | Lite: 81.3ms | Total: 141.0ms | ROI: 107,50,149 | EAR: 0.18 | MAR: 0.23 | Yaw: +33.6┬░ | Status: NORMAL
+
+W (13795) httpd_uri: httpd_uri: URI '/capture?t=1789740632247' not found
+
+W (13795) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (13826) MAIN_APP: [Frame #  40] FPS:  7.0 | Dec: 34.1ms | AI: 138.3ms | PnP: 0.1ms | Lite: 93.4ms | Total: 143.3ms | ROI: 106,49,150 | EAR: 0.17 | MAR: 0.24 | Yaw: +32.7┬░ | Status: NORMAL
+
+I (14536) MAIN_APP: [Frame #  45] FPS:  7.0 | Dec: 33.8ms | AI: 135.9ms | PnP: 0.1ms | Lite: 82.4ms | Total: 141.0ms | ROI: 107,50,149 | EAR: 0.19 | MAR: 0.23 | Yaw: +34.8┬░ | Status: NORMAL
+
+W (14787) httpd_uri: httpd_uri: URI '/capture?t=1789740633241' not found
+
+W (14787) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (14861) IMAGE_DECODER: [Decode avg] JPEG: 23.7 ms | Gray+Downsample: 9.6 ms
+
+I (15249) MAIN_APP: [Frame #  50] FPS:  7.0 | Dec: 34.8ms | AI: 135.6ms | PnP: 0.1ms | Lite: 82.4ms | Total: 140.9ms | ROI: 106,50,149 | EAR: 0.19 | MAR: 0.24 | Yaw: +32.5┬░ | Status: NORMAL
+
+W (15827) httpd_uri: httpd_uri: URI '/capture?t=1789740634235' not found
+
+W (15827) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI
+
+I (15964) MAIN_APP: [Frame #  55] FPS:  7.0 | Dec: 34.9ms | AI: 140.5ms | PnP: 0.1ms | Lite: 81.7ms | Total: 145.5ms | ROI: 107,50,149 | EAR: 0.19 | MAR: 0.23 | Yaw: +33.6┬░ | Status: NORMAL
+
+I (16675) MAIN_APP: [Frame #  60] FPS:  7.0 | Dec: 34.7ms | AI: 135.7ms | PnP: 0.1ms | Lite: 82.0ms | Total: 140.6ms | ROI: 107,50,149 | EAR: 0.17 | MAR: 0.24 | Yaw: +37.0┬░ | Status: NORMAL
+
+W (16785) httpd_uri: httpd_uri: URI '/capture?t=1789740635241' not found
+
+W (16786) httpd_txrx: httpd_resp_send_err: 404 Not Found - Nothing matches the given URI

@@ -22,6 +22,7 @@
 #include "pnp_solver.h"
 #include "adas_controller.h"
 #include "telemetry_sender.h"
+#include "web_server.h"
 #include "tinydriver_model_data.h"
 
 static const char* TAG = "MAIN_APP";
@@ -235,6 +236,14 @@ static SemaphoreHandle_t s_buf_free[TD_DEC_NBUF]  = {NULL, NULL};   // Core 0 ch
 static SemaphoreHandle_t s_buf_ready[TD_DEC_NBUF] = {NULL, NULL};   // Core 1 cho (buffer san sang)
 static StaticSemaphore_t s_buf_free_storage[TD_DEC_NBUF];           // cap phat TINH -> khong the that bai
 static StaticSemaphore_t s_buf_ready_storage[TD_DEC_NBUF];
+// [D21] Staging JPEG theo tung slot: de Core 1 phat len web CUNG LUC voi du lieu AI.
+// LY DO: web stream lay frame camera tho (~25-30fps) con overlay (22 diem + ROI + MAR)
+// chi ~7fps va tre them ~140ms (pipeline AI) => lop phu LUON DI SAU video => nhin nhu
+// "diem sai cho / mieng sai / quay dau sai / lag" khi nguoi dung di chuyen hay ngap.
+// Phat frame cua CHINH frame ma AI vua xu ly => video va overlay KHOP NHAU.
+#define TD_STAGE_JPEG_MAX (40 * 1024)
+static uint8_t* s_stage_jpeg[TD_DEC_NBUF] = {NULL, NULL};
+static size_t   s_stage_len[TD_DEC_NBUF] = {0, 0};
 static volatile int s_dec_slot = 0;      // buffer Core 1 dang dung (chi Core 1 ghi/doc)
 static TaskHandle_t s_decode_task = NULL;
 static TaskHandle_t s_ai_task_h = NULL;
@@ -257,6 +266,11 @@ static void vTaskDecodeC0(void* arg) {
         }
         const uint8_t* jpeg = cam.data;
         size_t jlen = cam.length;
+        // [D21] Chi COPY vao staging, KHONG phat len web o day (doi AI xu ly xong)
+        if (s_stage_jpeg[cur] && jlen > 0 && jlen <= TD_STAGE_JPEG_MAX) {
+            memcpy(s_stage_jpeg[cur], jpeg, jlen);
+            s_stage_len[cur] = jlen;
+        }
 #else
         frame_buffer_t frameb;
         if (!wifi_stream_acquire_latest_frame(&frameb, 100)) {
@@ -267,6 +281,10 @@ static void vTaskDecodeC0(void* arg) {
         }
         const uint8_t* jpeg = frameb.buffer;
         size_t jlen = frameb.length;
+        if (s_stage_jpeg[cur] && jlen > 0 && jlen <= TD_STAGE_JPEG_MAX) {
+            memcpy(s_stage_jpeg[cur], jpeg, jlen);
+            s_stage_len[cur] = jlen;
+        }
 #endif
 
         // ROI: uu tien detector, fallback landmark tracker (giong laptop)
@@ -390,6 +408,7 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
         const image_crop_roi_t* p_roi = NULL;
         int64_t t_decode = 0;
         bool has_roi = false;
+        int dec_slot_used = 0;   // [D21] slot buffer AI vua xu ly (de phat web dung frame)
 
 #if TD_PIPELINE_DECODE_C0
         // [D16] Cho buffer DA GIAI MA SAN (double-buffer). Core 0 da giai ma frame nay
@@ -412,6 +431,7 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
                    (size_t)TINYDRIVER_INPUT_WIDTH * TINYDRIVER_INPUT_HEIGHT);
             xSemaphoreGive(s_buf_free[slot]);      // tra buffer NGAY -> Core 0 giai ma tiep
             s_dec_slot ^= 1;
+            dec_slot_used = slot;                  // [D21] nho slot de phat web sau khi AI xong
         }
         portENTER_CRITICAL(&s_crop_mux);
         has_roi = s_det_crop_valid;
@@ -433,6 +453,7 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
         jpeg_data = cam_frame.data;
         jpeg_len = cam_frame.length;
         frame_index = ++s_device_frame_counter;
+        web_server_update_frame(jpeg_data, jpeg_len);
 #else
         frame_buffer_t frame;
         // 1. Acquire the latest 1:1 JPEG frame from PSRAM Double Buffer
@@ -444,6 +465,7 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
         jpeg_data = frame.buffer;
         jpeg_len = frame.length;
         frame_index = frame.frame_index;
+        web_server_update_frame(jpeg_data, jpeg_len);
 #endif
 
         // 2. Fast JPEG Decode & Isomorphic Downsample directly to 96x96 INT8
@@ -565,7 +587,11 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
             for (int i = 0; i < 6; i++)  { eA_x += landmarks[i].x; eA_y += landmarks[i].y; }
             for (int i = 6; i < 12; i++) { eB_x += landmarks[i].x; eB_y += landmarks[i].y; }
             eA_x /= 6.0f; eA_y /= 6.0f; eB_x /= 6.0f; eB_y /= 6.0f;
-            float dxe = eA_x - eB_x, dye = eA_y - eB_y;      // mắt A -> mắt B (trái ảnh)
+            // [D20-FIX] P0..P5 nam o NUA TRAI anh (x~0.34), P6..P11 o NUA PHAI (x~0.66).
+            // Truoc day tinh dxe = eA - eB => dxe AM (~-0.31) => atan2(dy,dxe) tra
+            // ~+/-180 do va NHAY LOAN (do thuc te: std=171 do!) => roll rac tren HUD.
+            // Dung vector mat-trai-anh -> mat-phai-anh (eB - eA) de dxe > 0.
+            float dxe = eB_x - eA_x, dye = eB_y - eA_y;
             float d_eyes = sqrtf(dxe * dxe + dye * dye);
             if (d_eyes > 1e-4f) {
                 float roll_geo = atan2f(dye, dxe) * 57.2957795f;
@@ -625,6 +651,12 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
         // 5. Update ADAS Finite State Machine (EAR, MAR, Microsleep, Fatigue, Distraction)
         adas_controller_update(landmarks, &head_pose, current_fps, &adas_metrics);
 
+        // [D23] HIỂN THỊ pose ĐÃ TRỪ BIAS: nếu không, khi mặt hướng thẳng thì
+        // PITCH/YAW vẫn hiện ~+10..14° (bias POSIT) -> trục X/Y/Z nghiêng sai trên web.
+        // (ADAS bên trong vẫn dùng bias riêng để báo mất tập trung — không đổi hành vi.)
+        adas_metrics.pose.pitch -= adas_controller_get_pitch_bias();
+        adas_metrics.pose.yaw   -= adas_controller_get_yaw_bias();
+
         // 6. Dispatch Telemetry JSON to Laptop Host & Actuate Onboard Buzzer/LED
         telemetry_sender_set_timing((float)t_decode / 1000.0f, (float)t_ai / 1000.0f,
                                     (float)(esp_timer_get_time() - t0) / 1000.0f);
@@ -640,6 +672,26 @@ static void vTaskEdgeAI_ADAS(void* pvParameters) {
 #endif
         telemetry_sender_set_roi(crop_mode, roi_used.x0, roi_used.y0, roi_used.size);
         telemetry_sender_dispatch(&adas_metrics, landmarks);
+
+        // [D21] Phat khung hinh len Web Dashboard CUNG LUC voi du lieu AI (22 diem/ROI/MAR)
+        // => video va lop phu KHOP NHAU (het cam giac "diem sai cho / lag" khi di chuyen).
+        if (s_stage_jpeg[dec_slot_used] && s_stage_len[dec_slot_used] > 0) {
+            web_server_update_frame(s_stage_jpeg[dec_slot_used], s_stage_len[dec_slot_used]);
+        }
+
+        // Cập nhật số liệu telemetry và 22 mốc lên Web Dashboard
+        web_server_update_telemetry(&adas_metrics, landmarks,
+                                   crop_mode, roi_used.x0, roi_used.y0, roi_used.size,
+                                   (float)t_decode / 1000.0f,
+                                   (float)t_ai / 1000.0f,
+                                   (float)t_pnp / 1000.0f,
+                                   (float)(esp_timer_get_time() - t0) / 1000.0f);
+
+        // Kiểm tra xem người dùng có bấm nút "Hiệu chuẩn lại" từ Web UI không
+        if (web_server_is_recalibrate_requested()) {
+            ESP_LOGI(TAG, "🔄 Kích hoạt lại quá trình tự hiệu chuẩn ADAS theo yêu cầu Web UI!");
+            adas_controller_init();
+        }
 
         // 6b. [v2.7.0] Gửi ảnh 96x96 (đúng cái ESP32 nhìn) để laptop HIỂN THỊ (display-only)
         telemetry_sender_image(s_model_input_snapshot,
@@ -749,6 +801,11 @@ extern "C" void app_main(void) {
         return;
     }
 
+    // Khởi tạo HTTP Web Server nhúng (Port 80)
+    if (!web_server_init()) {
+        ESP_LOGW(TAG, "Khởi tạo Web Server thất bại (kiểm tra tài nguyên mạng)!");
+    }
+
     ESP_LOGI(TAG, "✅ Tất cả các module phần cứng và phần mềm đã sẵn sàng!");
 
     // [D2] Detect 1 lần để xác định vùng crop khuôn mặt (BlazeFace)
@@ -762,6 +819,13 @@ extern "C" void app_main(void) {
 
     // [D16] Task PIPELINE Core 0: DECODE (double-buffer) + PREVIEW + LITE
 #if TD_PIPELINE_DECODE_C0
+    // [D21] Cap phat staging JPEG (PSRAM) de phat web cung luc voi du lieu AI
+    for (int i = 0; i < TD_DEC_NBUF; i++) {
+        s_stage_jpeg[i] = (uint8_t*)heap_caps_malloc(TD_STAGE_JPEG_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_stage_jpeg[i]) {
+            ESP_LOGW(TAG, "D21: khong cap phat duoc staging JPEG[%d] -> web stream se cham", i);
+        }
+    }
     for (int i = 0; i < TD_DEC_NBUF; i++) {
         s_buf_free[i]  = xSemaphoreCreateBinaryStatic(&s_buf_free_storage[i]);
         s_buf_ready[i] = xSemaphoreCreateBinaryStatic(&s_buf_ready_storage[i]);
