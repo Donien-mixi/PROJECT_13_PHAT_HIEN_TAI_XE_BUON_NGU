@@ -83,6 +83,10 @@ static inline float euclidean_dist(point2d_t a, point2d_t b) {
     return sqrtf(dx * dx + dy * dy);
 }
 
+// [D23] Bias pose (đo lúc hiệu chuẩn 5s) để hiển thị pose đã trừ bias
+float adas_controller_get_pitch_bias(void) { return s_pitch_bias; }
+float adas_controller_get_yaw_bias(void)   { return s_yaw_bias; }
+
 void adas_controller_init(void) {
     s_start_time_us = esp_timer_get_time();
     s_is_calibrated = false;
@@ -137,15 +141,13 @@ void adas_controller_update(const point2d_t landmarks[22],
     // ĐO THỰC TẾ: điểm miệng của model nhấp nháy (0.99 -> 0.22 trong <1s) vì miệng
     // là vùng model yếu nhất (lệch MediaPipe 5.68px) -> điều kiện "MAR>ngưỡng LIÊN TỤC
     // 1.5s" không bao giờ đạt -> KHÔNG BAO GIỜ BÁO NGÁP. Lọc trượt khử nhấp nháy.
-    #define MAR_SMOOTH_N 4
-    static float s_mar_hist[MAR_SMOOTH_N] = {0};
-    static int   s_mar_idx = 0, s_mar_fill = 0;
-    s_mar_hist[s_mar_idx] = mar_raw;
-    s_mar_idx = (s_mar_idx + 1) % MAR_SMOOTH_N;
-    if (s_mar_fill < MAR_SMOOTH_N) s_mar_fill++;
-    float mar_sum = 0.0f;
-    for (int i = 0; i < s_mar_fill; i++) mar_sum += s_mar_hist[i];
-    float mar = (s_mar_fill > 0) ? (mar_sum / (float)s_mar_fill) : mar_raw;
+    // [D22] KHÔNG lọc trượt MAR nữa.
+    // ĐO THỰC TẾ (so log song song): CÙNG model TinyDriverNet, cùng người:
+    //   - Trên laptop: MAR ngáp đạt 0.84 – 1.05
+    //   - Trên ESP32  : chỉ 0.60  => bộ lọc trung bình trượt 4-tap (D10) ĂN MẤT ĐỈNH NGÁP.
+    // => Dùng MAR THÔ (khớp đúng laptop), chống nhấp nháy bằng "grace 2 frame" ở
+    //    state machine phía dưới (chỉ reset bộ đếm khi miệng đóng LIÊN TỤC 2 frame).
+    float mar = mar_raw;
 
     // 3. Calibration Phase (First 5 Seconds)
     if (!s_is_calibrated) {
@@ -224,10 +226,15 @@ void adas_controller_update(const point2d_t landmarks[22],
     }
 
     // 5. Mouth State & Yawn Detection
+    // [D22] GRACE: chỉ reset bộ đếm khi miệng ĐÓNG LIÊN TỤC >= 2 frame. Nhờ vậy khử được
+    // hiện tượng model nhấp nháy (0.99 -> 0.22 trong 1 frame) mà KHÔNG làm mất đỉnh ngáp
+    // như bộ lọc trượt trước đây.
     bool mouth_open = (mar > s_mar_threshold);
     int64_t mouth_open_duration = 0;
+    static int s_mouth_closed_cnt = 0;
 
     if (mouth_open) {
+        s_mouth_closed_cnt = 0;
         if (s_mouth_open_start_us == 0) {
             s_mouth_open_start_us = now;
         }
@@ -247,8 +254,11 @@ void adas_controller_update(const point2d_t landmarks[22],
             ESP_LOGI(TAG, "🥱 Phát hiện sự kiện NGÁP (Lần thứ %u)!", (unsigned int)s_total_yawns);
         }
     } else {
-        s_mouth_open_start_us = 0;
-        s_is_currently_yawning = false;
+        s_mouth_closed_cnt++;
+        if (s_mouth_closed_cnt >= 2) {
+            s_mouth_open_start_us = 0;
+            s_is_currently_yawning = false;
+        }
     }
 
     // Count recent yawns within 3-minute rolling window

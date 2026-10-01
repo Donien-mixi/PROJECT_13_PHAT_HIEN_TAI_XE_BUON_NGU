@@ -62,7 +62,12 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "Đã nhận IP từ Router: " IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "Da nhan IP tu Router: " IPSTR, IP2STR(&event->ip_info.ip));
+        // [v2] In URL bang ESP_LOGI (printf khong vao duoc log Serial/monitor)
+        ESP_LOGI(TAG, "========================================================================");
+        ESP_LOGI(TAG, ">>> WEB DASHBOARD URL: http://" IPSTR "/ <<<", IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, ">>> Mo trinh duyet (cung mang WiFi) vao dia chi tren de xem Dashboard + 22 moc! <<<");
+        ESP_LOGI(TAG, "========================================================================");
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
