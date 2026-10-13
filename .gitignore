@@ -52,3 +52,10 @@ test_camera_ov5620_on_ESP32-S3 WROOM-1 N16R8 CAM/
 *.tflite
 !host_laptop/models/tinydriver_model.tflite
 !training_tinyml/tinydriver_model.tflite
+
+# Tài liệu hướng dẫn nội bộ (chỉ đẩy sản phẩm/code lên GitHub)
+/huong_dan_chay_project.md
+/mo-ta-chi-tiet-de-tai-aiot.md
+/KIEN_TRUC_NEN_TANG.md
+/host_laptop/README.md
+/firmware_esp32/README.md
