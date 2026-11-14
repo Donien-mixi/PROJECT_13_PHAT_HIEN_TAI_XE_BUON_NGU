@@ -157,6 +157,14 @@ phát hiện `mar 2,4–2,7` khi **đóng miệng**. Nguyên nhân: map 6 điể
 - Lưu ý: lịch sử git vẫn nặng (~1,1 GiB pack) do file lớn của giai đoạn cũ; muốn repo nhẹ phải viết lại
   lịch sử (BFG/filter-repo) — chưa làm.
 
+**MẪU CẤU HÌNH WI-FI + LỆNH ĐIỀN TỰ ĐỘNG (14/11 — commit `9035011`):**
+- `firmware_esp32/main/wifi_secret.h.example` (tracked): 2 dòng ghi rõ **"DIEN TEN WI-FI"** và
+  **"DIEN MAT KHAU"** + hướng dẫn; `wifi_secret.h` thật vẫn **gitignored** (máy anh giữ nguyên).
+- `tools/set_wifi.ps1 -Ssid X -Password Y [-Build -Flash -Port COM3]`: ghi header bằng 1 lệnh rồi build/nạp.
+- `tools/flash_release.ps1` thêm `-App <path>` để nạp app tự build (bỏ qua hash app gốc; vẫn kiểm hash
+  các phần khác). Đã test end-to-end: set_wifi → build → flash -AppOnly -App → board lên Wi-Fi, web OK.
+- `release/app.bin` trong repo vẫn **không chứa Wi-Fi của ai** (placeholder `CHANGE_ME`).
+
 **Việc đầu tiên phiên sau:**
 1. **Đo 3 người thật** (chỉ cách này mới chứng minh đa tài xế): mỗi người 1 vòng 2 phút
    (`tools/live_session_cue.py --rounds 1`), chấm `tools/live_session_analyze.py --latency 7.7`.
