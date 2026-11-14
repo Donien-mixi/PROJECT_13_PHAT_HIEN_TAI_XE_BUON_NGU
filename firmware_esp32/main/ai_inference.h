@@ -16,6 +16,9 @@ extern "C" {
  */
 bool ai_inference_init(void);
 
+/** Set the full-resolution grayscale frame + ROI used by the landmark model. */
+void ai_inference_set_source(const uint8_t* gray, int w, int h, int rx, int ry, int rs);
+
 /**
  * Returns a direct pointer to the 96x96 INT8 input tensor buffer.
  */
@@ -30,8 +33,21 @@ int8_t* ai_inference_get_input_buffer(void);
  */
 bool ai_inference_run(point2d_t out_landmarks[22], int64_t* out_latency_us);
 
+/** Last 106 raw landmarks (ROI-normalised), updated every inference. */
+extern float g_lm106[106][2];
+
+/**
+ * [13/11] Copy of the last PIPNet 98 landmarks in FRAME pixel coordinates.
+ * Used to build the landmark bbox for the detector/landmark fusion.
+ */
+bool ai_inference_get_last_pts98(float out[98][2]);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif // AI_INFERENCE_H_
+
+
+
+

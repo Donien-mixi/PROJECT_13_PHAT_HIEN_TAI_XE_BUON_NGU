@@ -5,6 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// [14/11 - SPEED] 1 = the OV5640 is configured for YUV422/GRAYSCALE so the pipeline can read the
+// Y plane directly and skip the JPEG decode (~0.60 s/frame on QVGA). 0 = hardware JPEG (old path).
+#ifndef TD_CAM_RAW_GRAY
+#define TD_CAM_RAW_GRAY 0
+#endif
+
+
 // A single captured frame. For the OV5640 we request the sensor's hardware
 // JPEG output, so `data` points to a baseline JPEG byte stream.
 typedef struct {
@@ -12,6 +19,12 @@ typedef struct {
     size_t length;
     int width;
     int height;
+    // [P1 - TRUY VET] So thu tu frame (tang dan theo moi lan acquire thanh cong).
+    uint32_t seq;
+    // [P1 - TRUY VET] Thoi diem bat dau nhan frame tu DMA (esp_timer, us).
+    // Lay tu camera_fb_t.timestamp (cam_hal.c set khi VSYNC frame) -> gan dung
+    // thoi diem "chup"; dung de do tuoi anh capture -> publish.
+    int64_t timestamp_us;
 } camera_frame_t;
 
 // Initializes the onboard OV5640 via the DVP 24-pin interface.

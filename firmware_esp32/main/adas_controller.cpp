@@ -8,20 +8,33 @@
 #include "esp_log.h"
 #else
 #include <chrono>
-static int64_t esp_timer_get_time() {
-    auto now = std::chrono::steady_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-}
+// Host build (tools/adas_replay_test.cpp): the clock is driven by the test so the
+// same code can be replayed at 4,3 FPS and at 0,12 FPS without waiting in real time.
+static int64_t g_adas_host_now_us = 0;
+void adas_host_set_now_us(int64_t t_us) { g_adas_host_now_us = t_us; }
+static int64_t esp_timer_get_time() { return g_adas_host_now_us; }
 #define ESP_LOGI(tag, fmt, ...) printf("[%s] " fmt "\n", tag, ##__VA_ARGS__)
+#define ESP_LOGW(tag, fmt, ...) printf("[%s][W] " fmt "\n", tag, ##__VA_ARGS__)
 #define ESP_LOGE(tag, fmt, ...) fprintf(stderr, "[ERROR][%s] " fmt "\n", tag, ##__VA_ARGS__)
 #endif
 
 static const char* TAG = "ADAS_CONTROLLER";
 
 // Timing thresholds (microseconds)
-#define CALIBRATION_DURATION_US   (5 * 1000 * 1000)   // 5 seconds calibration
+// [13/11] Calibration: frame-count driven (xem khối calibration) — 5 s wall-clock chỉ chứa
+// 1 khung ở 0,12 FPS nên không bao giờ đủ mẫu để tính bias pose / ngưỡng EAR.
+#define CALIB_MIN_SAMPLES         4
+#define CALIB_MAX_SAMPLES         10
+#define CALIB_MIN_TIME_US         (4 * 1000 * 1000)
 #define SLOW_BLINK_DURATION_US    (500 * 1000)        // 0.5s slow blink
+#define EYE_MAX_FRAME_AGE_US       (600 * 1000)
+#define EYE_MAX_SAMPLE_GAP_US      (500 * 1000)
 #define MICROSLEEP_DURATION_US    (1500 * 1000)       // 1.5s microsleep
+// [13/11] Cổng tin cậy mí mắt: khi đầu quay/cúi quá mức, điểm mí của PIPNet bị kéo
+// (đo được EAR 0,143 khi quay trái so với 0,20 lúc nhìn thẳng) -> coi mẫu là không hợp lệ
+// thay vì tính thành "nhắm mắt".
+#define EYE_MAX_YAW_DEV_DEG       25.0f
+#define EYE_MAX_PITCH_DEV_DEG     30.0f
 #define YAWN_EVENT_DURATION_US    (1200 * 1000)       // [D14] 1.2s (bù việc lọc MAR 4-tap ăn ~0.35s mỗi đầu, yawn thật 1.5-3s vẫn dư biên)
 #define DISTRACTION_DURATION_US   (3000 * 1000)       // 3.0s head turned away
 #define YAWN_WINDOW_US            (180 * 1000 * 1000) // 3 minutes rolling window
@@ -44,6 +57,24 @@ static float s_yaw_bias = 0.0f;     // [D9] baseline yaw — tránh BÁO ĐỘNG
 static uint32_t s_calib_count = 0;
 
 // Median (sắp xếp nổi bọt/chèn tại chỗ, n <= 256)
+// [11/11] Robust baseline: percentile of the calibration EAR samples, so blinks or
+// half-closed eyes during calibration do not drag the open-eye baseline down.
+static float compute_percentile(float* buf, uint32_t n, float p) {
+    if (n == 0 || !buf) return 0.0f;
+    float tmp[MAX_CALIB_SAMPLES];
+    uint32_t m = n < MAX_CALIB_SAMPLES ? n : MAX_CALIB_SAMPLES;
+    for (uint32_t i = 0; i < m; i++) tmp[i] = buf[i];
+    for (uint32_t i = 1; i < m; i++) {
+        float v = tmp[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && tmp[j] > v) { tmp[j + 1] = tmp[j]; j--; }
+        tmp[j + 1] = v;
+    }
+    uint32_t idx = (uint32_t)(p * (float)(m - 1) + 0.5f);
+    if (idx >= m) idx = m - 1;
+    return tmp[idx];
+}
+
 static float compute_median(float* buf, uint32_t n) {
     if (n == 0) return 0.0f;
     for (uint32_t i = 1; i < n; i++) {
@@ -58,14 +89,37 @@ static float compute_median(float* buf, uint32_t n) {
 
 // Adaptive Dynamic Thresholds
 static float s_ear_threshold = 0.21f;
+static float s_ear_baseline = 0.0f;   // [14/11] p75 EAR luc hieu chuan (mo mat)
+// [11/11] Student eye-state: P(closed) tu mo hinh 48x48, -1 khi khong co.
+static float s_eye_prob = -1.0f;
+static const float EYE_PROB_CLOSED_THRESH = 0.50f;
 static float s_mar_threshold = 0.45f;
 static const float s_yaw_threshold_deg = 30.0f;
 static const float s_pitch_threshold_deg = 25.0f;
 
 // Duration Tracking Timers
 static int64_t s_eye_closed_start_us = 0;
+static int64_t s_last_eye_capture_us = 0;
+static bool s_eye_sample_lost = false;
+// [14/11] "Kiem tra dinh ky": lich su trang thai mat de mot mau bi lo (detector miss)
+// khong xoa mat ca dot nham mat. 1 = nham, 0 = mo, -1 = khong biet.
+#define EYE_HIST_LEN 12
+static int8_t s_eye_hist[EYE_HIST_LEN] = {0};
+static int s_eye_hist_pos = 0, s_eye_hist_n = 0;
 static int64_t s_mouth_open_start_us = 0;
 static int64_t s_distraction_start_us = 0;
+
+// [13/11] FPS-adaptive eye timing.
+// Ở 4,3 FPS (v3/Lite) một cử chỉ 1,5 s ≈ 7 khung; ở 0,12 FPS (PIPNet) chỉ có 1 khung.
+// Vì vậy "nhắm mắt" được đếm bằng SỐ MẪU liên tiếp, với ngưỡng suy ra từ chu kỳ khung
+// đo được, để cùng một logic chạy đúng ở cả hai tốc độ.
+static int64_t s_period_us = 0;          // EMA chu kỳ khung (capture_us)
+static int64_t s_last_any_capture_us = 0; // mọi mẫu, kể cả không hợp lệ (đo chu kỳ)
+static int s_eye_closed_samples = 0;     // số mẫu "nhắm" liên tiếp
+static int s_k_slow = 1, s_k_micro = 2;  // ngưỡng mẫu cho slow-blink / microsleep
+// [13/11] PIPNet trả landmark rác khi không có mặt trong khung (ROI dự phòng) -> EAR 0,03
+// sẽ bị tính là "nhắm". Pipeline bật/tắt đường mắt theo kết quả detector.
+static bool s_eye_enabled = true;
 
 // Yawn Tracking History
 static int64_t s_yawn_timestamps[MAX_YAWN_HISTORY] = {0};
@@ -86,13 +140,37 @@ static inline float euclidean_dist(point2d_t a, point2d_t b) {
 // [D23] Bias pose (đo lúc hiệu chuẩn 5s) để hiển thị pose đã trừ bias
 float adas_controller_get_pitch_bias(void) { return s_pitch_bias; }
 float adas_controller_get_yaw_bias(void)   { return s_yaw_bias; }
+float adas_controller_get_ear_baseline(void) { return s_ear_baseline; }
+
+static void reset_eye_timer(void) {
+    s_eye_closed_start_us = 0;
+    s_eye_closed_samples = 0;
+    s_was_eye_closed = false;
+    // lich su KHONG bi xoa: chi cuon theo thoi gian de chiu duoc 1 mau bi lo
+}
+
+void adas_controller_invalidate_eye_sample(void) {
+    reset_eye_timer();
+    s_eye_sample_lost = true;
+}
+
+void adas_controller_set_eye_prob(float p_closed) { s_eye_prob = p_closed; }
+
+void adas_controller_set_eye_enabled(bool enabled) { s_eye_enabled = enabled; }
 
 void adas_controller_init(void) {
+    s_eye_prob = -1.0f;
     s_start_time_us = esp_timer_get_time();
     s_is_calibrated = false;
     s_calib_count = 0;
+    s_period_us = 0;                 // [13/11] đo lại chu kỳ khung sau khi khởi tạo lại
+    s_last_any_capture_us = 0;
+    s_eye_enabled = true;
+    s_eye_closed_samples = 0;
 
     s_eye_closed_start_us = 0;
+    s_last_eye_capture_us = 0;
+    s_eye_sample_lost = false;
     s_mouth_open_start_us = 0;
     s_distraction_start_us = 0;
 
@@ -109,7 +187,19 @@ void adas_controller_update(const point2d_t landmarks[22],
                             const head_pose_t* pose,
                             float fps,
                             adas_metrics_t* out_metrics) {
+    adas_controller_update_capture(landmarks, pose, fps, esp_timer_get_time(), out_metrics);
+}
+
+void adas_controller_update_capture(const point2d_t landmarks[22],
+                                    const head_pose_t* pose,
+                                    float fps,
+                                    int64_t capture_us,
+                                    adas_metrics_t* out_metrics) {
     int64_t now = esp_timer_get_time();
+
+    out_metrics->eye = {capture_us > 0 && capture_us <= now
+        ? (float)(now - capture_us) / 1000.0f : -1.0f,
+        0.0f, false, false, "calibrating"};
 
     // 1. Calculate Eye Aspect Ratio (EAR)
     // Left Eye: 0 (outer), 1, 2, 3 (inner), 4, 5
@@ -149,10 +239,22 @@ void adas_controller_update(const point2d_t landmarks[22],
     //    state machine phía dưới (chỉ reset bộ đếm khi miệng đóng LIÊN TỤC 2 frame).
     float mar = mar_raw;
 
-    // 3. Calibration Phase (First 5 Seconds)
+    // 3. Calibration Phase
+    // [13/11] Calibration is now FRAME-COUNT driven, not wall-clock driven.
+    // ĐO THỰC TẾ: ở chế độ PIPNet-98 (0,12 FPS = 8,2 s/khung) cửa sổ 5 s chỉ chứa 1 khung
+    // -> s_calib_count = 1 -> khối "count > 10" không bao giờ chạy -> không có bias pose,
+    // không có ngưỡng EAR => yaw thô +40..+65° khi nhìn thẳng => DISTRACTION ALARM vĩnh viễn
+    // (bằng chứng: serial_live5.log 400 s, 8/9 khung báo DISTRACTION, 0 lần "Hiệu chuẩn thành công").
     if (!s_is_calibrated) {
-        if (now - s_start_time_us < CALIBRATION_DURATION_US) {
-            if (s_calib_count < MAX_CALIB_SAMPLES) {
+        const int64_t cal_elapsed = now - s_start_time_us;
+        // [13/11] Chỉ lấy mẫu hiệu chuẩn khi có mặt + EAR hợp lý. Trước đây gom mù nên
+        // khi vắng người baseline EAR = 0,09 (rác) -> ngưỡng báo sai.
+        const bool cal_plausible = s_eye_enabled && isfinite(ear) && ear > 0.05f && ear < 0.60f &&
+                                   left_h > 1e-4f && right_h > 1e-4f;
+        const bool cal_ready = (s_calib_count >= CALIB_MIN_SAMPLES) &&
+                               (cal_elapsed >= CALIB_MIN_TIME_US || s_calib_count >= CALIB_MAX_SAMPLES);
+        if (!cal_ready) {
+            if (cal_plausible && s_calib_count < MAX_CALIB_SAMPLES) {
                 s_calib_ear_buf[s_calib_count] = ear;
                 s_calib_mar_buf[s_calib_count] = mar;
                 s_calib_pitch_buf[s_calib_count] = pose->pitch;
@@ -173,13 +275,24 @@ void adas_controller_update(const point2d_t landmarks[22],
             out_metrics->ear_threshold = s_ear_threshold;
             out_metrics->mar_threshold = s_mar_threshold;
             out_metrics->mouth_open_s = 0.0f;
-            snprintf(out_metrics->status_str, sizeof(out_metrics->status_str), "CALIBRATING... (%.1fs)",
-                     (float)(CALIBRATION_DURATION_US - (now - s_start_time_us)) / 1e6f);
+            snprintf(out_metrics->status_str, sizeof(out_metrics->status_str), "CALIBRATING... %us/%u",
+                     (unsigned)s_calib_count, (unsigned)CALIB_MIN_SAMPLES);
+            // Không log mỗi khung (8,2 s/khung -> spam); chỉ log khi có mẫu mới hoặc mỗi ~60 s.
+            static uint32_t s_last_logged_count = 99;
+            static int64_t s_last_log_us = 0;
+            if (s_calib_count != s_last_logged_count || now - s_last_log_us > 60 * 1000 * 1000) {
+                s_last_logged_count = s_calib_count;
+                s_last_log_us = now;
+                ESP_LOGI(TAG, "calib sample %u/%u (elapsed %lld ms, %s)",
+                         (unsigned)s_calib_count, (unsigned)CALIB_MIN_SAMPLES,
+                         (long long)(cal_elapsed / 1000),
+                         cal_plausible ? "face ok" : "waiting for a face");
+            }
             return;
         } else {
             // Calibration Complete
-            if (s_calib_count > 10) {
-                float avg_ear = compute_median(s_calib_ear_buf, s_calib_count);
+            if (s_calib_count >= CALIB_MIN_SAMPLES) {
+                float avg_ear = compute_percentile(s_calib_ear_buf, s_calib_count, 0.75f);
                 float avg_mar = compute_median(s_calib_mar_buf, s_calib_count);
                 // [D12] Baseline MAR quá cao = lúc hiệu chuẩn miệng đang mở/nói chuyện
                 // -> ngưỡng bị đẩy lên TRẦN 0.65 -> KHÔNG BAO GIỜ BÁO NGÁP (đo thực tế:
@@ -191,9 +304,16 @@ void adas_controller_update(const point2d_t landmarks[22],
                 }
                 s_pitch_bias = compute_median(s_calib_pitch_buf, s_calib_count);
                 s_yaw_bias   = compute_median(s_calib_yaw_buf, s_calib_count);
-                s_ear_threshold = avg_ear * 0.70f;
+                // [14/11] 0,72 x baseline thay vi 0,70: tren 100 nguoi CEW, nguong 0,72*p75 tach
+                // mo/nham tot hon (open p10 0,145 > 0,1375 > closed trung vi 0,116), va san 0,085
+                // de nguoi mi mong (baseline ~0,13) khong bi san cu 0,15/0,10 chan mat do nhay.
+                s_ear_baseline = avg_ear;
+                // [14/11] 0,75 thay vi 0,72: do nghiem thu 20:29 thay mau NHAM = 0,107 va 0,130
+                // trong khi nguong 0,72x0,181 = 0,130 (dung bien, bi coi la MO); mau MO thap nhat
+                // do duoc la 0,147 -> nguong 0,75x0,181 = 0,136 tach duoc ca hai.
+                s_ear_threshold = avg_ear * 0.75f;
                 s_mar_threshold = avg_mar * 1.60f;
-                if (s_ear_threshold < 0.15f) s_ear_threshold = 0.15f;
+                if (s_ear_threshold < 0.085f) s_ear_threshold = 0.085f;
                 if (s_ear_threshold > 0.25f) s_ear_threshold = 0.25f;
                 if (s_mar_threshold < 0.40f) s_mar_threshold = 0.40f;
                 if (s_mar_threshold > 0.58f) s_mar_threshold = 0.58f;   // [D12] trần hạ 0.65->0.58: đo thực tế MAR ngáp đỉnh 0.71-0.94
@@ -205,25 +325,88 @@ void adas_controller_update(const point2d_t landmarks[22],
     }
 
     // 4. Eye State & Blink / Microsleep Detection
-    bool eye_closed = (ear < s_ear_threshold);
     int64_t eye_closed_duration = 0;
-
-    if (eye_closed) {
-        if (s_eye_closed_start_us == 0) {
-            s_eye_closed_start_us = now;
+    const char* invalid_reason = nullptr;
+    // [13/11] Chu kỳ khung + ngưỡng mẫu suy ra từ chu kỳ (FPS-adaptive).
+    // Chu kỳ phải đo từ MỌI mẫu (kể cả mẫu bị loại), nếu không sẽ tự khoá: mẫu bị
+    // "stale" -> s_last_eye_capture_us không cập nhật -> period giữ 230 ms -> mãi stale.
+    if (s_last_any_capture_us > 0 && capture_us > s_last_any_capture_us) {
+        int64_t d = capture_us - s_last_any_capture_us;
+        if (d > 50000 && d < 60000000) {
+            s_period_us = s_period_us == 0 ? d : (s_period_us * 7 + d * 3) / 10;
         }
-        eye_closed_duration = now - s_eye_closed_start_us;
-        s_was_eye_closed = true;
-    } else {
-        if (s_was_eye_closed && s_eye_closed_start_us > 0) {
-            int64_t blink_dur = now - s_eye_closed_start_us;
-            if (blink_dur > (100 * 1000) && blink_dur < SLOW_BLINK_DURATION_US) {
-                s_total_blinks++;
-            }
-        }
-        s_eye_closed_start_us = 0;
-        s_was_eye_closed = false;
     }
+    if (capture_us > 0) s_last_any_capture_us = capture_us;
+    const int64_t period = s_period_us > 0 ? s_period_us : 230000;
+    const int64_t age_limit_us = (period * 3 / 2 > EYE_MAX_FRAME_AGE_US) ? period * 3 / 2 : EYE_MAX_FRAME_AGE_US;
+    const int64_t gap_limit_us = (period * 3 / 2 > EYE_MAX_SAMPLE_GAP_US) ? period * 3 / 2 : EYE_MAX_SAMPLE_GAP_US;
+    int k_slow = (int)((SLOW_BLINK_DURATION_US + period - 1) / period);
+    int k_micro = (int)((MICROSLEEP_DURATION_US + period - 1) / period);
+    // [14/11] Chế độ "kiểm tra định kỳ" (0,12 FPS): một mẫu đơn lẻ KHÔNG đủ để kết luận
+    // (không phân biệt được chớp mắt với nhắm mắt) -> mọi cảnh báo mắt cần >= 2 mẫu liên tiếp (~16 s).
+    if (k_slow < 2) k_slow = 2;
+    if (k_micro < k_slow) k_micro = k_slow;
+    if (k_micro < 2) k_micro = 2;      // ít nhất 2 mẫu, kể cả khi khung rất thưa
+    if (k_micro > 12) k_micro = 12;
+    s_k_slow = k_slow;
+    s_k_micro = k_micro;
+
+    if (capture_us <= 0) invalid_reason = "missing_timestamp";
+    else if (capture_us > now) invalid_reason = "future_timestamp";
+    else if (capture_us <= s_last_eye_capture_us) invalid_reason = "non_increasing_timestamp";
+    else if (!s_eye_enabled) invalid_reason = "no_face";
+    else if (now - capture_us > age_limit_us) invalid_reason = "stale";
+    else if (!(left_h > 1e-4f && right_h > 1e-4f && isfinite(ear))) invalid_reason = "eye_geometry";
+    else if (pose->is_valid &&
+             (fabsf(pose->yaw - s_yaw_bias) > EYE_MAX_YAW_DEV_DEG ||
+              fabsf(pose->pitch - s_pitch_bias) > EYE_MAX_PITCH_DEV_DEG))
+        invalid_reason = "head_turned";   // mí mắt không còn tin cậy khi đầu quay/cúi mạnh
+
+    const bool eye_sample_valid = invalid_reason == nullptr;
+    const bool gap = eye_sample_valid && s_last_eye_capture_us > 0 &&
+        capture_us - s_last_eye_capture_us > gap_limit_us;
+    if (!eye_sample_valid || gap) reset_eye_timer();
+    out_metrics->eye.valid = eye_sample_valid;
+    // [14/11] Luat tuong doi: nham khi EAR tut >= 25 % so voi baseline cua chinh tai xe
+    // (chi ap dung khi baseline du tin cay >= 0,12).
+    const bool ear_drop_25 = (s_ear_baseline >= 0.12f) && (ear < 0.75f * s_ear_baseline);
+    out_metrics->eye.closed = eye_sample_valid &&
+        (ear < s_ear_threshold || ear_drop_25 ||
+         (s_eye_prob >= 0.0f && s_eye_prob >= EYE_PROB_CLOSED_THRESH));
+    out_metrics->eye.reset_reason = invalid_reason ? invalid_reason :
+        s_eye_sample_lost ? "processing_loss" : gap ? "capture_gap" : "none";
+    s_eye_sample_lost = false;
+    // day trang thai vao lich su (ca mau khong hop le: -1)
+    {
+        int8_t v = -1;
+        if (eye_sample_valid) v = out_metrics->eye.closed ? 1 : 0;
+        s_eye_hist[s_eye_hist_pos] = v;
+        s_eye_hist_pos = (s_eye_hist_pos + 1) % EYE_HIST_LEN;
+        if (s_eye_hist_n < EYE_HIST_LEN) s_eye_hist_n++;
+    }
+
+    if (eye_sample_valid) {
+        s_last_eye_capture_us = capture_us;
+        if (out_metrics->eye.closed) {
+            if (s_eye_closed_start_us == 0) {
+                s_eye_closed_start_us = capture_us;
+            }
+            s_eye_closed_samples++;                     // [13/11] đếm mẫu, không chỉ thời gian
+            eye_closed_duration = capture_us - s_eye_closed_start_us;
+            s_was_eye_closed = true;
+        } else {
+            if (s_was_eye_closed && s_eye_closed_start_us > 0) {
+                int64_t blink_dur = capture_us - s_eye_closed_start_us;
+                if (blink_dur > (100 * 1000) && blink_dur < SLOW_BLINK_DURATION_US) {
+                    s_total_blinks++;
+                }
+            }
+            if (s_was_eye_closed && !gap) out_metrics->eye.reset_reason = "opened";
+            reset_eye_timer();
+        }
+    }
+
+    out_metrics->eye.closed_ms = (float)eye_closed_duration / 1000.0f;
 
     // 5. Mouth State & Yawn Detection
     // [D22] GRACE: chỉ reset bộ đếm khi miệng ĐÓNG LIÊN TỤC >= 2 frame. Nhờ vậy khử được
@@ -292,7 +475,21 @@ void adas_controller_update(const point2d_t landmarks[22],
     bool alarm = false;
     const char* status_text = "NORMAL";
 
-    if (eye_closed_duration >= MICROSLEEP_DURATION_US) {
+    // [13/11] Quyết định theo SỐ MẪU liên tiếp (FPS-adaptive): 1,5 s @4,3 FPS = 7 mẫu,
+    // 1,5 s @0,12 FPS = 2 mẫu (không thể phân biệt chớp mắt với nhắm ở tốc độ đó).
+    // [14/11] Microsleep: >= k_micro mau NHAM trong cua so (k_micro+1 khi thoi gian lay mau thua)
+    // -> o 0,12 FPS chi can 2/3 mau la bao, mot mau bi miss khong xoa dot.
+    int eye_win = s_k_micro + (s_k_micro <= 3 ? 1 : 0);
+    if (eye_win > s_eye_hist_n) eye_win = s_eye_hist_n;
+    int eye_closed_in_window = 0;
+    for (int i = 0; i < eye_win; i++) {
+        int idx = (s_eye_hist_pos - 1 - i + EYE_HIST_LEN * 2) % EYE_HIST_LEN;
+        if (s_eye_hist[idx] == 1) eye_closed_in_window++;
+    }
+    const bool eye_micro = (eye_win >= s_k_micro) && (eye_closed_in_window >= s_k_micro);
+    const bool eye_slow = eye_sample_valid && (s_eye_closed_samples >= s_k_slow);
+
+    if (eye_micro) {
         current_state = ADAS_STATE_MICROSLEEP_ALARM;
         alarm = true;
         status_text = "MICROSLEEP ALARM!";
@@ -304,7 +501,7 @@ void adas_controller_update(const point2d_t landmarks[22],
         current_state = ADAS_STATE_FATIGUE_ALARM;
         alarm = true;
         status_text = "FATIGUE ALARM (>=3 YAWNS)!";
-    } else if (eye_closed_duration >= SLOW_BLINK_DURATION_US) {
+    } else if (eye_slow) {
         current_state = ADAS_STATE_SLOW_BLINK_WARNING;
         status_text = "SLOW BLINK WARNING";
     } else if (mouth_open_duration >= YAWN_EVENT_DURATION_US || s_is_currently_yawning) {
@@ -326,5 +523,18 @@ void adas_controller_update(const point2d_t landmarks[22],
     out_metrics->ear_threshold = s_ear_threshold;
     out_metrics->mar_threshold = s_mar_threshold;
     out_metrics->mouth_open_s = (float)mouth_open_duration / 1e6f;
+    out_metrics->eye_prob = s_eye_prob;
     strncpy(out_metrics->status_str, status_text, sizeof(out_metrics->status_str));
 }
+
+// [14/11] Calibration window finished? (exposed for /status)
+bool adas_controller_is_calibrated(void) { return s_is_calibrated; }
+
+// [14/11] Re-run the calibration window (pose bias + EAR/MAR baseline); alarm state is not touched.
+void adas_controller_request_recalibration(void) {
+    adas_controller_init();
+    ESP_LOGI("adas_ctl", "recalibration requested from the web UI");
+}
+
+
+

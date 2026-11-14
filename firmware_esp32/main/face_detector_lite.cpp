@@ -2,139 +2,177 @@
 
 #include <math.h>
 #include <string.h>
+
+#include "blaze_tracker.h"
 #include "esp_log.h"
-#include "esp_heap_caps.h"
 #include "esp_timer.h"
+#include "face_det_espdl.h"
 
-#include "face_detector_lite_model_data.h"
+static const char* TAG = "DETLITE";
 
-#include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
-#include "tensorflow/lite/schema/schema_generated.h"
+#ifndef BLAZE_LIVE_DIAG
+#define BLAZE_LIVE_DIAG 1   // log a coarse brightness grid with every live detect
+#endif
 
-static const char* TAG = "FD_LITE";
+// [13/11] Fusion threshold from measurement: detector-vs-landmark IoU was 0,873 / 0,831
+// on clean stills, so 0,60 means "clearly disagree" rather than "small jitter".
+#define FUSION_MIN_IOU 0.60f
 
-#define FDL_IN        FDL_INPUT_W          // 96
-#define FDL_ARENA_KB  200                  // PSRAM (model nhỏ)
-
-static const tflite::Model* s_model = NULL;
-static tflite::MicroInterpreter* s_interp = NULL;
-static TfLiteTensor* s_in = NULL;
-static TfLiteTensor* s_out = NULL;
-static bool s_ready = false;
 static float s_last_ms = 0.0f;
+static bool s_init_done = false;
+static bool s_ready = false;
+static int64_t s_last_us = 0;
 
 bool face_detector_lite_init(void) {
-    s_model = tflite::GetModel(g_face_detector_lite);
-    if (s_model->version() != TFLITE_SCHEMA_VERSION) {
-        ESP_LOGE(TAG, "Schema mismatch");
-        return false;
-    }
-    // Model lite (Keras3) chua: CONV_2D, DEPTHWISE_CONV_2D, SHAPE, STRIDED_SLICE, PACK,
-    // RESHAPE, FULLY_CONNECTED, DEQUANTIZE (SHAPE/STRIDED_SLICE/PACK do lop Flatten sinh ra)
-    static tflite::MicroMutableOpResolver<10> resolver;
-    resolver.AddConv2D();
-    resolver.AddDepthwiseConv2D();
-    resolver.AddFullyConnected();
-    resolver.AddReshape();
-    resolver.AddShape();
-    resolver.AddStridedSlice();
-    resolver.AddPack();
-    resolver.AddDequantize();
-    resolver.AddAdd();
-    resolver.AddMul();
+    if (s_init_done) return s_ready;
+    s_init_done = true;
+    // BlazeFace short-range INT8 (TFLM). 187 KB rodata, arena in PSRAM.
+    // The MSR/MNP ESP-DL detector needs far more RAM next to PIPNet, so BlazeFace
+    // is the only external detector in this build.
+    s_ready = blaze_init();
+    if (s_ready) blaze_reset();
+    ESP_LOGI(TAG, "blaze detector %s", s_ready ? "READY" : "UNAVAILABLE (centre ROI)");
+    return s_ready;
+}
 
-    size_t bytes = (size_t)FDL_ARENA_KB * 1024;
-    uint8_t* arena = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!arena) {
-        ESP_LOGE(TAG, "Khong cap phat duoc arena PSRAM (%u KB)", (unsigned)FDL_ARENA_KB);
-        return false;
+bool face_detector_lite_run(const uint8_t* gray, int src_w, int src_h, face_box_t* out) {
+    if (!out) return false;
+    out->valid = false;
+
+    int64_t t0 = esp_timer_get_time();
+    float box[4] = {0, 0, 0, 0};
+    float score = 0.0f;
+    bool ok = s_ready && blaze_detect(gray, src_w, src_h, box, &score);
+
+#if BLAZE_LIVE_DIAG
+    // Coarse view of what the camera actually delivers (16x12 block means) so a
+    // "no face" result can be told apart from a dark / blank / misaimed frame.
+    {
+        int gw = 16, gh = 12;
+        int bw = src_w / gw, bh = src_h / gh;
+        long sum = 0; int mx = 0, mn = 255;
+        char grid[16 * 12 * 4 + 1];
+        int gi = 0;
+        for (int by = 0; by < gh; by++) {
+            for (int bx = 0; bx < gw; bx++) {
+                long s2 = 0; int cnt = 0;
+                for (int y = by * bh; y < (by + 1) * bh; y += 2)
+                    for (int x = bx * bw; x < (bx + 1) * bw; x += 2) {
+                        uint8_t v = gray[y * src_w + x];
+                        s2 += v; cnt++;
+                        if (v > mx) mx = v;
+                        if (v < mn) mn = v;
+                    }
+                int m = cnt ? (int)(s2 / cnt) : 0;
+                sum += m;
+                grid[gi++] = "0123456789abcdef"[m >> 4];
+                if (bx == gw - 1) grid[gi++] = '|';
+            }
+        }
+        grid[gi] = 0;
+        ESP_LOGI(TAG, "frame %dx%d mean=%ld min=%d max=%d grid=%s", src_w, src_h,
+                 sum / (gw * gh), mn, mx, grid);
     }
-    static tflite::MicroInterpreter interp(s_model, resolver, arena, bytes);
-    s_interp = &interp;
-    if (s_interp->AllocateTensors() != kTfLiteOk) {
-        ESP_LOGE(TAG, "AllocateTensors FAILED (used %d)", (int)s_interp->arena_used_bytes());
-        return false;
+#endif
+
+    int64_t now = t0;
+    float dt = (s_last_us > 0) ? (float)(now - s_last_us) / 1e6f : 0.0f;
+    s_last_us = now;
+
+    float tbox[4] = {0, 0, 0, 0};
+    bool tracked = false;
+    if (ok) {
+        // [13/11] Fusion with the landmark bbox of the previous frame.
+        float lm[4] = {0, 0, 0, 0};
+        float fiou = -1.0f;
+        bool used_lm = false;
+        const bool have_lm = blaze_fusion_get(nullptr, lm, &fiou, &used_lm);
+        if (have_lm) {
+            float det[4] = {box[0], box[1], box[2], box[3]};
+            const float iou_dl = blaze_box_iou(det, lm);
+            // [13/11] Plausibility gate — ĐO THỰC TẾ buổi 18:10 (mặt ở ~40 cm, box 145 px):
+            // bbox landmark rộng gấp **1,67×** (median, max 4,5×) và lệch tâm 0,30–0,45 cạnh box,
+            // EAR vọt 0,6–2,7 ⇒ landmark rác. Nếu chỉ so IoU thì 37/41 khung chọn landmark rác.
+            const float det_w = det[2] - det[0], det_h = det[3] - det[1];
+            const float lm_w = lm[2] - lm[0], lm_h = lm[3] - lm[1];
+            bool lm_plausible = false;
+            if (det_w > 16.0f && det_h > 16.0f && lm_w > 16.0f && lm_h > 16.0f) {
+                const float rw = lm_w / det_w, rh = lm_h / det_h;
+                const float cx_off = fabsf((lm[0] + lm[2]) - (det[0] + det[2])) * 0.5f / det_w;
+                const float cy_off = fabsf((lm[1] + lm[3]) - (det[1] + det[3])) * 0.5f / det_h;
+                lm_plausible = rw >= 0.60f && rw <= 1.40f && rh >= 0.60f && rh <= 1.40f &&
+                               cx_off <= 0.35f && cy_off <= 0.35f;
+            }
+            if (lm_plausible && iou_dl < FUSION_MIN_IOU) {
+                // Landmark geometry disagrees with the detector: trust the landmarks
+                // (they follow the face every inference) and keep the detector score.
+                memcpy(box, lm, sizeof(float) * 4);
+                used_lm = true;
+            }
+            ESP_LOGI(TAG, "fusion iou=%.3f use=%s lm_ok=%d det=%.1f,%.1f,%.1f,%.1f lm=%.1f,%.1f,%.1f,%.1f",
+                     (double)iou_dl, used_lm ? "landmark" : "detector", (int)lm_plausible,
+                     (double)det[0], (double)det[1], (double)det[2], (double)det[3],
+                     (double)lm[0], (double)lm[1], (double)lm[2], (double)lm[3]);
+        }
+        tracked = blaze_track(box, score, dt, tbox);
+    } else if (s_ready) {
+        // Detector missed: keep the last good box for a few frames.
+        tracked = blaze_track(box, 0.0f, dt, tbox);
     }
-    s_in = s_interp->input(0);
-    s_out = s_interp->output(0);
-    s_ready = true;
-    ESP_LOGI(TAG, "FaceDetectorLite san sang | arena dung %d KB / %u KB PSRAM | in %dx%dx%d %s | out %d %s",
-             (int)(s_interp->arena_used_bytes() / 1024), (unsigned)FDL_ARENA_KB,
-             s_in->dims->data[1], s_in->dims->data[2], s_in->dims->data[3],
-             (s_in->type == kTfLiteInt8) ? "INT8" : "?", s_out->dims->data[1],
-             (s_out->type == kTfLiteFloat32) ? "float32" : "?");
+
+    s_last_ms = (float)(esp_timer_get_time() - t0) / 1000.0f;
+
+    if (tracked) {
+        out->cx = (tbox[0] + tbox[2]) * 0.5f;
+        out->cy = (tbox[1] + tbox[3]) * 0.5f;
+        out->size = fmaxf(tbox[2] - tbox[0], tbox[3] - tbox[1]);
+        out->score = score;
+        out->valid = true;
+        out->has_kp = false;
+        ESP_LOGI(TAG, "blaze OK cand=%d score=%.3f box=%.1f,%.1f,%.1f,%.1f det=%.0fms",
+                 blaze_last_cand(), (double)score, (double)tbox[0], (double)tbox[1],
+                 (double)tbox[2], (double)tbox[3], (double)blaze_last_ms());
+        return true;
+    }
+
+    // [13/11] Detector missed and no tracked box: use the landmark bbox ONLY if we have
+    // a face history and the miss streak is short. Otherwise the landmark bbox is derived
+    // from PIPNet running on the fallback centre ROI (garbage) and would drift the ROI.
+    static bool s_had_face = false;
+    static int s_miss_streak = 0;
+    if (ok) { s_had_face = true; s_miss_streak = 0; } else { s_miss_streak++; }
+    if (!ok && s_miss_streak > 12) {          // ≈100 s @0.12 FPS without any detection
+        if (s_had_face) ESP_LOGW(TAG, "no face for %d frames -> reset tracker", s_miss_streak);
+        s_had_face = false;
+        blaze_reset();
+    }
+    {
+        float lm[4] = {0, 0, 0, 0};
+        if (s_had_face && blaze_fusion_get(nullptr, lm, nullptr, nullptr) &&
+            lm[2] > lm[0] + 16.0f && lm[3] > lm[1] + 16.0f) {
+            out->cx = (lm[0] + lm[2]) * 0.5f;
+            out->cy = (lm[1] + lm[3]) * 0.5f;
+            out->size = fmaxf(lm[2] - lm[0], lm[3] - lm[1]);
+            out->score = 0.0f;
+            out->valid = true;
+            out->has_kp = false;
+            ESP_LOGI(TAG, "blaze MISS cand=%d -> landmark ROI (%.0f,%.0f,%.0f)",
+                     blaze_last_cand(), (double)out->cx, (double)out->cy, (double)out->size);
+            return true;
+        }
+    }
+
+    // Fallback: centre ROI. The landmark tracker refines it every frame.
+    float side = 0.75f * (float)(src_w < src_h ? src_w : src_h);
+    out->cx = src_w * 0.5f;
+    out->cy = src_h * 0.5f;
+    out->size = side;
+    out->score = 0.0f;
+    out->valid = true;
+    out->has_kp = false;
+    ESP_LOGI(TAG, "blaze MISS cand=%d -> centre ROI (%.0f,%.0f,%.0f)",
+             blaze_last_cand(), (double)out->cx, (double)out->cy, (double)side);
     return true;
 }
 
 float face_detector_lite_last_ms(void) { return s_last_ms; }
-
-bool face_detector_lite_run(const uint8_t* gray, int src_w, int src_h, face_box_t* out) {
-    if (out) { out->valid = false; out->has_kp = false; }
-    if (!s_ready || !gray || !out || src_w <= 0 || src_h <= 0) return false;
-
-    int64_t t0 = esp_timer_get_time();
-
-    // Nạp input 96x96: lấy mẫu bilinear toàn khung -> chuẩn hoá (px-127.5)/128 -> INT8
-    const float sc = (s_in->params.scale > 0.0f) ? s_in->params.scale : (1.0f / 128.0f);
-    const int   zp = s_in->params.zero_point;
-    const float sx = (float)src_w / (float)FDL_IN;
-    const float sy = (float)src_h / (float)FDL_IN;
-    for (int dy = 0; dy < FDL_IN; dy++) {
-        float fy = (dy + 0.5f) * sy - 0.5f;
-        int y0 = (int)floorf(fy);
-        float ay = fy - (float)y0;
-        int y1 = y0 + 1;
-        if (y0 < 0) y0 = 0;
-        if (y0 > src_h - 1) y0 = src_h - 1;
-        if (y1 < 0) y1 = 0;
-        if (y1 > src_h - 1) y1 = src_h - 1;
-        for (int dx = 0; dx < FDL_IN; dx++) {
-            float fx = (dx + 0.5f) * sx - 0.5f;
-            int x0 = (int)floorf(fx);
-            float ax = fx - (float)x0;
-            int x1 = x0 + 1;
-            if (x0 < 0) x0 = 0;
-            if (x0 > src_w - 1) x0 = src_w - 1;
-            if (x1 < 0) x1 = 0;
-            if (x1 > src_w - 1) x1 = src_w - 1;
-            float p00 = gray[y0 * src_w + x0], p01 = gray[y0 * src_w + x1];
-            float p10 = gray[y1 * src_w + x0], p11 = gray[y1 * src_w + x1];
-            float v = (p00 * (1 - ax) + p01 * ax) * (1 - ay) + (p10 * (1 - ax) + p11 * ax) * ay;
-            float n = (v - 127.5f) / 128.0f;
-            int q = (int)lroundf(n / sc) + zp;
-            if (q < -128) q = -128;
-            if (q > 127) q = 127;
-            if (s_in->type == kTfLiteInt8) s_in->data.int8[dy * FDL_IN + dx] = (int8_t)q;
-            else if (s_in->type == kTfLiteUInt8) s_in->data.uint8[dy * FDL_IN + dx] = (uint8_t)(q + 128);
-            else s_in->data.f[dy * FDL_IN + dx] = n;
-        }
-    }
-
-    if (s_interp->Invoke() != kTfLiteOk) {
-        ESP_LOGE(TAG, "Invoke FAILED");
-        s_last_ms = (float)(esp_timer_get_time() - t0) / 1000.0f;
-        return false;
-    }
-
-    const float* o = s_out->data.f;
-    float cx = o[0] * FDL_STD[0] + FDL_MEAN[0];
-    float cy = o[1] * FDL_STD[1] + FDL_MEAN[1];
-    float bw = o[2] * FDL_STD[2] + FDL_MEAN[2];
-    float bh = o[3] * FDL_STD[3] + FDL_MEAN[3];
-
-    s_last_ms = (float)(esp_timer_get_time() - t0) / 1000.0f;
-
-    bool ok = isfinite(cx) && isfinite(cy) && isfinite(bw) && isfinite(bh) &&
-              bw > 0.02f && bh > 0.02f && bw < 1.6f && bh < 1.6f &&
-              cx > -0.1f && cx < 1.1f && cy > -0.1f && cy < 1.1f;
-    if (!ok) return false;
-
-    out->cx = cx * (float)src_w;
-    out->cy = cy * (float)src_h;
-    out->size = fmaxf(bw * (float)src_w, bh * (float)src_h);
-    out->score = 1.0f;
-    out->has_kp = false;
-    out->valid = true;
-    return true;
-}

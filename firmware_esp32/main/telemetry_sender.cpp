@@ -58,6 +58,19 @@ void telemetry_sender_set_roi(int active, int x0, int y0, int size) {
     s_roi_size = size;
 }
 
+// [P1 - TRUY VET] frame_id + tuoi anh/ROI tai thoi diem publish
+static uint32_t s_diag_frame_id = 0;
+static float s_diag_img_age_ms = -1.0f;
+static float s_diag_roi_age_ms = -1.0f;
+static float s_diag_core1_ms = -1.0f;
+
+void telemetry_sender_set_diag(uint32_t frame_id, float img_age_ms, float roi_age_ms, float core1_ms) {
+    s_diag_frame_id = frame_id;
+    s_diag_img_age_ms = img_age_ms;
+    s_diag_roi_age_ms = roi_age_ms;
+    s_diag_core1_ms = core1_ms;
+}
+
 // JSON Serialization Buffer
 static char s_json_buffer[2048];
 
@@ -119,7 +132,8 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
                        "\"status\":\"%s\",\"alarm\":%s,\"fps\":%.1f,"
                        "\"dec\":%.1f,\"ai\":%.1f,\"total\":%.1f,"
                        "\"ear_thr\":%.3f,\"mar_thr\":%.3f,\"mouth_s\":%.2f,\"yawns\":%u,"
-                       "\"roi\":%d,\"rx\":%d,\"ry\":%d,\"rs\":%d,\"landmarks\":[",
+                       "\"roi\":%d,\"rx\":%d,\"ry\":%d,\"rs\":%d,"
+                       "\"frame_id\":%u,\"img_age\":%.1f,\"roi_age\":%.1f,\"core1\":%.1f,\"landmarks\":[",
                        metrics->ear,
                        metrics->mar,
                        metrics->pose.is_valid ? metrics->pose.yaw : 0.0f,
@@ -135,7 +149,10 @@ bool telemetry_sender_dispatch(const adas_metrics_t* metrics, const point2d_t la
                        (double)metrics->mar_threshold,
                        (double)metrics->mouth_open_s,
                        (unsigned)metrics->total_yawns,
-                       s_roi_active, s_roi_x0, s_roi_y0, s_roi_size);
+                       s_roi_active, s_roi_x0, s_roi_y0, s_roi_size,
+                       (unsigned)s_diag_frame_id,
+                       (double)s_diag_img_age_ms, (double)s_diag_roi_age_ms,
+                       (double)s_diag_core1_ms);
 
     // Append 22 landmarks as 44 float array [x0, y0, x1, y1, ...]
     if (landmarks_22) {

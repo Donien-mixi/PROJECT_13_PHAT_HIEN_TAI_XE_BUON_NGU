@@ -249,12 +249,9 @@ static bool decode_jpeg_to_gray(const uint8_t* jpeg_data, size_t jpeg_len,
 }
 #endif
 
-bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
-                                    int8_t* out_int8_tensor,
-                                    float input_scale, int32_t input_zero_point,
-                                    const image_crop_roi_t* roi_in,
-                                    image_crop_roi_t* roi_used) {
-    if (!jpeg_data || jpeg_len == 0 || !out_int8_tensor) {
+bool image_decoder_decode_jpeg(const uint8_t* jpeg_data, size_t jpeg_len,
+                               int* out_w, int* out_h) {
+    if (!jpeg_data || jpeg_len == 0) {
         return false;
     }
 
@@ -265,6 +262,10 @@ bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
     }
 
     int img_w = 0, img_h = 0;
+    // [P4] Vô hiệu hoá buffer cũ ngay khi bắt đầu: decode lỗi thì
+    // image_decoder_crop_from_last_gray() sẽ từ chối thay vì dùng ảnh cũ.
+    s_last_img_w = 0;
+    s_last_img_h = 0;
     int64_t t_dec_start = esp_timer_get_time();
 
 #if HAS_ESP_NEW_JPEG
@@ -302,6 +303,24 @@ bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
     int64_t t_dec_end = esp_timer_get_time();
     s_last_img_w = img_w;
     s_last_img_h = img_h;
+    s_acc_jpeg_us += (t_dec_end - t_dec_start);
+
+    if (out_w) *out_w = img_w;
+    if (out_h) *out_h = img_h;
+    return true;
+}
+
+bool image_decoder_crop_from_last_gray(const image_crop_roi_t* roi_in,
+                                       int8_t* out_int8_tensor,
+                                       float input_scale, int32_t input_zero_point,
+                                       image_crop_roi_t* roi_used) {
+    if (!out_int8_tensor || s_last_img_w <= 0 || s_last_img_h <= 0) {
+        return false;
+    }
+
+    int img_w = s_last_img_w;
+    int img_h = s_last_img_h;
+    int64_t t_ds_start = esp_timer_get_time();
 
     // [v2.9.5 - M1] Xác định vùng crop theo thứ tự ưu tiên:
     //   1) ROI tuyệt đối nếu được truyền (detector/tracker)
@@ -345,10 +364,9 @@ bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
     downsample_and_quantize_crop(s_gray_buffer, img_w, img_h, crop_x0, crop_y0, crop_size,
                                  out_int8_tensor,
                                  input_scale, input_zero_point);
-    int64_t t_dec_all = esp_timer_get_time();
+    int64_t t_ds_end = esp_timer_get_time();
 
-    s_acc_jpeg_us += (t_dec_end - t_dec_start);
-    s_acc_ds_us += (t_dec_all - t_dec_end);
+    s_acc_ds_us += (t_ds_end - t_ds_start);
     s_dec_frames++;
     if (s_dec_frames >= 60) {
         ESP_LOGI(TAG, "[Decode avg] JPEG: %.1f ms | Gray+Downsample: %.1f ms",
@@ -358,5 +376,58 @@ bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
         s_dec_frames = 0;
     }
 
+    return true;
+}
+
+bool image_decoder_process_jpeg_roi(const uint8_t* jpeg_data, size_t jpeg_len,
+                                    int8_t* out_int8_tensor,
+                                    float input_scale, int32_t input_zero_point,
+                                    const image_crop_roi_t* roi_in,
+                                    image_crop_roi_t* roi_used) {
+    if (!out_int8_tensor) {
+        return false;
+    }
+    int img_w = 0, img_h = 0;
+    if (!image_decoder_decode_jpeg(jpeg_data, jpeg_len, &img_w, &img_h)) {
+        return false;
+    }
+    return image_decoder_crop_from_last_gray(roi_in, out_int8_tensor,
+                                             input_scale, input_zero_point, roi_used);
+}
+
+// [14/11 - SPEED] Y-plane shortcut: the OV5640 hands over YUV422 (YUYV), so the grey frame is
+// byte 0 of every pixel pair. Saves the whole JPEG decode step (~0.60 s/frame on QVGA).
+extern "C" bool image_decoder_load_gray_raw(const uint8_t* raw, size_t len, int* out_w, int* out_h) {
+    if (!raw || !out_w || !out_h || !s_gray_buffer) return false;
+    // Production format is QVGA; fall back to the last decoded size if it was already known.
+    int w = (s_last_img_w > 0) ? s_last_img_w : 320;
+    int h = (s_last_img_h > 0) ? s_last_img_h : 240;
+    if (w > MAX_IMG_W || h > MAX_IMG_H) return false;
+    const size_t npix = (size_t)w * (size_t)h;
+    static bool s_logged = false;
+    if (!s_logged) {
+        ESP_LOGI("IMAGE_DECODER", "raw gray: len=%u  w=%d h=%d  (expect %u Y-only / %u YUV422)",
+                 (unsigned)len, w, h, (unsigned)npix, (unsigned)(npix * 2u));
+        s_logged = true;
+    }
+    uint8_t* dst = s_gray_buffer;
+    if (len == npix) {
+        // driver already stripped chroma (1 byte per pixel)
+        memcpy(dst, raw, npix);
+        s_last_img_w = w; s_last_img_h = h;
+        *out_w = w; *out_h = h;
+        return true;
+    }
+    if (len < npix * 2u) return false;                    // neither Y-only nor YUV422
+    const uint8_t* src = raw;
+    for (int y = 0; y < h; y++) {
+        const uint8_t* row = src + (size_t)y * (size_t)w * 2u;
+        for (int x = 0; x < w; x++) dst[x] = row[x * 2];
+        dst += w;
+    }
+    s_last_img_w = w;
+    s_last_img_h = h;
+    *out_w = w;
+    *out_h = h;
     return true;
 }

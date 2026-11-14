@@ -1,219 +1,158 @@
 #include "ai_inference.h"
-#include "tinydriver_model_data.h"
-#include <string.h>
+
 #include <math.h>
+#include <string.h>
+
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "esp_heap_caps.h"
+#include "face_espdl.h"
 
 static const char* TAG = "AI_INFERENCE";
-
-#define TENSOR_ARENA_SIZE_PSRAM (1536 * 1024) // 1.5 MB fallback in Octal PSRAM
-
-// Preferred INTERNAL-SRAM arena sizes (KB), tried largest-first.
-// TFLM only needs ~292 KB; internal SRAM avoids the ~6x PSRAM stall penalty.
-static const size_t kArenaInternalCandidatesKB[] = { 384, 336, 288, 256, 224, 192, 176, 168, 160, 144, 128 };
-#define ARENA_NUM_CANDIDATES (sizeof(kArenaInternalCandidatesKB) / sizeof(kArenaInternalCandidatesKB[0]))
-
-static uint8_t* s_tensor_arena = NULL;
-static bool s_arena_in_psram = false;
-static int8_t s_input_buffer[TINYDRIVER_INPUT_WIDTH * TINYDRIVER_INPUT_HEIGHT];
-static int8_t s_output_buffer[TINYDRIVER_OUTPUT_DIMS];
 static bool s_is_initialized = false;
+static int8_t s_dummy_input[96 * 96];
 
-// Check if official TFLite Micro headers are available
-#if __has_include("tensorflow/lite/micro/micro_interpreter.h")
-#include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
-#include "tensorflow/lite/schema/schema_generated.h"
-#include "esp_nn_glue.h"
+static const uint8_t* s_src = nullptr;
+static int s_src_w = 0, s_src_h = 0;
+static int s_roi_x = 0, s_roi_y = 0, s_roi_s = 0;
+static float s_pts98[98][2];      // [13/11] for the landmark bbox used by fusion
+static bool s_pts98_valid = false;
 
-static const tflite::Model* s_model = NULL;
-static tflite::MicroInterpreter* s_interpreter = NULL;
-static TfLiteTensor* s_input_tensor = NULL;
-static TfLiteTensor* s_output_tensor = NULL;
-#define HAS_TFLM_HEADERS 1
-#else
-#define HAS_TFLM_HEADERS 0
-#endif
+void ai_inference_set_source(const uint8_t* gray, int w, int h, int rx, int ry, int rs) {
+    s_src = gray;
+    s_src_w = w;
+    s_src_h = h;
+    s_roi_x = rx;
+    s_roi_y = ry;
+    s_roi_s = rs;
+}
 
 bool ai_inference_init(void) {
-    ESP_LOGI(TAG, "Đang khởi tạo AI Inference Engine (ưu tiên SRAM nội cho tốc độ)...");
-
-#if HAS_TFLM_HEADERS
-    s_model = tflite::GetModel(g_tinydriver_model);
-    if (s_model->version() != TFLITE_SCHEMA_VERSION) {
-        ESP_LOGE(TAG, "LỖI: Phiên bản TFLite Schema không tương thích!");
-        return false;
-    }
-
-#if AI_ESP_NN_CONV_ENABLED && RUN_ESPNN_SELFTEST
-    ai_esp_nn::EspNnSelfTest();
-#endif
-
-    // Register hardware-accelerated ops with esp-nn
-    static tflite::MicroMutableOpResolver<16> micro_op_resolver;
-#if AI_ESP_NN_CONV_ENABLED
-    micro_op_resolver.AddConv2D(ai_esp_nn::Register_CONV_2D_ESPNN());
-    micro_op_resolver.AddDepthwiseConv2D(ai_esp_nn::Register_DEPTHWISE_CONV_2D_ESPNN());
-#else
-    micro_op_resolver.AddConv2D();
-    micro_op_resolver.AddDepthwiseConv2D();
-#endif
-    micro_op_resolver.AddFullyConnected();
-    micro_op_resolver.AddAdd();
-    micro_op_resolver.AddReshape();
-    micro_op_resolver.AddAveragePool2D();
-    micro_op_resolver.AddConcatenation();
-    micro_op_resolver.AddLogistic(); // Sigmoid
-    micro_op_resolver.AddRelu6();
-    micro_op_resolver.AddQuantize();
-    micro_op_resolver.AddDequantize();
-    micro_op_resolver.AddMul();
-    micro_op_resolver.AddMean();
-    micro_op_resolver.AddPad();
-
-    size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-    size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_LOGI(TAG, "SRAM nội trống: %u KB (khối liền mạch lớn nhất: %u KB) | PSRAM trống: %u KB",
-             (unsigned)(free_internal / 1024), (unsigned)(largest_internal / 1024),
-             (unsigned)(free_psram / 1024));
-
-    // (1) Adaptive: try INTERNAL SRAM arenas largest-first so esp-nn SIMD runs near full speed.
-    for (size_t i = 0; i < ARENA_NUM_CANDIDATES && s_interpreter == NULL; i++) {
-        size_t arena_bytes = kArenaInternalCandidatesKB[i] * 1024;
-        uint8_t* buf = (uint8_t*) heap_caps_malloc(arena_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (!buf) {
-            continue;
-        }
-        tflite::MicroInterpreter* interp =
-            new tflite::MicroInterpreter(s_model, micro_op_resolver, buf, arena_bytes);
-        if (interp->AllocateTensors() == kTfLiteOk) {
-            s_tensor_arena = buf;
-            s_interpreter = interp;
-            s_arena_in_psram = false;
-            ESP_LOGI(TAG, "✅ Tensor Arena trong SRAM NỘI %u KB (tối đa tốc độ).", (unsigned)(arena_bytes / 1024));
-        } else {
-            delete interp;
-            heap_caps_free(buf);
-        }
-    }
-
-    // (2) Fallback: Octal PSRAM (slow but keeps the board running).
-    if (s_interpreter == NULL) {
-        ESP_LOGW(TAG, "⚠️ Không đủ SRAM nội cho Arena -> dùng PSRAM (chậm ~6x).");
-        s_tensor_arena = (uint8_t*) heap_caps_malloc(TENSOR_ARENA_SIZE_PSRAM, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!s_tensor_arena) {
-            ESP_LOGE(TAG, "LỖI: Không thể cấp phát Tensor Arena!");
-            return false;
-        }
-        s_interpreter = new tflite::MicroInterpreter(
-            s_model, micro_op_resolver, s_tensor_arena, TENSOR_ARENA_SIZE_PSRAM);
-        if (s_interpreter->AllocateTensors() != kTfLiteOk) {
-            ESP_LOGE(TAG, "LỖI: AllocateTensors thất bại!");
-            return false;
-        }
-        s_arena_in_psram = true;
-    }
-
-    s_input_tensor = s_interpreter->input(0);
-    s_output_tensor = s_interpreter->output(0);
-    ESP_LOGI(TAG, "✅ TFLite Micro nạp mô hình OK | Arena dùng %u KB ở %s | Output: %s",
-             (unsigned)(s_interpreter->arena_used_bytes() / 1024),
-             s_arena_in_psram ? "PSRAM (chậm)" : "SRAM NỘI (nhanh)",
-             (s_output_tensor->type == kTfLiteFloat32) ? "FLOAT32 (Mixed-Precision)" : "INT8");
-#else
-    ESP_LOGI(TAG, "ℹ️ TFLite Micro Arena sẵn sàng (Chế độ tương thích nhúng Standalone).");
-#endif
-
     s_is_initialized = true;
+    ESP_LOGI(TAG, "AI inference backend = ESP-DL PIPNet-98 (pretrained)");
     return true;
 }
 
-int8_t* ai_inference_get_input_buffer(void) {
-#if HAS_TFLM_HEADERS
-    if (s_input_tensor) {
-        return s_input_tensor->data.int8;
-    }
-#endif
-    return s_input_buffer;
+int8_t* ai_inference_get_input_buffer(void) { return s_dummy_input; }
+
+bool ai_inference_get_last_pts98(float out[98][2]) {
+    if (!s_pts98_valid || !out) return false;
+    memcpy(out, s_pts98, sizeof(s_pts98));
+    return true;
 }
 
 bool ai_inference_run(point2d_t out_landmarks[22], int64_t* out_latency_us) {
-    if (!s_is_initialized || !out_landmarks) {
+    if (!s_is_initialized || !out_landmarks || !s_src || s_roi_s <= 0) return false;
+
+    int64_t t0 = esp_timer_get_time();
+    float pts[98][2];
+    if (!face_espdl_landmarks(s_src, s_src_w, s_src_h, s_roi_x, s_roi_y, s_roi_s, pts, nullptr)) {
+        s_pts98_valid = false;
         return false;
     }
+    memcpy(s_pts98, pts, sizeof(s_pts98));
+    s_pts98_valid = true;
 
-    int64_t t_start = esp_timer_get_time();
+    // WFLW-98 eye contours: left 60..67, right 68..75 (outer -> upper -> inner -> lower).
+    // 22-point contract needs 6 points per eye: corner, upper1, upper2, corner, lower1, lower2.
+    // Metric: openness = vertical lid gap / inter-ocular distance (stable when eyes close).
+    // lm0=outer corner L, lm3=outer corner R => ADAS width becomes the inter-ocular distance.
+    const int left6[6] = {60, 61, 62, 68, 66, 65};
+    const int right6[6] = {60, 61, 62, 68, 66, 65};
+    // Nose / chin from the contour+face region of the 98-point layout.
+    const int nose_a = 43, nose_b = 51, chin_a = 8, chin_b = 7;
 
-#if HAS_TFLM_HEADERS
-    TfLiteStatus invoke_status = s_interpreter->Invoke();
-    if (invoke_status != kTfLiteOk) {
-        ESP_LOGE(TAG, "LỖI: Suy luận Invoke() thất bại!");
-        return false;
+    float roi_norm[22][2];
+    for (int i = 0; i < 6; i++) {
+        roi_norm[i][0] = (pts[left6[i]][0] - s_roi_x) / (float)s_roi_s;
+        roi_norm[i][1] = (pts[left6[i]][1] - s_roi_y) / (float)s_roi_s;
+        roi_norm[6 + i][0] = (pts[right6[i]][0] - s_roi_x) / (float)s_roi_s;
+        roi_norm[6 + i][1] = (pts[right6[i]][1] - s_roi_y) / (float)s_roi_s;
     }
-
-    if (s_output_tensor->type == kTfLiteFloat32) {
-        // Mixed-Precision: Đọc trực tiếp tọa độ Float32 dưới pixel siêu chuẩn xác
-        const float* out_float = s_output_tensor->data.f;
-        for (int i = 0; i < TINYDRIVER_NUM_LANDMARKS; i++) {
-            float x = out_float[i * 2];
-            float y = out_float[i * 2 + 1];
-            out_landmarks[i].x = fmaxf(0.0f, fminf(1.0f, x));
-            out_landmarks[i].y = fmaxf(0.0f, fminf(1.0f, y));
-        }
-    } else {
-        // Full INT8 Quantized fallback
-        const int8_t* out_int8 = s_output_tensor->data.int8;
-        float scale = s_output_tensor->params.scale;
-        int32_t zero_point = s_output_tensor->params.zero_point;
-        if (scale <= 0.0f) {
-            scale = TINYDRIVER_OUTPUT_SCALE;
-            zero_point = TINYDRIVER_OUTPUT_ZERO_POINT;
-        }
-
-        for (int i = 0; i < TINYDRIVER_NUM_LANDMARKS; i++) {
-            int8_t q_x = out_int8[i * 2];
-            int8_t q_y = out_int8[i * 2 + 1];
-
-            // Dequantize: float_val = (q - zero_point) * scale
-            float x = (float)(q_x - zero_point) * scale;
-            float y = (float)(q_y - zero_point) * scale;
-
-            // Clamp to [0.0, 1.0]
-            out_landmarks[i].x = fmaxf(0.0f, fminf(1.0f, x));
-            out_landmarks[i].y = fmaxf(0.0f, fminf(1.0f, y));
-        }
+    // Mouth: PIPNet-98 lip indices (76..95).
+    // [14/11] FIX: the old set {76,87,80,84,89,92} paired a corner with a lower-lip point as
+    // "mouth width" (~5 px on a 30 px mouth) -> MAR inflated ~10x (2.4-2.7 with the mouth CLOSED)
+    // and the FSM kept firing YAWNING WARNING.
+    // Verified on a live PTSDUMP (roi 125,125,81, closed mouth):
+    //   76 left corner (148.7,181.4) | 82 right corner (178.3,182.8)      -> width 29.7 px
+    //   80 upper outer centre (167.6,178.6) | 85 lower outer centre (163.8,185.7) -> h 8.1 px
+    //   90 upper inner centre (163.8,181.4) | 94 lower inner centre (164.1,181.9) -> h 0.5 px
+    // => MAR closed = (8.1+0.5)/(2*29.7) = 0.145 (sane); a yawn jumps to >= 0.5.
+    const int mouth_idx[6] = {76, 82, 80, 85, 90, 94};
+    for (int i = 0; i < 6; i++) {
+        roi_norm[12 + i][0] = (pts[mouth_idx[i]][0] - s_roi_x) / (float)s_roi_s;
+        roi_norm[12 + i][1] = (pts[mouth_idx[i]][1] - s_roi_y) / (float)s_roi_s;
     }
-#else
-    // Standalone fallback: calculates realistic nominal facial biometric keypoints
-    // Centered around (0.5, 0.5) in normalized space
-    const float cx = 0.50f;
-    const float cy = 0.50f;
-
-    // Nominal 22-landmark offsets from center (matching training config)
-    static const float BASE_PTS[22][2] = {
-        // Left Eye (0-5)
-        {-0.12f, -0.06f}, {-0.08f, -0.08f}, {-0.04f, -0.08f}, {0.00f, -0.06f}, {-0.04f, -0.04f}, {-0.08f, -0.04f},
-        // Right Eye (6-11)
-        {0.04f, -0.06f}, {0.08f, -0.08f}, {0.12f, -0.08f}, {0.16f, -0.06f}, {0.12f, -0.04f}, {0.08f, -0.04f},
-        // Mouth (12-17)
-        {-0.08f, 0.15f}, {0.08f, 0.15f}, {0.00f, 0.12f}, {0.00f, 0.18f}, {0.00f, 0.14f}, {0.00f, 0.16f},
-        // Nose & Chin (18-21)
-        {0.02f, -0.02f}, {0.02f, 0.06f}, {-0.02f, 0.08f}, {0.02f, 0.26f}
-    };
+    roi_norm[18][0] = (pts[nose_a][0] - s_roi_x) / (float)s_roi_s;
+    roi_norm[18][1] = (pts[nose_a][1] - s_roi_y) / (float)s_roi_s;
+    roi_norm[19][0] = (pts[nose_b][0] - s_roi_x) / (float)s_roi_s;
+    roi_norm[19][1] = (pts[nose_b][1] - s_roi_y) / (float)s_roi_s;
+    roi_norm[20][0] = (pts[chin_a][0] - s_roi_x) / (float)s_roi_s;
+    roi_norm[20][1] = (pts[chin_a][1] - s_roi_y) / (float)s_roi_s;
+    roi_norm[21][0] = (pts[chin_b][0] - s_roi_x) / (float)s_roi_s;
+    roi_norm[21][1] = (pts[chin_b][1] - s_roi_y) / (float)s_roi_s;
 
     for (int i = 0; i < 22; i++) {
-        out_landmarks[i].x = cx + BASE_PTS[i][0];
-        out_landmarks[i].y = cy + BASE_PTS[i][1];
+        out_landmarks[i].x = roi_norm[i][0];
+        out_landmarks[i].y = roi_norm[i][1];
     }
-#endif
-
-    int64_t t_end = esp_timer_get_time();
-    if (out_latency_us) {
-        *out_latency_us = (t_end - t_start);
+    {
+        auto dist = [](float ax, float ay, float bx2, float by2) {
+            return sqrtf((ax - bx2) * (ax - bx2) + (ay - by2) * (ay - by2));
+        };
+        float D = dist(pts[60][0], pts[60][1], pts[68][0], pts[68][1]);
+        float vl = (dist(pts[61][0], pts[61][1], pts[66][0], pts[66][1]) +
+                    dist(pts[62][0], pts[62][1], pts[65][0], pts[65][1])) * 0.5f;
+        float vr = (dist(pts[69][0], pts[69][1], pts[74][0], pts[74][1]) +
+                    dist(pts[70][0], pts[70][1], pts[73][0], pts[73][1])) * 0.5f;
+        float wl = D, wr = D;
+        float e1 = wl > 1e-4f ? vl / wl : 0.0f;
+        float e2 = wr > 1e-4f ? vr / wr : 0.0f;
+        static int s_n = 0;
+        if ((s_n++ % 2) == 0)
+            ESP_LOGI(TAG, "EARDIRECT L=%.3f R=%.3f avg=%.3f (wl=%.1f vl=%.1f wr=%.1f vr=%.1f)",
+                     e1, e2, (e1 + e2) * 0.5f, wl, vl, wr, vr);
     }
-
+    static int s_dbg = 0;
+    if ((s_dbg++ % 3) == 0) {
+        float wl = hypotf(out_landmarks[3].x - out_landmarks[0].x,
+                          out_landmarks[3].y - out_landmarks[0].y);
+        float v1 = hypotf(out_landmarks[5].x - out_landmarks[1].x,
+                          out_landmarks[5].y - out_landmarks[1].y);
+        float v2 = hypotf(out_landmarks[4].x - out_landmarks[2].x,
+                          out_landmarks[4].y - out_landmarks[2].y);
+        ESP_LOGI(TAG, "EARDBG roi=(%d,%d,%d) L0=(%.3f,%.3f) L3=(%.3f,%.3f) w=%.3f v1=%.3f v2=%.3f ear=%.3f",
+                 s_roi_x, s_roi_y, s_roi_s,
+                 out_landmarks[0].x, out_landmarks[0].y,
+                 out_landmarks[3].x, out_landmarks[3].y, wl, v1, v2,
+                 wl > 1e-4f ? (v1 + v2) / (2.0f * wl) : 0.0f);
+    }
+    static int s_seen = 0;
+    static bool s_dumped = false;
+    ++s_seen;
+    if (!s_dumped && s_seen >= 5 && out_landmarks) {
+        s_dumped = true;
+        ESP_LOGI(TAG, "FRAMEDUMP roi %d %d %d %d %d", s_roi_x, s_roi_y, s_roi_s, s_src_w, s_src_h);
+        for (int i = 0; i < 98; i++)
+            ESP_LOGI(TAG, "PTSDUMP %d %.2f %.2f", i, pts[i][0], pts[i][1]);
+        for (int y = 0; y < s_src_h; y++) {
+            char line[3 * 64 + 12];
+            int p = 0;
+            for (int x0 = 0; x0 < s_src_w; x0 += 64) {
+                p = 0;
+                for (int x = x0; x < x0 + 64 && x < s_src_w; x++)
+                    p += snprintf(line + p, sizeof(line) - p, "%02x", s_src[y * s_src_w + x]);
+                ESP_LOGI(TAG, "GRAY %d %s", y * 10000 + x0, line);
+            }
+        }
+    }
+    if (out_latency_us) *out_latency_us = esp_timer_get_time() - t0;
     return true;
 }
+
+
+
+
+
+
+
+

@@ -38,6 +38,12 @@ void telemetry_sender_set_timing(float dec_ms, float ai_ms, float total_ms);
 void telemetry_sender_set_roi(int active, int x0, int y0, int size);
 
 /**
+ * [P1 - TRUY VET] Gửi kèm frame_id và tuổi ảnh/ROI (ms) trong gói JSON để
+ * đối chiếu đúng frame <-> kết quả AI khi phân tích độ trễ trên laptop.
+ */
+void telemetry_sender_set_diag(uint32_t frame_id, float img_age_ms, float roi_age_ms, float core1_ms);
+
+/**
  * Actuates hardware buzzer and warning LED based on ADAS alarm state.
  */
 void telemetry_sender_update_actuators(bool is_alarm_active);

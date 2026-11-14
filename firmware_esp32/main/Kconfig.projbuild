@@ -8,7 +8,7 @@ menu "TinyDriver ADAS Configuration"
 
     config ESP_WIFI_PASSWORD
         string "Wi-Fi Password"
-        default "12345678"
+        default ""
         help
             Password of the Wi-Fi network.
 
@@ -196,6 +196,18 @@ menu "TinyDriver ADAS Configuration"
         help
             Lite detector chay tren Core 0 song song voi mang 22 diem o Core 1
             -> khong cong 66ms vao thoi gian moi frame (FPS 4.4 -> ~6.4).
+
+    config TD_DIAG_SEQUENTIAL
+        bool "P4: sequential same-frame diagnostic baseline (slow)"
+        depends on TD_USE_LITE_DETECTOR
+        default n
+        help
+            CHE DO CHAN DOAN (khong phai kien truc cuoi):
+            acquire JPEG -> decode toan anh -> Lite detector tren CHINH frame do
+            -> crop canonical tu ket qua do -> 96x96 -> landmark -> publish.
+            Tat du doan van toc + EMA cua crop, khong cho landmark tu chinh ROI,
+            chup JPEG vao staging de publish anh + telemetry cung frame.
+            FPS se giam (detector chay tuan tu) - chap nhan de do baseline.
 
     config TD_DETECT_INTERVAL
         int "Detect interval (frames)"

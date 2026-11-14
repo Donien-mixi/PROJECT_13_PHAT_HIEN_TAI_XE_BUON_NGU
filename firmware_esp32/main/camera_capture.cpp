@@ -2,11 +2,13 @@
 
 #include "esp_camera.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
 static const char* TAG = "CAMERA";
 
 static camera_fb_t* s_fb = NULL;
+static uint32_t s_cam_seq = 0;   // [P1] so thu tu frame camera (chi tang khi acquire OK)
 
 bool camera_capture_init(void) {
     camera_config_t config = {};
@@ -34,7 +36,13 @@ bool camera_capture_init(void) {
     config.pin_pclk  = CONFIG_TD_CAM_PIN_PCLK;
 
     config.xclk_freq_hz = CONFIG_TD_CAM_XCLK_FREQ;
+#if TD_CAM_RAW_GRAY
+    // [14/11 - SPEED] YUV422 (the driver exposes it as GRAYSCALE): byte 0 of every pixel pair is Y,
+    // so the pipeline can skip the 0.60 s JPEG decode (see image_decoder_load_gray_raw).
+    config.pixel_format = PIXFORMAT_GRAYSCALE;
+#else
     config.pixel_format = PIXFORMAT_JPEG;
+#endif
 
 #if CONFIG_TD_CAM_FS_VGA
     config.frame_size = FRAMESIZE_VGA;
@@ -70,7 +78,7 @@ bool camera_capture_init(void) {
         s->set_vflip(s, 1);
         s->set_hmirror(s, 0);
         s->set_quality(s, CONFIG_TD_CAM_JPEG_QUALITY);
-        ESP_LOGI(TAG, "✅ Camera sẵn sàng: PID=0x%02X VER=0x%02X | JPEG | %s | V-Flip=1 H-Mirror=0 | Q=%d",
+        ESP_LOGI(TAG, "✅ Camera sẵn sàng: PID=0x%02X VER=0x%02X | %s | %s | V-Flip=1 H-Mirror=0 | Q=%d",
                  s->id.PID, s->id.VER,
 #if CONFIG_TD_CAM_FS_VGA
                  "VGA 640x480"
@@ -78,6 +86,11 @@ bool camera_capture_init(void) {
                  "240x240"
 #else
                  "QVGA 320x240"
+#endif
+#if TD_CAM_RAW_GRAY
+                 , "YUV422 (raw Y)"
+#else
+                 , "JPEG"
 #endif
                  , CONFIG_TD_CAM_JPEG_QUALITY
         );
@@ -114,6 +127,12 @@ bool camera_capture_acquire(camera_frame_t* out_frame) {
     out_frame->length = s_fb->len;
     out_frame->width  = (int)s_fb->width;
     out_frame->height = (int)s_fb->height;
+
+    // [P1 - TRUY VET] Timestamp DMA cua frame (cam_hal.c: set tai VSYNC dau frame).
+    // Neu driver khong set (<=0) thi fallback ve thoi diem acquire.
+    int64_t ts = (int64_t)s_fb->timestamp.tv_sec * 1000000LL + (int64_t)s_fb->timestamp.tv_usec;
+    out_frame->timestamp_us = (ts > 0) ? ts : esp_timer_get_time();
+    out_frame->seq = ++s_cam_seq;
     return true;
 }
 

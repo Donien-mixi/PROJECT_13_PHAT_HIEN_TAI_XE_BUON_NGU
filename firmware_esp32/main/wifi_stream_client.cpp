@@ -19,7 +19,7 @@ static const char* TAG = "WIFI_STREAM";
 #endif
 
 #ifndef CONFIG_ESP_WIFI_PASSWORD
-#define CONFIG_ESP_WIFI_PASSWORD "12345678"
+#define CONFIG_ESP_WIFI_PASSWORD ""   // set in menuconfig or wifi_secret.h; never commit a real password
 #endif
 
 #ifndef CONFIG_LAPTOP_HOST_IP

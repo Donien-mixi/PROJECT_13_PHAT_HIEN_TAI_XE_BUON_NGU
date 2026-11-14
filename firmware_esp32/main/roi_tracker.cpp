@@ -1,4 +1,4 @@
-#include "roi_tracker.h"
+﻿#include "roi_tracker.h"
 #include <math.h>
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -149,10 +149,27 @@ static void compute_canonical_anchor(const float px[22], const float py[22],
     *out_cy = eye_y + 0.32f * h_skull;
 }
 
+#ifndef PIPNET_FREEZE_ROI
+#define PIPNET_FREEZE_ROI 0   // self-tracking ON (gated)
+#endif
+
 void roi_tracker_update_from_landmarks(const point2d_t landmarks[22],
                                        int src_w, int src_h,
                                        int crop_x0, int crop_y0, int crop_size) {
+    if (PIPNET_FREEZE_ROI) return;   // PIPNet mode: keep a fixed ROI so EAR is stable
     if (!landmarks || src_w <= 0 || src_h <= 0 || crop_size <= 0) return;
+
+    // sanity gate: reject frames whose landmark spread is implausible
+    float minx = 1e9f, maxx = -1e9f, miny = 1e9f, maxy = -1e9f;
+    for (int i = 0; i < 22; i++) {
+        float qx = landmarks[i].x * (float)crop_size, qy = landmarks[i].y * (float)crop_size;
+        if (qx < minx) minx = qx;
+        if (qx > maxx) maxx = qx;
+        if (qy < miny) miny = qy;
+        if (qy > maxy) maxy = qy;
+    }
+    float span = (maxx - minx > maxy - miny) ? (maxx - minx) : (maxy - miny);
+    if (span < 0.35f * (float)crop_size || span > 1.6f * (float)crop_size) return;
 
     float px[22], py[22];
     for (int i = 0; i < 22; i++) {
@@ -210,6 +227,7 @@ void roi_tracker_update_from_landmarks(const point2d_t landmarks[22],
 
 void roi_tracker_anchor(int cx, int cy, int size, int src_w, int src_h) {
     if (size <= 0 || src_w <= 0 || src_h <= 0) return;
+    if (PIPNET_FREEZE_ROI) return;
     float S = (float)size;
     int minDim = (src_w < src_h) ? src_w : src_h;
     if (S > (float)minDim) S = (float)minDim;
@@ -218,3 +236,8 @@ void roi_tracker_anchor(int cx, int cy, int size, int src_w, int src_h) {
     s_valid = true;
     s_smooth_ready = true;
 }
+
+
+
+
+
