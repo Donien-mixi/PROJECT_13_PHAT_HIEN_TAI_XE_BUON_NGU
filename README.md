@@ -51,8 +51,21 @@ $py='C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe'
 `flash_release.ps1` kiểm **SHA-256** của cả 4 file trước khi ghi (bootloader, phân vùng, app, model
 PIPNet). Lần đầu dùng đủ 4 phần; các lần sau chỉ cần app: thêm `-AppOnly`.
 
-**Wi-Fi:** điền SSID/mật khẩu vào `firmware_esp32/main/wifi_secret.h` rồi build lại.
-File này **bị gitignore**, không bao giờ được commit (xem `.gitignore`).
+**Wi-Fi:** `release/app.bin` được build **không kèm thông tin Wi-Fi** (placeholder `CHANGE_ME`). Sau khi nạp,
+camera + cảnh báo + serial vẫn chạy nhưng **web chưa lên**. Muốn dùng web, điền Wi-Fi của bạn rồi build lại:
+
+```powershell
+# 1) sửa firmware_esp32/main/wifi_secret.h  (file này BỊ GITIGNORE — không bao giờ commit)
+#    #define TD_WIFI_SSID     "TenMangCuaBan"
+#    #define TD_WIFI_PASSWORD "matkhau"
+# 2) build lại rồi nạp app
+$py='C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe'
+& $py $env:IDF_PATH\tools\idf.py -C firmware_esp32 build
+& $py -m esptool --chip esp32s3 -p COM3 -b 921600 write_flash 0x10000 firmware_esp32\build\tinydriver_esp32s3_edge_ai.bin
+```
+
+Lý do: repo công khai — **không bao giờ** để mật khẩu Wi-Fi trong mã, log hay binary được commit.
+`.gitignore` đã chặn `wifi_secret.h`, `sdkconfig.bak*`; Kconfig và `wifi_stream_client.cpp` để mặc định trống.
 
 ## 4. Build lại từ mã nguồn
 
@@ -103,4 +116,4 @@ docs/                    báo cáo cuối + nhật ký kỹ thuật + checklist 
 |---|---|---|---|
 | BlazeFace short-range INT8 | TFLite (TFLM), trong rodata app | 187.416 B | `9594B46F455E5D015A15F45EEBBCC4E0F97D583AA6A2751934748CF161DD33CA` |
 | PIPNet-98 (ResNet18) INT8 | ESP-DL `.espdl`, partition `pipnet` @0x300000 | 12.388.576 B | `D402A7D1C3B274338C90D8BD8D94F1A62DEEA692DD15E2B616CA805902633909` |
-| Firmware app | ESP-IDF, factory @0x10000 | 2.333.648 B | `02972E91F1B60C57098B65282EB632952222305521140D73D6E4070BEF86BED8` |
+| Firmware app | ESP-IDF, factory @0x10000 | 2.333.648 B | `29FFC0C787118069318F22D8BEDB3D3D1D95ED61E8C35BA75D6DB67A1595F326` |

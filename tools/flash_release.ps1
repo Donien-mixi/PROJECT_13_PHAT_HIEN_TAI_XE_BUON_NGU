@@ -26,7 +26,7 @@ function Assert-Hash($file, $sha) {
 }
 
 Write-Host "== Kiem tra hash ==" -ForegroundColor Cyan
-Assert-Hash (Join-Path $rel "app.bin")               "02972E91F1B60C57098B65282EB632952222305521140D73D6E4070BEF86BED8"
+Assert-Hash (Join-Path $rel "app.bin")               "29FFC0C787118069318F22D8BEDB3D3D1D95ED61E8C35BA75D6DB67A1595F326"
 Assert-Hash (Join-Path $rel "pipnet_partition.bin")  "3E0690DDBF145BDE5DAD58CAEB2A98DFCFCE8C39AEC74834A32454E376713E15"
 
 if (-not $AppOnly) {
