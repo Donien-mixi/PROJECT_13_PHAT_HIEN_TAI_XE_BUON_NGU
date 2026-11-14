@@ -21,6 +21,10 @@ Thumbs.db
 *.o
 *.a
 *.bin
+
+# [14/11] release/ phai duoc commit: do la anh san pham de nap
+!release/
+!release/*.bin
 *.elf
 *.map
 firmware_esp32/build/
