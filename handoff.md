@@ -144,6 +144,19 @@ phát hiện `mar 2,4–2,7` khi **đóng miệng**. Nguyên nhân: map 6 điể
   ear_baseline`; trang hiện "yaw X° (raw Y°, bias Z°)".
 - Thêm nút **↻ Hiệu chuẩn lại** → `POST /recalib` → `adas_controller_request_recalibration()` (đã kiểm).
 
+**REPO ĐÃ ĐÓNG GÓI (14/11 — commit `612945d2`, nhánh `main`):**
+- `release/` = **nạp là chạy**: `bootloader.bin`, `partition-table.bin`, `app.bin` (SHA `02972E91…EF86BED8`),
+  `pipnet_partition.bin` (12 MB, SHA `3E0690DD…376713E15`) + `tools/flash_release.ps1` (kiểm SHA rồi ghi).
+  Đã test end-to-end: nạp đủ 4 phần từ `release/` → board boot, `FbsLoader partition 12288 KB`,
+  `MO http://192.168.1.5/`, HTTP 200.
+- `README.md` + `docs/img/web_dashboard.png` (ảnh chụp thật trang web đang chạy: banner NORMAL, ROI +
+  98 điểm, EAR 0,202/ngưỡng 0,162, MAR 0,197/0,451, detector 0,930/587 ms, yaw 10,2° raw 46,5 bias 36,4).
+- Dọn: bỏ track `managed_components` (idf.py tải lại), xoá `host_laptop/`, `training_tinyml/`, `evaluation/`,
+  toàn bộ zip cũ, 96 tool cũ; `docs/` còn 5 tài liệu; **không còn chuỗi mật khẩu WiFi** trong repo
+  (`wifi_secret.h` bị gitignore; Kconfig/`wifi_stream_client`/sdkconfig đã để trống).
+- Lưu ý: lịch sử git vẫn nặng (~1,1 GiB pack) do file lớn của giai đoạn cũ; muốn repo nhẹ phải viết lại
+  lịch sử (BFG/filter-repo) — chưa làm.
+
 **Việc đầu tiên phiên sau:**
 1. **Đo 3 người thật** (chỉ cách này mới chứng minh đa tài xế): mỗi người 1 vòng 2 phút
    (`tools/live_session_cue.py --rounds 1`), chấm `tools/live_session_analyze.py --latency 7.7`.
