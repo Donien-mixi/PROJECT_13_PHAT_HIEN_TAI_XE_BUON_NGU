@@ -9,7 +9,9 @@
 
 param(
     [string]$Port = "COM3",
-    [switch]$AppOnly
+    [switch]$AppOnly,
+    # app tu build (da dien Wi-Fi cua ban). Truyen vao day thi bo qua kiem hash app goc.
+    [string]$App = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +28,14 @@ function Assert-Hash($file, $sha) {
 }
 
 Write-Host "== Kiem tra hash ==" -ForegroundColor Cyan
-Assert-Hash (Join-Path $rel "app.bin")               "29FFC0C787118069318F22D8BEDB3D3D1D95ED61E8C35BA75D6DB67A1595F326"
+$appBin = if ($App) { $App } else { Join-Path $rel "app.bin" }
+if ($App) {
+    if (-not (Test-Path $appBin)) { throw "khong thay app: $appBin" }
+    Write-Host ("  app tu build: " + (Get-FileHash $appBin -Algorithm SHA256).Hash) -ForegroundColor Green
+    Write-Host "  (bo qua doi chieu hash app goc vi day la ban ban tu build kem Wi-Fi)" -ForegroundColor Yellow
+} else {
+    Assert-Hash $appBin "29FFC0C787118069318F22D8BEDB3D3D1D95ED61E8C35BA75D6DB67A1595F326"
+}
 Assert-Hash (Join-Path $rel "pipnet_partition.bin")  "3E0690DDBF145BDE5DAD58CAEB2A98DFCFCE8C39AEC74834A32454E376713E15"
 
 if (-not $AppOnly) {
@@ -37,12 +46,12 @@ if (-not $AppOnly) {
 Write-Host "== Nap (dong Serial Monitor truoc khi chay) ==" -ForegroundColor Cyan
 if ($AppOnly) {
     & $py -m esptool --chip esp32s3 -p $Port -b 921600 write_flash `
-        0x10000 (Join-Path $rel "app.bin")
+        0x10000 $appBin
 } else {
     & $py -m esptool --chip esp32s3 -p $Port -b 921600 write_flash `
         0x0      (Join-Path $rel "bootloader.bin") `
         0x8000   (Join-Path $rel "partition-table.bin") `
-        0x10000  (Join-Path $rel "app.bin") `
+        0x10000  $appBin `
         0x300000 (Join-Path $rel "pipnet_partition.bin")
 }
 if ($LASTEXITCODE -ne 0) { throw "esptool loi (exit $LASTEXITCODE)" }

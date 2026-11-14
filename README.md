@@ -51,20 +51,27 @@ $py='C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe'
 `flash_release.ps1` kiểm **SHA-256** của cả 4 file trước khi ghi (bootloader, phân vùng, app, model
 PIPNet). Lần đầu dùng đủ 4 phần; các lần sau chỉ cần app: thêm `-AppOnly`.
 
-**Wi-Fi:** `release/app.bin` được build **không kèm thông tin Wi-Fi** (placeholder `CHANGE_ME`). Sau khi nạp,
-camera + cảnh báo + serial vẫn chạy nhưng **web chưa lên**. Muốn dùng web, điền Wi-Fi của bạn rồi build lại:
+**Wi-Fi (bắt buộc điền trước khi nạp nếu muốn dùng web):** repo **không** chứa SSID/mật khẩu của ai.
+Ai tải về thì tự điền vào 2 chỗ dưới đây — có sẵn file mẫu `firmware_esp32/main/wifi_secret.h.example`
+và một lệnh điền tự động:
 
 ```powershell
-# 1) sửa firmware_esp32/main/wifi_secret.h  (file này BỊ GITIGNORE — không bao giờ commit)
-#    #define TD_WIFI_SSID     "TenMangCuaBan"
-#    #define TD_WIFI_PASSWORD "matkhau"
-# 2) build lại rồi nạp app
+# cách 1 (nhanh): một lệnh điền + build + nạp
+powershell -ExecutionPolicy Bypass -File tools\set_wifi.ps1 -Ssid "TenMangCuaBan" -Password "matkhau" -Build -Flash -Port COM3
+
+# cách 2 (thủ công): copy file mẫu rồi sửa 2 dòng
+copy firmware_esp32\main\wifi_secret.h.example firmware_esp32\main\wifi_secret.h
+#   #define TD_WIFI_SSID     "TenMangCuaBan"
+#   #define TD_WIFI_PASSWORD "matkhau"
+# rồi build lại và nạp app vừa build:
 $py='C:\Espressif\python_env\idf5.3_py3.11_env\Scripts\python.exe'
 & $py $env:IDF_PATH\tools\idf.py -C firmware_esp32 build
-& $py -m esptool --chip esp32s3 -p COM3 -b 921600 write_flash 0x10000 firmware_esp32\build\tinydriver_esp32s3_edge_ai.bin
+powershell -ExecutionPolicy Bypass -File tools\flash_release.ps1 -Port COM3 -AppOnly `
+    -App firmware_esp32\build\tinydriver_esp32s3_edge_ai.bin
 ```
 
-Lý do: repo công khai — **không bao giờ** để mật khẩu Wi-Fi trong mã, log hay binary được commit.
+`release/app.bin` trong repo được build với placeholder (`CHANGE_ME`) nên **không chứa Wi-Fi của ai**;
+nạp bản đó thì camera + cảnh báo + serial vẫn chạy, chỉ web là chưa lên.
 `.gitignore` đã chặn `wifi_secret.h`, `sdkconfig.bak*`; Kconfig và `wifi_stream_client.cpp` để mặc định trống.
 
 ## 4. Build lại từ mã nguồn
